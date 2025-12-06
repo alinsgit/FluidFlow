@@ -1,11 +1,14 @@
 import React, { useRef, useEffect } from 'react';
-import { User, Bot, Image, Palette, RotateCcw, FileCode, Plus, Minus, Loader2, AlertCircle } from 'lucide-react';
+import { User, Bot, Image, Palette, RotateCcw, FileCode, Plus, Minus, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { ChatMessage, FileChange } from '../../types';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
   onRevert: (messageId: string) => void;
+  onRetry: (messageId: string) => void;
   isGenerating: boolean;
+  streamingStatus?: string;
+  streamingChars?: number;
 }
 
 // Simple markdown renderer for explanations
@@ -114,15 +117,15 @@ const FileChangesSummary: React.FC<{ changes: FileChange[] }> = ({ changes }) =>
   );
 };
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, isGenerating }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, onRetry, isGenerating, streamingStatus, streamingChars }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or streaming updates
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, streamingStatus, streamingChars]);
 
   if (messages.length === 0) {
     return (
@@ -191,9 +194,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, isGene
 
                 {/* Error State */}
                 {message.error && (
-                  <div className="flex items-center gap-2 text-red-400">
-                    <AlertCircle className="w-4 h-4" />
-                    <span className="text-sm">{message.error}</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-red-400">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-sm">{message.error}</span>
+                    </div>
+                    {!isGenerating && (
+                      <button
+                        onClick={() => onRetry(message.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Retry
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -228,17 +242,45 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, isGene
         </div>
       ))}
 
-      {/* Generating indicator at bottom */}
+      {/* Generating indicator at bottom with streaming status */}
       {isGenerating && messages[messages.length - 1]?.role === 'user' && (
         <div className="flex gap-3">
           <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-purple-600/20 text-purple-400">
             <Bot className="w-4 h-4" />
           </div>
-          <div className="bg-slate-800/50 border border-white/5 rounded-xl rounded-tl-sm p-3">
-            <div className="flex items-center gap-2 text-blue-400">
+          <div className="bg-slate-800/50 border border-white/5 rounded-xl rounded-tl-sm p-3 flex-1">
+            <div className="flex items-center gap-2 text-blue-400 mb-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Generating your app...</span>
+              <span className="text-sm font-medium">Generating your app...</span>
             </div>
+
+            {/* Streaming Status */}
+            {streamingStatus && (
+              <div className="mt-2 space-y-2">
+                <div className="text-xs text-slate-300 font-mono bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
+                  {streamingStatus}
+                </div>
+
+                {/* Progress bar */}
+                {streamingChars && streamingChars > 0 && (
+                  <div className="space-y-1">
+                    <div className="h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300 ease-out"
+                        style={{
+                          width: `${Math.min(100, (streamingChars / 50000) * 100)}%`,
+                          animation: 'pulse 2s ease-in-out infinite'
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-600">
+                      <span>{Math.round(streamingChars / 1024)}KB received</span>
+                      <span className="animate-pulse">streaming...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

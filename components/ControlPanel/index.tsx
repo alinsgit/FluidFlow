@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Layers, Trash2, Settings } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
+import { cleanGeneratedCode } from '../../utils/cleanCode';
+import { generateContextForPrompt } from '../../utils/codemap';
+import { debugLog } from '../../hooks/useDebugStore';
 
 // Sub-components
 import { ChatPanel } from './ChatPanel';
@@ -68,6 +71,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   const [isConsultantMode, setIsConsultantMode] = useState(false);
   const [isEducationMode, setIsEducationMode] = useState(false);
 
+  // Streaming state
+  const [streamingStatus, setStreamingStatus] = useState<string>('');
+  const [streamingChars, setStreamingChars] = useState(0);
+
   const existingApp = files['src/App.tsx'];
 
   const handleSend = async (prompt: string, attachments: ChatAttachment[]) => {
@@ -106,6 +113,15 @@ Output ONLY a raw JSON array of strings containing your specific suggestions. Do
           text: prompt ? `Analyze this design. Context: ${prompt}` : 'Analyze this design for UX gaps.'
         });
 
+        const requestId = debugLog.request('generation', {
+          model: selectedModel,
+          prompt: prompt || 'Analyze design for UX gaps',
+          systemInstruction,
+          attachments: attachments.map(a => ({ type: a.type, size: a.file.size })),
+          metadata: { mode: 'consultant' }
+        });
+        const startTime = Date.now();
+
         const response = await ai.models.generateContent({
           model: selectedModel,
           contents: { parts },
@@ -116,6 +132,14 @@ Output ONLY a raw JSON array of strings containing your specific suggestions. Do
         });
 
         const text = response.text || '[]';
+
+        debugLog.response('generation', {
+          id: requestId,
+          model: selectedModel,
+          duration: Date.now() - startTime,
+          response: text,
+          metadata: { mode: 'consultant' }
+        });
         try {
           const suggestionsData = JSON.parse(text);
           setSuggestions(Array.isArray(suggestionsData) ? suggestionsData : ['Could not parse suggestions.']);
@@ -179,14 +203,33 @@ Write a clear markdown explanation including:
         }
 
         if (existingApp) {
-          parts.push({ text: `CURRENT PROJECT FILES:\n${JSON.stringify(files, null, 2)}` });
+          // Generate codemap for better context understanding
+          const codeContext = generateContextForPrompt(files);
+          parts.push({ text: `${codeContext}\n\n### Full Source Files\n\`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\`` });
           parts.push({ text: `USER REQUEST: ${prompt || 'Refine the app based on the attached images.'}` });
-          systemInstruction += '\n\nYou are UPDATING an existing project. Return ALL files in the "files" object, including unchanged ones.';
+          systemInstruction += `\n\nYou are UPDATING an existing project. The codemap above shows the current structure.
+- Maintain existing component names and prop interfaces
+- Keep import paths consistent with the current structure
+- Return ALL files in the "files" object, including unchanged ones
+- Only modify files that need changes based on the user request`;
         } else {
           parts.push({ text: `TASK: Create a React app from this design. ${prompt ? `Additional context: ${prompt}` : ''}` });
         }
 
-        const response = await ai.models.generateContent({
+        // Use streaming for better UX
+        setStreamingStatus('🚀 Starting generation...');
+        setStreamingChars(0);
+
+        const genRequestId = debugLog.request('generation', {
+          model: selectedModel,
+          prompt: prompt || 'Generate/Update app',
+          systemInstruction,
+          attachments: attachments.map(a => ({ type: a.type, size: a.file.size })),
+          metadata: { mode: 'generator', hasExistingApp: !!existingApp }
+        });
+        const genStartTime = Date.now();
+
+        const stream = await ai.models.generateContentStream({
           model: selectedModel,
           contents: { parts },
           config: {
@@ -195,12 +238,64 @@ Write a clear markdown explanation including:
           }
         });
 
-        const text = response.text || '{}';
+        let fullText = '';
+        let detectedFiles: string[] = [];
+        let chunkCount = 0;
+
+        // Process stream chunks
+        for await (const chunk of stream) {
+          const chunkText = chunk.text || '';
+          fullText += chunkText;
+          chunkCount++;
+          setStreamingChars(fullText.length);
+
+          // Log every 10th chunk to avoid spam
+          if (chunkCount % 10 === 0) {
+            debugLog.stream('generation', {
+              id: genRequestId,
+              metadata: { chunkCount, totalChars: fullText.length, filesDetected: detectedFiles.length }
+            });
+          }
+
+          // Try to detect file paths as they appear
+          const fileMatches = fullText.match(/"src\/[^"]+\.tsx?"/g);
+          if (fileMatches) {
+            const newFiles = fileMatches.map(m => m.replace(/"/g, '')).filter(f => !detectedFiles.includes(f));
+            if (newFiles.length > 0) {
+              detectedFiles = [...detectedFiles, ...newFiles];
+              setStreamingStatus(`📁 ${detectedFiles.length} files detected: ${detectedFiles[detectedFiles.length - 1]}`);
+            }
+          }
+
+          // Update status with character count
+          if (detectedFiles.length === 0) {
+            setStreamingStatus(`⚡ Generating... (${Math.round(fullText.length / 1024)}KB)`);
+          }
+        }
+
+        setStreamingStatus('✨ Parsing response...');
 
         try {
-          const result = JSON.parse(text);
+          // Clean any markdown artifacts from the response
+          const cleanedText = cleanGeneratedCode(fullText);
+          const result = JSON.parse(cleanedText);
           const explanation = result.explanation || 'App generated successfully.';
           const newFiles = result.files || result; // Support both formats
+
+          debugLog.response('generation', {
+            id: genRequestId,
+            model: selectedModel,
+            duration: Date.now() - genStartTime,
+            response: JSON.stringify({ explanation, fileCount: Object.keys(newFiles).length, files: Object.keys(newFiles) }),
+            metadata: { mode: 'generator', totalChunks: chunkCount, totalChars: fullText.length }
+          });
+
+          // Clean code in each file
+          for (const [path, content] of Object.entries(newFiles)) {
+            if (typeof content === 'string') {
+              newFiles[path] = cleanGeneratedCode(content);
+            }
+          }
 
           // Ensure we have src/App.tsx
           if (!newFiles['src/App.tsx']) {
@@ -209,6 +304,8 @@ Write a clear markdown explanation including:
 
           const mergedFiles = { ...files, ...newFiles };
           const fileChanges = calculateFileChanges(files, mergedFiles);
+
+          setStreamingStatus(`✅ Generated ${Object.keys(newFiles).length} files!`);
 
           // Add assistant message
           const assistantMessage: ChatMessage = {
@@ -225,7 +322,17 @@ Write a clear markdown explanation including:
           // Show diff modal
           reviewChange(existingApp ? 'Updated App' : 'Generated Initial App', mergedFiles);
         } catch (e) {
-          console.error('Parse error:', e, text);
+          console.error('Parse error:', e, fullText.slice(0, 500));
+          setStreamingStatus('❌ Failed to parse response');
+
+          debugLog.error('generation', e instanceof Error ? e.message : 'Parse error', {
+            id: genRequestId,
+            model: selectedModel,
+            duration: Date.now() - genStartTime,
+            response: fullText.slice(0, 1000),
+            metadata: { mode: 'generator', totalChunks: chunkCount }
+          });
+
           const errorMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -238,6 +345,12 @@ Write a clear markdown explanation including:
       }
     } catch (error) {
       console.error('Error generating content:', error);
+
+      debugLog.error('generation', error instanceof Error ? error.message : 'Unknown error', {
+        model: selectedModel,
+        metadata: { mode: isConsultantMode ? 'consultant' : 'generator' }
+      });
+
       const errorMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -248,6 +361,11 @@ Write a clear markdown explanation including:
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsGenerating(false);
+      // Clear streaming status after a delay so user sees final status
+      setTimeout(() => {
+        setStreamingStatus('');
+        setStreamingChars(0);
+      }, 2000);
     }
   };
 
@@ -256,6 +374,24 @@ Write a clear markdown explanation including:
     if (message?.snapshotFiles) {
       reviewChange(`Revert to earlier state`, message.snapshotFiles);
     }
+  };
+
+  const handleRetry = (errorMessageId: string) => {
+    // Find the error message and the user message before it
+    const errorIndex = messages.findIndex(m => m.id === errorMessageId);
+    if (errorIndex < 1) return;
+
+    const userMessage = messages[errorIndex - 1];
+    if (userMessage.role !== 'user') return;
+
+    // Remove the error message and user message from chat
+    setMessages(prev => prev.filter((_, i) => i !== errorIndex && i !== errorIndex - 1));
+
+    // Re-send the request
+    handleSend(
+      userMessage.prompt || '',
+      userMessage.attachments || []
+    );
   };
 
   const handleReset = () => {
@@ -292,7 +428,10 @@ Write a clear markdown explanation including:
       <ChatPanel
         messages={messages}
         onRevert={handleRevert}
+        onRetry={handleRetry}
         isGenerating={isGenerating}
+        streamingStatus={streamingStatus}
+        streamingChars={streamingChars}
       />
 
       {/* Mode Toggle */}

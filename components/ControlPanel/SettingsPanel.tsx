@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Settings, ChevronUp, ChevronDown, CheckCircle, AlertCircle, GraduationCap, Zap, Sparkles } from 'lucide-react';
+import { Settings, ChevronUp, ChevronDown, CheckCircle, AlertCircle, GraduationCap, Zap, Sparkles, Bug } from 'lucide-react';
 import { AI_MODELS } from '../../types';
+import { useDebugStore } from '../../hooks/useDebugStore';
 
 interface SettingsPanelProps {
   isEducationMode: boolean;
@@ -18,6 +19,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onModelChange
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { enabled: debugEnabled, setEnabled: setDebugEnabled, logs } = useDebugStore();
 
   return (
     <div className="border-t border-white/5 pt-2 flex-none">
@@ -117,6 +119,41 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 />
               </button>
             </div>
+          </div>
+
+          {/* Debug Mode */}
+          <div className="space-y-2 pt-2 border-t border-white/5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-slate-300 font-medium flex items-center gap-2">
+                <Bug className="w-3.5 h-3.5 text-purple-400" />
+                Debug Mode
+                {debugEnabled && logs.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                    {logs.length}
+                  </span>
+                )}
+              </label>
+              <button
+                onClick={() => setDebugEnabled(!debugEnabled)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-purple-500 ${
+                  debugEnabled ? 'bg-purple-600' : 'bg-slate-700'
+                }`}
+                role="switch"
+                aria-checked={debugEnabled}
+                aria-label="Toggle debug mode"
+              >
+                <span
+                  className={`${
+                    debugEnabled ? 'translate-x-4' : 'translate-x-1'
+                  } inline-block h-3 w-3 transform rounded-full bg-white transition-transform`}
+                />
+              </button>
+            </div>
+            {debugEnabled && (
+              <p className="text-[10px] text-slate-500 pl-5">
+                API calls logged in Debug tab
+              </p>
+            )}
           </div>
         </div>
       )}

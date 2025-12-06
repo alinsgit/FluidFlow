@@ -79,7 +79,7 @@ export interface PushResult {
 
 // Device types for preview
 export type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
-export type TabType = 'preview' | 'code' | 'database' | 'tests' | 'docs';
+export type TabType = 'preview' | 'code' | 'database' | 'tests' | 'docs' | 'debug';
 export type TerminalTab = 'console' | 'network';
 
 // AI Model types
@@ -113,3 +113,38 @@ export const AI_MODELS: ModelConfig[] = [
     description: 'Best for complex tasks'
   }
 ];
+
+// Debug types
+export interface DebugLogEntry {
+  id: string;
+  timestamp: number;
+  type: 'request' | 'response' | 'stream' | 'error' | 'info';
+  category: 'generation' | 'accessibility' | 'quick-edit' | 'auto-fix' | 'other';
+  model?: string;
+  duration?: number;
+  // Request data
+  prompt?: string;
+  systemInstruction?: string;
+  attachments?: { type: string; size: number }[];
+  // Response data
+  response?: string;
+  tokenCount?: {
+    input?: number;
+    output?: number;
+  };
+  // Error data
+  error?: string;
+  // Metadata
+  metadata?: Record<string, unknown>;
+}
+
+export interface DebugState {
+  enabled: boolean;
+  logs: DebugLogEntry[];
+  maxLogs: number;
+  filter: {
+    types: DebugLogEntry['type'][];
+    categories: DebugLogEntry['category'][];
+    searchQuery: string;
+  };
+}

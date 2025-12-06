@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, Pencil, Send, FileText, Wrench, FlaskConical, Package, Loader2,
-  SplitSquareVertical, X
+  SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
 import { FileSystem, LogEntry, NetworkRequest, AccessibilityReport, TabType, TerminalTab, PreviewDevice, PushResult } from '../../types';
+import { cleanGeneratedCode, isValidCode } from '../../utils/cleanCode';
+import { debugLog } from '../../hooks/useDebugStore';
 
 // Sub-components
 import { CodeEditor } from './CodeEditor';
@@ -18,6 +20,8 @@ import { ExportModal } from './ExportModal';
 import { GithubModal } from './GithubModal';
 import { AccessibilityModal } from './AccessibilityModal';
 import { ConsultantReport } from './ConsultantReport';
+import { ComponentInspector, InspectionOverlay, InspectedElement } from './ComponentInspector';
+import DebugPanel from './DebugPanel';
 
 interface PreviewPanelProps {
   files: FileSystem;
@@ -84,7 +88,95 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [isSplitView, setIsSplitView] = useState(false);
   const [splitFile, setSplitFile] = useState<string>('');
 
+  // Auto-fix
+  const [autoFixEnabled, setAutoFixEnabled] = useState(true);
+  const [isAutoFixing, setIsAutoFixing] = useState(false);
+  const [autoFixToast, setAutoFixToast] = useState<string | null>(null);
+  const autoFixTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFixedErrorRef = useRef<string | null>(null);
+
+  // Inspect Mode
+  const [isInspectMode, setIsInspectMode] = useState(false);
+  const [hoveredElement, setHoveredElement] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [inspectedElement, setInspectedElement] = useState<InspectedElement | null>(null);
+  const [isInspectEditing, setIsInspectEditing] = useState(false);
+
   const appCode = files['src/App.tsx'];
+
+  // Auto-fix error function
+  const autoFixError = useCallback(async (errorMessage: string) => {
+    if (!appCode || isAutoFixing || isGenerating) return;
+
+    // Skip if we just fixed this error
+    if (lastFixedErrorRef.current === errorMessage) return;
+
+    // Skip common non-fixable errors
+    const skipPatterns = [
+      /\[Router\]/i,
+      /\[Sandbox\]/i,
+      /ResizeObserver/i,
+      /Script error/i,
+      /Loading chunk/i,
+      /redefine.*property.*location/i,
+      /non-configurable property/i,
+    ];
+    if (skipPatterns.some(p => p.test(errorMessage))) return;
+
+    setIsAutoFixing(true);
+    setAutoFixToast('🔧 Auto-fixing error...');
+    lastFixedErrorRef.current = errorMessage;
+
+    const requestId = debugLog.request('auto-fix', {
+      model: selectedModel,
+      prompt: `Fix runtime error: ${errorMessage}`,
+      metadata: { errorMessage }
+    });
+    const startTime = Date.now();
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: selectedModel,
+        contents: [{ parts: [{ text: `Fix this runtime error in the React component. Error: "${errorMessage}"\n\nCurrent Code:\n${appCode}\n\nIMPORTANT: Output ONLY the complete fixed code, no explanations.` }] }]
+      });
+
+      const fixedCode = cleanGeneratedCode(response.text || '');
+
+      debugLog.response('auto-fix', {
+        id: requestId,
+        model: selectedModel,
+        duration: Date.now() - startTime,
+        response: fixedCode.slice(0, 500) + '...',
+        metadata: { success: !!(fixedCode && isValidCode(fixedCode)) }
+      });
+
+      if (fixedCode && isValidCode(fixedCode)) {
+        setFiles({ ...files, 'src/App.tsx': fixedCode });
+        setAutoFixToast('✅ Error fixed automatically!');
+
+        // Clear the error from logs
+        setLogs(prev => prev.map(l =>
+          l.message === errorMessage ? { ...l, isFixed: true } : l
+        ));
+      } else {
+        setAutoFixToast('⚠️ Could not auto-fix this error');
+      }
+    } catch (e) {
+      console.error('Auto-fix failed:', e);
+      setAutoFixToast('❌ Auto-fix failed');
+      debugLog.error('auto-fix', e instanceof Error ? e.message : 'Auto-fix failed', {
+        id: requestId,
+        model: selectedModel,
+        duration: Date.now() - startTime
+      });
+    } finally {
+      setIsAutoFixing(false);
+      // Clear toast after delay (use separate ref to avoid conflicts with debounce timer)
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
+    }
+  }, [appCode, files, setFiles, isAutoFixing, isGenerating, selectedModel]);
 
   // Console Message Listener
   useEffect(() => {
@@ -92,15 +184,28 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
       if (!event.data) return;
 
       if (event.data.type === 'CONSOLE_LOG') {
-        setLogs(prev => [...prev, {
-          id: crypto.randomUUID(),
+        const logId = crypto.randomUUID();
+        const logEntry = {
+          id: logId,
           type: event.data.logType,
           message: event.data.message,
           timestamp: new Date(event.data.timestamp).toLocaleTimeString([], { hour12: false })
-        }]);
+        };
+
+        setLogs(prev => [...prev, logEntry]);
+
         if (event.data.logType === 'error') {
           setIsConsoleOpen(true);
           setActiveTerminalTab('console');
+
+          // Trigger auto-fix if enabled
+          if (autoFixEnabled && !isAutoFixing) {
+            // Debounce auto-fix to prevent multiple triggers
+            if (autoFixTimeoutRef.current) clearTimeout(autoFixTimeoutRef.current);
+            autoFixTimeoutRef.current = setTimeout(() => {
+              autoFixError(event.data.message);
+            }, 1000); // Wait 1 second before auto-fixing
+          }
         }
       } else if (event.data.type === 'NETWORK_REQUEST') {
         setNetworkLogs(prev => [...prev, {
@@ -111,19 +216,95 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
           duration: event.data.req.duration,
           timestamp: new Date(event.data.timestamp).toLocaleTimeString([], { hour12: false })
         }]);
+      } else if (event.data.type === 'INSPECT_HOVER') {
+        // Element hovered in inspect mode
+        setHoveredElement(event.data.rect);
+      } else if (event.data.type === 'INSPECT_SELECT') {
+        // Element selected in inspect mode
+        setInspectedElement(event.data.element);
+        setHoveredElement(null);
+      } else if (event.data.type === 'INSPECT_LEAVE') {
+        // Mouse left element
+        setHoveredElement(null);
       }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [autoFixEnabled, autoFixError, isAutoFixing]);
 
   // Build iframe content
   useEffect(() => {
     if (appCode) {
-      const html = buildIframeHtml(files);
+      const html = buildIframeHtml(files, isInspectMode);
       setIframeSrc(html);
     }
-  }, [appCode, files]);
+  }, [appCode, files, isInspectMode]);
+
+  // Toggle inspect mode in iframe
+  const toggleInspectMode = () => {
+    const newMode = !isInspectMode;
+    setIsInspectMode(newMode);
+    setInspectedElement(null);
+    setHoveredElement(null);
+    // Also disable edit mode when entering inspect mode
+    if (newMode) setIsEditMode(false);
+  };
+
+  // Handle targeted component edit
+  const handleInspectEdit = async (prompt: string, element: InspectedElement) => {
+    if (!appCode) return;
+    setIsInspectEditing(true);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+      const elementContext = `
+Target Element:
+- Tag: <${element.tagName.toLowerCase()}>
+- Component: ${element.componentName || 'Unknown'}
+- Classes: ${element.className || 'none'}
+- ID: ${element.id || 'none'}
+- Text content: "${element.textContent?.slice(0, 100) || ''}"
+${element.parentComponents ? `- Parent components: ${element.parentComponents.join(' > ')}` : ''}
+`;
+
+      const response = await ai.models.generateContent({
+        model: selectedModel,
+        contents: {
+          parts: [{
+            text: `${elementContext}\n\nUser Request: ${prompt}\n\nCurrent files:\n${JSON.stringify(files, null, 2)}`
+          }]
+        },
+        config: {
+          systemInstruction: `You are an expert React developer. The user has selected a specific element/component in their app and wants to modify it.
+
+Based on the element information provided, identify which file and component needs to be modified, then make the requested changes.
+
+**RESPONSE FORMAT**: Return a JSON object with:
+1. "explanation": Brief markdown explaining what you changed
+2. "files": Object with file paths as keys and updated code as values
+
+Only return files that need changes. Maintain all existing functionality.`,
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const text = response.text || '{}';
+      const result = JSON.parse(cleanGeneratedCode(text));
+
+      if (result.files && Object.keys(result.files).length > 0) {
+        const newFiles = { ...files, ...result.files };
+        reviewChange(`Edit: ${element.componentName || element.tagName}`, newFiles);
+      }
+
+      setInspectedElement(null);
+      setIsInspectMode(false);
+    } catch (error) {
+      console.error('Inspect edit failed:', error);
+    } finally {
+      setIsInspectEditing(false);
+    }
+  };
 
   // API functions
   const generateUnitTests = async () => {
@@ -135,7 +316,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         model: selectedModel,
         contents: [{ parts: [{ text: `Generate unit tests for this React component using React Testing Library.\nComponent:\n${appCode}\n\nOutput ONLY the raw code for the test file.` }] }]
       });
-      let tests = (response.text || '').replace(/```tsx/g, '').replace(/```typescript/g, '').replace(/```/g, '');
+      const tests = cleanGeneratedCode(response.text || '');
       setFiles({ ...files, 'src/App.test.tsx': tests });
       setActiveFile('src/App.test.tsx');
       setActiveTab('code');
@@ -155,8 +336,8 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         model: selectedModel,
         contents: [{ parts: [{ text: `Analyze the following React component and generate a professional README.md file.\n\nReact Component Code:\n${appCode}` }] }]
       });
-      let docs = (response.text || '').replace(/```markdown/g, '').replace(/```md/g, '').replace(/```/g, '');
-      setFiles({ ...files, 'README.md': docs.trim() });
+      const docs = cleanGeneratedCode(response.text || '');
+      setFiles({ ...files, 'README.md': docs });
       setActiveFile('README.md');
       setActiveTab('code');
     } catch (e) {
@@ -175,7 +356,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         model: selectedModel,
         contents: [{ parts: [{ text: `Based on this React App, generate a SQL schema for SQLite.\nCode: ${appCode}\nOutput ONLY SQL.` }] }]
       });
-      const sql = (response.text || '').replace(/```sql/g, '').replace(/```/g, '');
+      const sql = cleanGeneratedCode(response.text || '');
       setFiles({ ...files, 'db/schema.sql': sql });
       setActiveFile('db/schema.sql');
       setActiveTab('code');
@@ -190,6 +371,14 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     if (!appCode) return;
     setIsAuditing(true);
     setShowAccessReport(true);
+
+    const requestId = debugLog.request('accessibility', {
+      model: selectedModel,
+      prompt: 'WCAG 2.1 Accessibility Audit',
+      systemInstruction: 'You are a WCAG 2.1 Accessibility Auditor.'
+    });
+    const startTime = Date.now();
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
@@ -202,8 +391,20 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
       });
       const report = JSON.parse(response.text || '{}');
       setAccessibilityReport(report);
+
+      debugLog.response('accessibility', {
+        id: requestId,
+        model: selectedModel,
+        duration: Date.now() - startTime,
+        response: JSON.stringify(report),
+        metadata: { score: report.score, issueCount: report.issues?.length }
+      });
     } catch (e) {
       setAccessibilityReport({ score: 0, issues: [{ type: 'error', message: 'Failed to run audit.' }] });
+      debugLog.error('accessibility', e instanceof Error ? e.message : 'Audit failed', {
+        id: requestId,
+        duration: Date.now() - startTime
+      });
     } finally {
       setIsAuditing(false);
     }
@@ -219,7 +420,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         contents: [{ parts: [{ text: `Issues to fix: ${JSON.stringify(accessibilityReport.issues)}\n\nOriginal Code:\n${appCode}` }] }],
         config: { systemInstruction: 'Apply accessibility fixes. Return ONLY the FULL updated code.' }
       });
-      let fixedCode = (response.text || '').replace(/```jsx/g, '').replace(/```tsx/g, '').replace(/```/g, '');
+      const fixedCode = cleanGeneratedCode(response.text || '');
       reviewChange('Fixed Accessibility Issues', { ...files, 'src/App.tsx': fixedCode });
       setAccessibilityReport({ score: 100, issues: [] });
       setTimeout(() => setShowAccessReport(false), 2000);
@@ -239,7 +440,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         model: selectedModel,
         contents: [{ parts: [{ text: `Optimize this React component for mobile devices.\n\nCode: ${appCode}\n\nOutput ONLY the full updated code.` }] }]
       });
-      let fixedCode = (response.text || '').replace(/```jsx/g, '').replace(/```tsx/g, '').replace(/```/g, '');
+      const fixedCode = cleanGeneratedCode(response.text || '');
       reviewChange('Fixed Responsiveness', { ...files, 'src/App.tsx': fixedCode });
     } catch (e) {
       console.error(e);
@@ -251,18 +452,37 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const handleQuickEdit = async () => {
     if (!editPrompt.trim() || !appCode) return;
     setIsQuickEditing(true);
+
+    const requestId = debugLog.request('quick-edit', {
+      model: selectedModel,
+      prompt: editPrompt
+    });
+    const startTime = Date.now();
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: selectedModel,
         contents: [{ parts: [{ text: `Edit this React code based on: "${editPrompt}"\n\nCode: ${appCode}\n\nOutput ONLY the full updated code.` }] }]
       });
-      let fixedCode = (response.text || '').replace(/```jsx/g, '').replace(/```tsx/g, '').replace(/```/g, '');
+      const fixedCode = cleanGeneratedCode(response.text || '');
+
+      debugLog.response('quick-edit', {
+        id: requestId,
+        model: selectedModel,
+        duration: Date.now() - startTime,
+        response: fixedCode.slice(0, 500) + '...'
+      });
+
       setFiles({ ...files, 'src/App.tsx': fixedCode });
       setIsEditMode(false);
       setEditPrompt('');
     } catch (e) {
       console.error(e);
+      debugLog.error('quick-edit', e instanceof Error ? e.message : 'Quick edit failed', {
+        id: requestId,
+        duration: Date.now() - startTime
+      });
     } finally {
       setIsQuickEditing(false);
     }
@@ -276,7 +496,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         model: selectedModel,
         contents: [{ parts: [{ text: `Fix this runtime error: "${message}"\n\nCode: ${appCode}\n\nOutput ONLY the full updated code.` }] }]
       });
-      let fixedCode = (response.text || '').replace(/```jsx/g, '').replace(/```tsx/g, '').replace(/```/g, '');
+      const fixedCode = cleanGeneratedCode(response.text || '');
       reviewChange('Fixed Runtime Error', { ...files, 'src/App.tsx': fixedCode });
       setLogs(prev => prev.map(l => l.id === logId ? { ...l, isFixing: false, isFixed: true } : l));
     } catch (e) {
@@ -384,7 +604,8 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
               { id: 'code', icon: Code2, label: 'Code' },
               { id: 'database', icon: Database, label: 'SQL' },
               { id: 'tests', icon: FlaskConical, label: 'Tests' },
-              { id: 'docs', icon: FileText, label: 'Docs' }
+              { id: 'docs', icon: FileText, label: 'Docs' },
+              { id: 'debug', icon: Bug, label: 'Debug' }
             ].map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
@@ -439,6 +660,36 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                     <Pencil className="w-3.5 h-3.5" />
                     <span className="hidden lg:inline">Edit</span>
                   </button>
+                  <button
+                    onClick={toggleInspectMode}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                      isInspectMode
+                        ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                        : 'bg-slate-500/10 text-slate-300 border-transparent'
+                    }`}
+                    title="Inspect & edit specific components"
+                  >
+                    <MousePointer2 className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">Inspect</span>
+                  </button>
+                  <button
+                    onClick={() => setAutoFixEnabled(!autoFixEnabled)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                      autoFixEnabled
+                        ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                        : 'bg-slate-500/10 text-slate-400 border-transparent'
+                    }`}
+                    title={autoFixEnabled ? 'Auto-fix enabled' : 'Auto-fix disabled'}
+                  >
+                    {isAutoFixing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : autoFixEnabled ? (
+                      <Zap className="w-3.5 h-3.5" />
+                    ) : (
+                      <ZapOff className="w-3.5 h-3.5" />
+                    )}
+                    <span className="hidden lg:inline">{isAutoFixing ? 'Fixing...' : 'Auto-fix'}</span>
+                  </button>
                   <button onClick={runAccessibilityAudit} className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 text-xs font-medium">
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span className="hidden lg:inline">Audit A11y</span>
@@ -473,7 +724,9 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-hidden bg-[#050811] group flex flex-col">
-        {activeTab === 'preview' ? (
+        {activeTab === 'debug' ? (
+          <DebugPanel />
+        ) : activeTab === 'preview' ? (
           <PreviewContent
             appCode={appCode}
             iframeSrc={iframeSrc}
@@ -496,6 +749,14 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             setLogs={setLogs}
             setNetworkLogs={setNetworkLogs}
             fixError={fixError}
+            autoFixToast={autoFixToast}
+            isAutoFixing={isAutoFixing}
+            isInspectMode={isInspectMode}
+            hoveredElement={hoveredElement}
+            inspectedElement={inspectedElement}
+            isInspectEditing={isInspectEditing}
+            onCloseInspector={() => { setInspectedElement(null); setIsInspectMode(false); }}
+            onInspectEdit={handleInspectEdit}
           />
         ) : (
           <div className="flex-1 flex min-h-0 h-full">
@@ -619,8 +880,16 @@ const PreviewContent: React.FC<{
   setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>;
   setNetworkLogs: React.Dispatch<React.SetStateAction<NetworkRequest[]>>;
   fixError: (id: string, msg: string) => void;
+  autoFixToast: string | null;
+  isAutoFixing: boolean;
+  isInspectMode: boolean;
+  hoveredElement: { top: number; left: number; width: number; height: number } | null;
+  inspectedElement: InspectedElement | null;
+  isInspectEditing: boolean;
+  onCloseInspector: () => void;
+  onInspectEdit: (prompt: string, element: InspectedElement) => void;
 }> = (props) => {
-  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError } = props;
+  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit } = props;
 
   // Calculate content area height based on console state
   const contentStyle = {
@@ -630,6 +899,24 @@ const PreviewContent: React.FC<{
   return (
     <div className="flex-1 min-h-0 h-full overflow-hidden relative">
       <div className="absolute inset-0 opacity-[0.15] pointer-events-none z-0" style={{ backgroundImage: 'linear-gradient(rgba(148,163,184,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+
+      {/* Auto-fix Toast Notification */}
+      {autoFixToast && (
+        <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-full shadow-lg backdrop-blur-xl border animate-in slide-in-from-top-2 duration-300 ${
+          isAutoFixing
+            ? 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+            : autoFixToast.includes('✅')
+              ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+              : autoFixToast.includes('❌') || autoFixToast.includes('⚠️')
+                ? 'bg-red-500/20 border-red-500/30 text-red-300'
+                : 'bg-slate-500/20 border-slate-500/30 text-slate-300'
+        }`}>
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {isAutoFixing && <Loader2 className="w-4 h-4 animate-spin" />}
+            {autoFixToast}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-center overflow-hidden relative z-10 transition-all duration-300" style={contentStyle}>
         {appCode ? (
@@ -679,6 +966,23 @@ const PreviewContent: React.FC<{
                 </div>
               </div>
             )}
+
+            {/* Inspect Mode Overlay */}
+            <InspectionOverlay
+              isActive={isInspectMode}
+              hoveredRect={hoveredElement}
+              selectedRect={inspectedElement?.rect || null}
+            />
+
+            {/* Component Inspector Panel */}
+            {inspectedElement && (
+              <ComponentInspector
+                element={inspectedElement}
+                onClose={onCloseInspector}
+                onSubmit={onInspectEdit}
+                isProcessing={isInspectEditing}
+              />
+            )}
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -715,31 +1019,286 @@ const PreviewContent: React.FC<{
 };
 
 // Helper functions for generating files
-const buildIframeHtml = (files: FileSystem): string => {
+const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): string => {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="about:blank">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>body { font-family: 'Inter', sans-serif; background-color: #020617; color: white; height: 100vh; overflow: auto; }</style>
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #1a1a1a; min-height: 100vh; margin: 0; }
+    #root { min-height: 100vh; }
+    .sandbox-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .sandbox-loading .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; }
+    .sandbox-error { padding: 20px; background: #fee2e2; color: #dc2626; border-radius: 8px; margin: 20px; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    ${isInspectMode ? `
+    .inspect-highlight { outline: 2px solid #3b82f6 !important; outline-offset: 2px; background-color: rgba(59, 130, 246, 0.1) !important; cursor: crosshair !important; }
+    .inspect-selected { outline: 3px solid #8b5cf6 !important; outline-offset: 2px; background-color: rgba(139, 92, 246, 0.1) !important; }
+    * { cursor: crosshair !important; }
+    ` : ''}
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="sandbox-loading">
+      <div class="spinner"></div>
+      <p style="margin-top: 16px; font-size: 14px;">Loading app...</p>
+    </div>
+  </div>
   <script>
+    // Sandbox environment setup
     window.process = { env: { NODE_ENV: 'development' } };
+    window.__SANDBOX_READY__ = false;
+
+    // Console forwarding
     const notify = (type, msg) => window.parent.postMessage({ type: 'CONSOLE_LOG', logType: type, message: typeof msg === 'object' ? JSON.stringify(msg) : String(msg), timestamp: Date.now() }, '*');
     console.log = (...args) => { notify('log', args.join(' ')); };
     console.warn = (...args) => { notify('warn', args.join(' ')); };
     console.error = (...args) => { notify('error', args.join(' ')); };
     window.onerror = function(msg) { notify('error', msg); return false; };
+
+    // Inspect Mode
+    window.__INSPECT_MODE__ = ${isInspectMode};
+    ${isInspectMode ? `
+    (function() {
+      let highlightedEl = null;
+
+      // Try to get React component name from fiber
+      function getComponentName(element) {
+        // Try to find React fiber
+        const fiberKey = Object.keys(element).find(key => key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$'));
+        if (fiberKey) {
+          let fiber = element[fiberKey];
+          while (fiber) {
+            if (fiber.type && typeof fiber.type === 'function') {
+              return fiber.type.displayName || fiber.type.name || null;
+            }
+            if (fiber.type && typeof fiber.type === 'string') {
+              // This is a DOM element, go up to parent
+            }
+            fiber = fiber.return;
+          }
+        }
+        return null;
+      }
+
+      // Get parent component chain
+      function getParentComponents(element) {
+        const parents = [];
+        const fiberKey = Object.keys(element).find(key => key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$'));
+        if (fiberKey) {
+          let fiber = element[fiberKey];
+          while (fiber) {
+            if (fiber.type && typeof fiber.type === 'function') {
+              const name = fiber.type.displayName || fiber.type.name;
+              if (name && !parents.includes(name)) {
+                parents.push(name);
+              }
+            }
+            fiber = fiber.return;
+          }
+        }
+        return parents.slice(0, 5); // Limit to 5 parents
+      }
+
+      document.addEventListener('mouseover', function(e) {
+        if (e.target === document.body || e.target === document.documentElement || e.target.id === 'root') return;
+
+        if (highlightedEl && highlightedEl !== e.target) {
+          highlightedEl.classList.remove('inspect-highlight');
+        }
+
+        e.target.classList.add('inspect-highlight');
+        highlightedEl = e.target;
+
+        const rect = e.target.getBoundingClientRect();
+        window.parent.postMessage({
+          type: 'INSPECT_HOVER',
+          rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+        }, '*');
+      }, true);
+
+      document.addEventListener('mouseout', function(e) {
+        if (highlightedEl) {
+          highlightedEl.classList.remove('inspect-highlight');
+        }
+        window.parent.postMessage({ type: 'INSPECT_LEAVE' }, '*');
+      }, true);
+
+      document.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const target = e.target;
+        const rect = target.getBoundingClientRect();
+        const componentName = getComponentName(target);
+        const parentComponents = getParentComponents(target);
+
+        // Remove highlight
+        if (highlightedEl) {
+          highlightedEl.classList.remove('inspect-highlight');
+        }
+        target.classList.add('inspect-selected');
+
+        window.parent.postMessage({
+          type: 'INSPECT_SELECT',
+          element: {
+            tagName: target.tagName,
+            className: target.className.replace('inspect-highlight', '').replace('inspect-selected', '').trim(),
+            id: target.id || null,
+            textContent: target.textContent?.slice(0, 200) || null,
+            rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+            componentName: componentName,
+            parentComponents: parentComponents.length > 0 ? parentComponents : null
+          }
+        }, '*');
+      }, true);
+    })();
+    ` : ''}
+
+    // Simple in-memory router state
+    window.__SANDBOX_ROUTER__ = {
+      currentPath: '/',
+      listeners: [],
+      navigate: function(path) {
+        this.currentPath = path;
+        this.listeners.forEach(fn => fn(path));
+        console.log('[Router] Navigated to: ' + path);
+      },
+      subscribe: function(fn) {
+        this.listeners.push(fn);
+        return () => { this.listeners = this.listeners.filter(l => l !== fn); };
+      },
+      getPath: function() { return this.currentPath; }
+    };
+
+    // Intercept all link clicks to prevent navigation outside sandbox
+    document.addEventListener('click', function(e) {
+      const link = e.target.closest('a');
+      if (link) {
+        const href = link.getAttribute('href');
+        if (href) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Handle different link types
+          if (href.startsWith('http://') || href.startsWith('https://')) {
+            // External links - open in new tab
+            window.open(href, '_blank', 'noopener,noreferrer');
+            console.log('[Sandbox] External link opened in new tab: ' + href);
+          } else if (href.startsWith('#')) {
+            // Hash navigation - scroll to element
+            const id = href.substring(1);
+            const el = document.getElementById(id);
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+            window.__SANDBOX_ROUTER__.navigate(href);
+          } else if (href.startsWith('mailto:') || href.startsWith('tel:')) {
+            // Allow mailto/tel links
+            window.open(href, '_self');
+          } else {
+            // Internal navigation - use sandbox router
+            window.__SANDBOX_ROUTER__.navigate(href);
+          }
+        }
+      }
+    }, true);
+
+    // Intercept form submissions
+    document.addEventListener('submit', function(e) {
+      const form = e.target;
+      if (form.tagName === 'FORM') {
+        e.preventDefault();
+        const action = form.getAttribute('action') || '/';
+        const method = form.getAttribute('method') || 'GET';
+        console.log('[Sandbox] Form submitted: ' + method + ' ' + action);
+        window.__SANDBOX_ROUTER__.navigate(action);
+      }
+    }, true);
+
+    // Block window.location changes (wrapped in try-catch as location is non-configurable in some browsers)
+    try {
+      Object.defineProperty(window, 'location', {
+        get: function() {
+          return {
+            href: 'sandbox://app' + window.__SANDBOX_ROUTER__.currentPath,
+            pathname: window.__SANDBOX_ROUTER__.currentPath,
+            search: '',
+            hash: '',
+            origin: 'sandbox://app',
+            host: 'app',
+            hostname: 'app',
+            port: '',
+            protocol: 'sandbox:',
+            assign: function(url) { window.__SANDBOX_ROUTER__.navigate(url); },
+            replace: function(url) { window.__SANDBOX_ROUTER__.navigate(url); },
+            reload: function() { console.log('[Sandbox] Page reload blocked'); }
+          };
+        },
+        set: function(url) {
+          window.__SANDBOX_ROUTER__.navigate(url);
+        },
+        configurable: true
+      });
+    } catch (e) {
+      // location is non-configurable - use navigation interception instead
+    }
+
+    // Provide useLocation and useNavigate hooks for React Router-like experience
+    window.__SANDBOX_HOOKS__ = {
+      useLocation: function() {
+        const React = window.React;
+        if (!React) return { pathname: window.__SANDBOX_ROUTER__.currentPath };
+        const [path, setPath] = React.useState(window.__SANDBOX_ROUTER__.currentPath);
+        React.useEffect(() => window.__SANDBOX_ROUTER__.subscribe(setPath), []);
+        return { pathname: path, search: '', hash: '', state: null };
+      },
+      useNavigate: function() {
+        return function(to) { window.__SANDBOX_ROUTER__.navigate(to); };
+      },
+      Link: function(props) {
+        const React = window.React;
+        return React.createElement('a', {
+          ...props,
+          href: props.to || props.href,
+          onClick: function(e) {
+            e.preventDefault();
+            window.__SANDBOX_ROUTER__.navigate(props.to || props.href);
+            if (props.onClick) props.onClick(e);
+          }
+        }, props.children);
+      }
+    };
   </script>
   <script type="text/babel" data-presets="react,typescript">
     (async () => {
       const files = JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(files))}"));
-      const importMap = { imports: { "react": "https://esm.sh/react@19.0.0", "react-dom/client": "https://esm.sh/react-dom@19.0.0/client", "lucide-react": "https://esm.sh/lucide-react@0.469.0" }};
+      const importMap = {
+        imports: {
+          // React core
+          "react": "https://esm.sh/react@19.0.0",
+          "react-dom": "https://esm.sh/react-dom@19.0.0",
+          "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+          // Icons
+          "lucide-react": "https://esm.sh/lucide-react@0.469.0",
+          // Utilities
+          "clsx": "https://esm.sh/clsx@2.1.1",
+          "classnames": "https://esm.sh/classnames@2.5.1",
+          "tailwind-merge": "https://esm.sh/tailwind-merge@2.5.4",
+          // Animation
+          "framer-motion": "https://esm.sh/framer-motion@11.11.17?external=react,react-dom",
+          // Date handling
+          "date-fns": "https://esm.sh/date-fns@4.1.0",
+          // State management (lightweight)
+          "zustand": "https://esm.sh/zustand@5.0.1?external=react",
+          // Form handling
+          "react-hook-form": "https://esm.sh/react-hook-form@7.53.2?external=react"
+        }
+      };
 
       // Helper to resolve relative paths to absolute
       function resolvePath(fromFile, importPath) {
@@ -802,12 +1361,18 @@ const buildIframeHtml = (files: FileSystem): string => {
       }
 
       // Process all files
+      const errors = [];
+      console.log('[Sandbox] Processing ' + Object.keys(files).length + ' files...');
+
       for (const [filename, content] of Object.entries(files)) {
         if (/\\.(tsx|ts|jsx|js)$/.test(filename)) {
           try {
             // Transform relative imports to absolute before transpiling
             const transformedContent = transformImports(content, filename);
-            const transpiled = Babel.transform(transformedContent, { presets: ['react', ['env', { modules: false }], 'typescript'], filename }).code;
+            const transpiled = Babel.transform(transformedContent, {
+              presets: ['react', ['env', { modules: false }], 'typescript'],
+              filename
+            }).code;
             const url = URL.createObjectURL(new Blob([transpiled], { type: 'application/javascript' }));
 
             // Add multiple import map entries for flexibility
@@ -819,8 +1384,29 @@ const buildIframeHtml = (files: FileSystem): string => {
               const relativePath = './' + filename.substring(4);
               importMap.imports[relativePath] = url;
               importMap.imports[relativePath.replace(/\\.(tsx|ts|jsx|js)$/, '')] = url;
+
+              // Also support imports without src/ prefix
+              const withoutSrc = filename.substring(4);
+              importMap.imports[withoutSrc] = url;
+              importMap.imports[withoutSrc.replace(/\\.(tsx|ts|jsx|js)$/, '')] = url;
             }
-          } catch (err) { console.error("Transpilation failed for " + filename, err); }
+
+            // Support component folder imports (e.g., 'components/Header' -> 'src/components/Header.tsx')
+            if (filename.includes('/components/')) {
+              const componentPath = filename.split('/components/')[1];
+              if (componentPath) {
+                importMap.imports['components/' + componentPath] = url;
+                importMap.imports['components/' + componentPath.replace(/\\.(tsx|ts|jsx|js)$/, '')] = url;
+                importMap.imports['./components/' + componentPath] = url;
+                importMap.imports['./components/' + componentPath.replace(/\\.(tsx|ts|jsx|js)$/, '')] = url;
+              }
+            }
+
+            console.log('[Sandbox] Compiled: ' + filename);
+          } catch (err) {
+            console.error('[Sandbox] Transpilation failed for ' + filename + ': ' + err.message);
+            errors.push({ file: filename, error: err.message });
+          }
         } else if (/\\.css$/.test(filename)) {
           // Handle CSS files - inject as style tag
           const style = document.createElement('style');
@@ -832,19 +1418,79 @@ const buildIframeHtml = (files: FileSystem): string => {
           const url = URL.createObjectURL(new Blob([cssModule], { type: 'application/javascript' }));
           importMap.imports[filename] = url;
           importMap.imports[filename.replace(/\\.css$/, '')] = url;
+          console.log('[Sandbox] Loaded CSS: ' + filename);
+        } else if (/\\.json$/.test(filename)) {
+          // Handle JSON files
+          try {
+            const jsonModule = 'export default ' + content + ';';
+            const url = URL.createObjectURL(new Blob([jsonModule], { type: 'application/javascript' }));
+            importMap.imports[filename] = url;
+            importMap.imports[filename.replace(/\\.json$/, '')] = url;
+          } catch (err) {
+            console.error('[Sandbox] JSON parse failed for ' + filename);
+          }
         }
+      }
+
+      if (errors.length > 0) {
+        console.warn('[Sandbox] ' + errors.length + ' file(s) failed to compile');
       }
 
       const mapScript = document.createElement('script');
       mapScript.type = "importmap";
       mapScript.textContent = JSON.stringify(importMap);
       document.head.appendChild(mapScript);
-      const bootstrapCode = \`import * as __React from 'react';import { createRoot } from 'react-dom/client';import App from 'src/App.tsx';createRoot(document.getElementById('root')).render(__React.createElement(App));\`;
+
+      // Bootstrap code that makes React hooks globally available
+      const bootstrapCode = \`
+        import * as React from 'react';
+        import { createRoot } from 'react-dom/client';
+        import App from 'src/App.tsx';
+
+        // Make React and hooks globally available
+        window.React = React;
+        window.useState = React.useState;
+        window.useEffect = React.useEffect;
+        window.useCallback = React.useCallback;
+        window.useMemo = React.useMemo;
+        window.useRef = React.useRef;
+        window.useContext = React.useContext;
+        window.useReducer = React.useReducer;
+        window.useLayoutEffect = React.useLayoutEffect;
+        window.createContext = React.createContext;
+        window.forwardRef = React.forwardRef;
+        window.memo = React.memo;
+        window.Fragment = React.Fragment;
+
+        // Render the app
+        try {
+          const root = createRoot(document.getElementById('root'));
+          root.render(React.createElement(React.StrictMode, null, React.createElement(App)));
+          window.__SANDBOX_READY__ = true;
+          console.log('[Sandbox] App mounted successfully');
+        } catch (err) {
+          console.error('[Sandbox] Failed to mount app:', err.message);
+          document.getElementById('root').innerHTML = '<div class="sandbox-error">Error: ' + err.message + '</div>';
+        }
+      \`;
+
       const script = document.createElement('script');
       script.type = 'module';
-      script.src = URL.createObjectURL(new Blob([Babel.transform(bootstrapCode, { presets: ['react', ['env', { modules: false }], 'typescript'], filename: 'bootstrap.tsx' }).code], { type: 'application/javascript' }));
-      document.body.appendChild(script);
-    })();
+      try {
+        const transpiledBootstrap = Babel.transform(bootstrapCode, {
+          presets: ['react', ['env', { modules: false }], 'typescript'],
+          filename: 'bootstrap.tsx'
+        }).code;
+        script.src = URL.createObjectURL(new Blob([transpiledBootstrap], { type: 'application/javascript' }));
+        document.body.appendChild(script);
+      } catch (err) {
+        console.error('[Sandbox] Bootstrap transpilation failed:', err.message);
+        document.getElementById('root').innerHTML = '<div class="sandbox-error">Bootstrap Error: ' + err.message + '</div>';
+      }
+    })().catch(err => {
+      console.error('[Sandbox] Initialization failed:', err.message);
+      document.getElementById('root').innerHTML = '<div class="sandbox-error">Init Error: ' + err.message + '</div>';
+    });
   </script>
 </body>
 </html>`;
