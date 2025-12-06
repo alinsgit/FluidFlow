@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Layers, Trash2, Settings } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import React, { useState, useCallback } from 'react';
+import { Layers, Trash2 } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
 import { cleanGeneratedCode } from '../../utils/cleanCode';
 import { generateContextForPrompt } from '../../utils/codemap';
 import { debugLog } from '../../hooks/useDebugStore';
+import { getProviderManager, GenerationRequest } from '../../services/ai';
 
 // Sub-components
 import { ChatPanel } from './ChatPanel';
@@ -24,6 +24,7 @@ interface ControlPanelProps {
   reviewChange: (label: string, newFiles: FileSystem) => void;
   selectedModel: string;
   onModelChange: (modelId: string) => void;
+  onOpenAISettings?: () => void;
 }
 
 // Calculate file changes between two file systems
@@ -64,18 +65,28 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   resetApp,
   reviewChange,
   selectedModel,
-  onModelChange
+  onModelChange,
+  onOpenAISettings
 }) => {
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConsultantMode, setIsConsultantMode] = useState(false);
   const [isEducationMode, setIsEducationMode] = useState(false);
+  const [, forceUpdate] = useState({});
 
   // Streaming state
   const [streamingStatus, setStreamingStatus] = useState<string>('');
   const [streamingChars, setStreamingChars] = useState(0);
 
   const existingApp = files['src/App.tsx'];
+
+  // Handle provider changes from settings
+  const handleProviderChange = useCallback((providerId: string, modelId: string) => {
+    // Force re-render to update the active provider display
+    forceUpdate({});
+    // Model change handled through the provider's defaultModel
+    onModelChange(modelId);
+  }, [onModelChange]);
 
   const handleSend = async (prompt: string, attachments: ChatAttachment[]) => {
     // Create user message
@@ -96,7 +107,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     const brandAtt = attachments.find(a => a.type === 'brand');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const manager = getProviderManager();
+      const activeProvider = manager.getActiveConfig();
+      const currentModel = activeProvider?.defaultModel || selectedModel;
+      const providerName = activeProvider?.name || 'AI';
 
       if (isConsultantMode) {
         // Consultant mode - return suggestions
@@ -104,41 +118,37 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 Identify missing UX elements, accessibility gaps, logical inconsistencies, or edge cases.
 Output ONLY a raw JSON array of strings containing your specific suggestions. Do not include markdown formatting.`;
 
-        const parts: any[] = [];
+        const images: { data: string; mimeType: string }[] = [];
         if (sketchAtt) {
           const base64Data = sketchAtt.preview.split(',')[1];
-          parts.push({ inlineData: { mimeType: sketchAtt.file.type, data: base64Data } });
+          images.push({ data: base64Data, mimeType: sketchAtt.file.type });
         }
-        parts.push({
-          text: prompt ? `Analyze this design. Context: ${prompt}` : 'Analyze this design for UX gaps.'
-        });
+
+        const request: GenerationRequest = {
+          prompt: prompt ? `Analyze this design. Context: ${prompt}` : 'Analyze this design for UX gaps.',
+          systemInstruction,
+          images,
+          responseFormat: 'json'
+        };
 
         const requestId = debugLog.request('generation', {
-          model: selectedModel,
-          prompt: prompt || 'Analyze design for UX gaps',
+          model: currentModel,
+          prompt: request.prompt,
           systemInstruction,
           attachments: attachments.map(a => ({ type: a.type, size: a.file.size })),
-          metadata: { mode: 'consultant' }
+          metadata: { mode: 'consultant', provider: providerName }
         });
         const startTime = Date.now();
 
-        const response = await ai.models.generateContent({
-          model: selectedModel,
-          contents: { parts },
-          config: {
-            systemInstruction,
-            responseMimeType: 'application/json'
-          }
-        });
-
+        const response = await manager.generate(request, currentModel);
         const text = response.text || '[]';
 
         debugLog.response('generation', {
           id: requestId,
-          model: selectedModel,
+          model: currentModel,
           duration: Date.now() - startTime,
           response: text,
-          metadata: { mode: 'consultant' }
+          metadata: { mode: 'consultant', provider: providerName }
         });
         try {
           const suggestionsData = JSON.parse(text);
@@ -188,90 +198,94 @@ Write a clear markdown explanation including:
           systemInstruction += `\n\n**EDUCATION MODE**: Add detailed inline comments explaining complex Tailwind classes and React hooks.`;
         }
 
-        const parts: any[] = [];
+        // Build prompt parts
+        const promptParts: string[] = [];
+        const images: { data: string; mimeType: string }[] = [];
 
         if (sketchAtt) {
           const base64Data = sketchAtt.preview.split(',')[1];
-          parts.push({ text: 'SKETCH/WIREFRAME:' });
-          parts.push({ inlineData: { mimeType: sketchAtt.file.type, data: base64Data } });
+          promptParts.push('SKETCH/WIREFRAME: [attached image]');
+          images.push({ data: base64Data, mimeType: sketchAtt.file.type });
         }
 
         if (brandAtt) {
           const base64Data = brandAtt.preview.split(',')[1];
-          parts.push({ text: 'BRAND LOGO:' });
-          parts.push({ inlineData: { mimeType: brandAtt.file.type, data: base64Data } });
+          promptParts.push('BRAND LOGO: [attached image]');
+          images.push({ data: base64Data, mimeType: brandAtt.file.type });
         }
 
         if (existingApp) {
           // Generate codemap for better context understanding
           const codeContext = generateContextForPrompt(files);
-          parts.push({ text: `${codeContext}\n\n### Full Source Files\n\`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\`` });
-          parts.push({ text: `USER REQUEST: ${prompt || 'Refine the app based on the attached images.'}` });
+          promptParts.push(`${codeContext}\n\n### Full Source Files\n\`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\``);
+          promptParts.push(`USER REQUEST: ${prompt || 'Refine the app based on the attached images.'}`);
           systemInstruction += `\n\nYou are UPDATING an existing project. The codemap above shows the current structure.
 - Maintain existing component names and prop interfaces
 - Keep import paths consistent with the current structure
 - Return ALL files in the "files" object, including unchanged ones
 - Only modify files that need changes based on the user request`;
         } else {
-          parts.push({ text: `TASK: Create a React app from this design. ${prompt ? `Additional context: ${prompt}` : ''}` });
+          promptParts.push(`TASK: Create a React app from this design. ${prompt ? `Additional context: ${prompt}` : ''}`);
         }
 
+        const request: GenerationRequest = {
+          prompt: promptParts.join('\n\n'),
+          systemInstruction,
+          images,
+          responseFormat: 'json'
+        };
+
         // Use streaming for better UX
-        setStreamingStatus('🚀 Starting generation...');
+        setStreamingStatus(`🚀 Starting generation with ${providerName}...`);
         setStreamingChars(0);
 
         const genRequestId = debugLog.request('generation', {
-          model: selectedModel,
+          model: currentModel,
           prompt: prompt || 'Generate/Update app',
           systemInstruction,
           attachments: attachments.map(a => ({ type: a.type, size: a.file.size })),
-          metadata: { mode: 'generator', hasExistingApp: !!existingApp }
+          metadata: { mode: 'generator', hasExistingApp: !!existingApp, provider: providerName }
         });
         const genStartTime = Date.now();
-
-        const stream = await ai.models.generateContentStream({
-          model: selectedModel,
-          contents: { parts },
-          config: {
-            systemInstruction,
-            responseMimeType: 'application/json'
-          }
-        });
 
         let fullText = '';
         let detectedFiles: string[] = [];
         let chunkCount = 0;
 
-        // Process stream chunks
-        for await (const chunk of stream) {
-          const chunkText = chunk.text || '';
-          fullText += chunkText;
-          chunkCount++;
-          setStreamingChars(fullText.length);
+        // Use streaming API
+        await manager.generateStream(
+          request,
+          (chunk) => {
+            const chunkText = chunk.text || '';
+            fullText += chunkText;
+            chunkCount++;
+            setStreamingChars(fullText.length);
 
-          // Log every 10th chunk to avoid spam
-          if (chunkCount % 10 === 0) {
-            debugLog.stream('generation', {
-              id: genRequestId,
-              metadata: { chunkCount, totalChars: fullText.length, filesDetected: detectedFiles.length }
-            });
-          }
-
-          // Try to detect file paths as they appear
-          const fileMatches = fullText.match(/"src\/[^"]+\.tsx?"/g);
-          if (fileMatches) {
-            const newFiles = fileMatches.map(m => m.replace(/"/g, '')).filter(f => !detectedFiles.includes(f));
-            if (newFiles.length > 0) {
-              detectedFiles = [...detectedFiles, ...newFiles];
-              setStreamingStatus(`📁 ${detectedFiles.length} files detected: ${detectedFiles[detectedFiles.length - 1]}`);
+            // Log every 10th chunk to avoid spam
+            if (chunkCount % 10 === 0) {
+              debugLog.stream('generation', {
+                id: genRequestId,
+                metadata: { chunkCount, totalChars: fullText.length, filesDetected: detectedFiles.length }
+              });
             }
-          }
 
-          // Update status with character count
-          if (detectedFiles.length === 0) {
-            setStreamingStatus(`⚡ Generating... (${Math.round(fullText.length / 1024)}KB)`);
-          }
-        }
+            // Try to detect file paths as they appear
+            const fileMatches = fullText.match(/"src\/[^"]+\.tsx?"/g);
+            if (fileMatches) {
+              const newMatchedFiles = fileMatches.map(m => m.replace(/"/g, '')).filter(f => !detectedFiles.includes(f));
+              if (newMatchedFiles.length > 0) {
+                detectedFiles = [...detectedFiles, ...newMatchedFiles];
+                setStreamingStatus(`📁 ${detectedFiles.length} files detected: ${detectedFiles[detectedFiles.length - 1]}`);
+              }
+            }
+
+            // Update status with character count
+            if (detectedFiles.length === 0) {
+              setStreamingStatus(`⚡ Generating... (${Math.round(fullText.length / 1024)}KB)`);
+            }
+          },
+          currentModel
+        );
 
         setStreamingStatus('✨ Parsing response...');
 
@@ -284,10 +298,10 @@ Write a clear markdown explanation including:
 
           debugLog.response('generation', {
             id: genRequestId,
-            model: selectedModel,
+            model: currentModel,
             duration: Date.now() - genStartTime,
             response: JSON.stringify({ explanation, fileCount: Object.keys(newFiles).length, files: Object.keys(newFiles) }),
-            metadata: { mode: 'generator', totalChunks: chunkCount, totalChars: fullText.length }
+            metadata: { mode: 'generator', totalChunks: chunkCount, totalChars: fullText.length, provider: providerName }
           });
 
           // Clean code in each file
@@ -327,10 +341,10 @@ Write a clear markdown explanation including:
 
           debugLog.error('generation', e instanceof Error ? e.message : 'Parse error', {
             id: genRequestId,
-            model: selectedModel,
+            model: currentModel,
             duration: Date.now() - genStartTime,
             response: fullText.slice(0, 1000),
-            metadata: { mode: 'generator', totalChunks: chunkCount }
+            metadata: { mode: 'generator', totalChunks: chunkCount, provider: providerName }
           });
 
           const errorMessage: ChatMessage = {
@@ -346,9 +360,11 @@ Write a clear markdown explanation including:
     } catch (error) {
       console.error('Error generating content:', error);
 
+      const manager = getProviderManager();
+      const activeConfig = manager.getActiveConfig();
       debugLog.error('generation', error instanceof Error ? error.message : 'Unknown error', {
-        model: selectedModel,
-        metadata: { mode: isConsultantMode ? 'consultant' : 'generator' }
+        model: activeConfig?.defaultModel || selectedModel,
+        metadata: { mode: isConsultantMode ? 'consultant' : 'generator', provider: activeConfig?.name }
       });
 
       const errorMessage: ChatMessage = {
@@ -454,9 +470,15 @@ Write a clear markdown explanation including:
       <SettingsPanel
         isEducationMode={isEducationMode}
         onEducationModeChange={setIsEducationMode}
-        hasApiKey={!!process.env.API_KEY}
+        hasApiKey={(() => {
+          const manager = getProviderManager();
+          const config = manager.getActiveConfig();
+          return !!(config?.apiKey || config?.isLocal);
+        })()}
         selectedModel={selectedModel}
         onModelChange={onModelChange}
+        onProviderChange={handleProviderChange}
+        onOpenAISettings={onOpenAISettings}
       />
     </aside>
   );

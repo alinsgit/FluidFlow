@@ -3,7 +3,7 @@ import {
   Search, FileCode, Hash, Command, ArrowRight,
   FileText, Folder, CornerDownLeft, ArrowUp, ArrowDown,
   Settings, Trash2, Download, Github, Zap, Eye, Code2,
-  Undo2, Redo2, Palette, Layers, Rocket, Link2
+  Undo2, Redo2, Palette, Layers, Rocket, Link2, Cpu
 } from 'lucide-react';
 import { FileSystem } from '../types';
 
@@ -29,6 +29,7 @@ interface SearchResult {
 const QUICK_ACTIONS = [
   { id: 'undo', label: 'Undo (Ctrl+Z)', icon: <Undo2 className="w-4 h-4 text-orange-400" /> },
   { id: 'redo', label: 'Redo (Ctrl+Y)', icon: <Redo2 className="w-4 h-4 text-orange-400" /> },
+  { id: 'ai-settings', label: 'AI Provider Settings', icon: <Cpu className="w-4 h-4 text-blue-400" /> },
   { id: 'snippets', label: 'Code Snippets (Ctrl+J)', icon: <Code2 className="w-4 h-4 text-yellow-400" /> },
   { id: 'tailwind', label: 'Tailwind Palette (Ctrl+T)', icon: <Palette className="w-4 h-4 text-cyan-400" /> },
   { id: 'component-tree', label: 'Component Tree (Ctrl+Shift+T)', icon: <Layers className="w-4 h-4 text-green-400" /> },

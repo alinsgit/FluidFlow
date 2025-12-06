@@ -45,14 +45,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleSend = () => {
-    // Need at least a sketch if no existing app
-    if (!hasExistingApp && !attachments.find(a => a.type === 'sketch')) {
-      setError('Please upload a sketch first');
+    // Need at least a sketch OR a prompt
+    const hasSketch = attachments.find(a => a.type === 'sketch');
+    const hasPrompt = prompt.trim().length > 0;
+
+    if (!hasExistingApp && !hasSketch && !hasPrompt) {
+      setError('Please upload a sketch or enter a prompt');
       setTimeout(() => setError(null), 3000);
       return;
     }
 
-    if (hasExistingApp && !prompt.trim() && attachments.length === 0) {
+    if (hasExistingApp && !hasPrompt && attachments.length === 0) {
       setError('Please enter a prompt or attach an image');
       setTimeout(() => setError(null), 3000);
       return;
@@ -135,7 +138,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const sketchAttachment = attachments.find(a => a.type === 'sketch');
   const brandAttachment = attachments.find(a => a.type === 'brand');
-  const canSend = hasExistingApp ? (prompt.trim() || attachments.length > 0) : !!sketchAttachment;
+  // Can send if: (existing app + prompt/attachment) OR (new app + sketch OR prompt)
+  const canSend = hasExistingApp
+    ? (prompt.trim() || attachments.length > 0)
+    : (!!sketchAttachment || prompt.trim().length > 0);
 
   return (
     <div className="flex-shrink-0 border-t border-white/5 bg-slate-900/50">
@@ -288,14 +294,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {/* Status hint */}
         {!hasExistingApp && (
           <div className="mt-2 flex items-center justify-center gap-2">
-            {sketchAttachment ? (
+            {canSend ? (
               <p className="text-[10px] text-green-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                Ready to generate
+                Ready to generate {sketchAttachment ? '(with sketch)' : '(text only)'}
               </p>
             ) : (
               <p className="text-[10px] text-slate-500">
-                Upload a sketch to get started
+                Upload a sketch or describe your app
               </p>
             )}
           </div>

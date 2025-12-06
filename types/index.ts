@@ -92,25 +92,25 @@ export interface ModelConfig {
   description: string;
 }
 
-// Code generation models only
+// Code generation models only (for Gemini provider) - Updated December 2025
 export const AI_MODELS: ModelConfig[] = [
   {
-    id: 'gemini-2.5-flash',
+    id: 'models/gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     tier: 'fast',
-    description: 'Fast & cost-effective'
+    description: 'Fast & efficient'
   },
   {
-    id: 'gemini-2.5-pro',
+    id: 'models/gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
     tier: 'pro',
-    description: 'Best for complex tasks'
+    description: 'Best quality'
   },
   {
-    id: 'gemini-3-pro-preview',
-    name: 'Gemini 3 Pro Preview',
+    id: 'models/gemini-3-pro-preview',
+    name: 'Gemini 3 Pro',
     tier: 'pro',
-    description: 'Best for complex tasks'
+    description: 'Latest flagship'
   }
 ];
 

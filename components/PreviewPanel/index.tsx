@@ -2,9 +2,11 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, Pencil, Send, FileText, Wrench, FlaskConical, Package, Loader2,
-  SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield
+  SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
+  ChevronLeft, ChevronRight, Globe
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
+import { getProviderManager } from '../../services/ai';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -130,6 +132,12 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [inspectedElement, setInspectedElement] = useState<InspectedElement | null>(null);
   const [isInspectEditing, setIsInspectEditing] = useState(false);
 
+  // URL Bar state
+  const [currentUrl, setCurrentUrl] = useState('/');
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   const appCode = files['src/App.tsx'];
 
   // Auto-fix error function
@@ -254,6 +262,11 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
       } else if (event.data.type === 'INSPECT_LEAVE') {
         // Mouse left element
         setHoveredElement(null);
+      } else if (event.data.type === 'URL_CHANGE') {
+        // URL changed in sandbox
+        setCurrentUrl(event.data.url || '/');
+        setCanGoBack(event.data.canGoBack || false);
+        setCanGoForward(event.data.canGoForward || false);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -400,35 +413,82 @@ Only return files that need changes. Maintain all existing functionality.`,
     setIsAuditing(true);
     setShowAccessReport(true);
 
+    const manager = getProviderManager();
+    const activeConfig = manager.getActiveConfig();
+    const currentModel = activeConfig?.defaultModel || selectedModel;
+
+    const systemInstruction = `You are a WCAG 2.1 Accessibility Auditor. Analyze the provided React code for accessibility issues.
+
+You MUST return a JSON object with this EXACT structure:
+{
+  "score": <number 0-100>,
+  "issues": [
+    {
+      "type": "error" | "warning",
+      "message": "<description of the accessibility issue>"
+    }
+  ]
+}
+
+Rules for scoring:
+- 100: No accessibility issues found
+- 80-99: Minor issues (warnings only)
+- 50-79: Moderate issues (some errors)
+- 0-49: Critical accessibility problems
+
+Check for these WCAG 2.1 violations:
+1. Missing alt text on images
+2. Missing form labels
+3. Poor color contrast
+4. Missing ARIA attributes
+5. Non-semantic HTML usage
+6. Missing keyboard navigation support
+7. Missing focus indicators
+8. Missing skip links
+9. Missing language attributes
+10. Missing heading hierarchy`;
+
     const requestId = debugLog.request('accessibility', {
-      model: selectedModel,
+      model: currentModel,
       prompt: 'WCAG 2.1 Accessibility Audit',
-      systemInstruction: 'You are a WCAG 2.1 Accessibility Auditor.'
+      systemInstruction
     });
     const startTime = Date.now();
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents: [{ parts: [{ text: `Audit this code:\n${appCode}` }] }],
-        config: {
-          systemInstruction: 'You are a WCAG 2.1 Accessibility Auditor. Output ONLY a JSON object with score (0-100) and issues array.',
-          responseMimeType: 'application/json'
-        }
-      });
-      const report = JSON.parse(response.text || '{}');
+      const response = await manager.generate({
+        prompt: `Audit this React code for accessibility issues:\n\n${appCode}`,
+        systemInstruction,
+        responseFormat: 'json'
+      }, currentModel);
+
+      let report: AccessibilityReport;
+      try {
+        const parsed = JSON.parse(response.text || '{}');
+        // Normalize the response to match our expected format
+        report = {
+          score: typeof parsed.score === 'number' ? parsed.score : 0,
+          issues: Array.isArray(parsed.issues) ? parsed.issues.map((issue: any) => ({
+            type: issue.type === 'error' || issue.type === 'warning' ? issue.type : 'warning',
+            message: typeof issue.message === 'string' ? issue.message :
+                     typeof issue === 'string' ? issue : JSON.stringify(issue)
+          })) : []
+        };
+      } catch {
+        report = { score: 0, issues: [{ type: 'error', message: 'Failed to parse audit response.' }] };
+      }
+
       setAccessibilityReport(report);
 
       debugLog.response('accessibility', {
         id: requestId,
-        model: selectedModel,
+        model: currentModel,
         duration: Date.now() - startTime,
         response: JSON.stringify(report),
         metadata: { score: report.score, issueCount: report.issues?.length }
       });
     } catch (e) {
-      setAccessibilityReport({ score: 0, issues: [{ type: 'error', message: 'Failed to run audit.' }] });
+      setAccessibilityReport({ score: 0, issues: [{ type: 'error', message: 'Failed to run audit: ' + (e instanceof Error ? e.message : 'Unknown error') }] });
       debugLog.error('accessibility', e instanceof Error ? e.message : 'Audit failed', {
         id: requestId,
         duration: Date.now() - startTime
@@ -442,12 +502,21 @@ Only return files that need changes. Maintain all existing functionality.`,
     if (!appCode || !accessibilityReport) return;
     setIsFixing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents: [{ parts: [{ text: `Issues to fix: ${JSON.stringify(accessibilityReport.issues)}\n\nOriginal Code:\n${appCode}` }] }],
-        config: { systemInstruction: 'Apply accessibility fixes. Return ONLY the FULL updated code.' }
-      });
+      const manager = getProviderManager();
+      const activeConfig = manager.getActiveConfig();
+      const currentModel = activeConfig?.defaultModel || selectedModel;
+
+      const response = await manager.generate({
+        prompt: `Fix the following accessibility issues in this React code.
+
+Issues to fix:
+${accessibilityReport.issues.map((issue, i) => `${i + 1}. [${issue.type.toUpperCase()}] ${issue.message}`).join('\n')}
+
+Original Code:
+${appCode}`,
+        systemInstruction: 'You are an accessibility expert. Apply the necessary fixes to resolve all listed accessibility issues. Return ONLY the complete fixed code without any markdown formatting or explanations.'
+      }, currentModel);
+
       const fixedCode = cleanGeneratedCode(response.text || '');
       reviewChange('Fixed Accessibility Issues', { ...files, 'src/App.tsx': fixedCode });
       setAccessibilityReport({ score: 100, issues: [] });
@@ -630,7 +699,32 @@ Thumbs.db
   };
 
   // Helper functions
-  const reloadPreview = () => setKey(prev => prev + 1);
+  const reloadPreview = () => {
+    setKey(prev => prev + 1);
+    setCurrentUrl('/');
+    setCanGoBack(false);
+    setCanGoForward(false);
+  };
+
+  // URL Bar navigation functions
+  const navigateToUrl = (url: string) => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'NAVIGATE', url }, '*');
+    }
+  };
+
+  const goBack = () => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'GO_BACK' }, '*');
+    }
+  };
+
+  const goForward = () => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'GO_FORWARD' }, '*');
+    }
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(files[activeFile] || '');
     setIsCopied(true);
@@ -882,6 +976,14 @@ Thumbs.db
             isInspectEditing={isInspectEditing}
             onCloseInspector={() => { setInspectedElement(null); setIsInspectMode(false); }}
             onInspectEdit={handleInspectEdit}
+            iframeRef={iframeRef}
+            currentUrl={currentUrl}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            onNavigate={navigateToUrl}
+            onGoBack={goBack}
+            onGoForward={goForward}
+            onReload={reloadPreview}
           />
         ) : (
           <div className="flex-1 flex min-h-0 h-full">
@@ -1067,8 +1169,34 @@ const PreviewContent: React.FC<{
   isInspectEditing: boolean;
   onCloseInspector: () => void;
   onInspectEdit: (prompt: string, element: InspectedElement) => void;
+  // URL Bar props
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  currentUrl: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onNavigate: (url: string) => void;
+  onGoBack: () => void;
+  onGoForward: () => void;
+  onReload: () => void;
 }> = (props) => {
-  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit } = props;
+  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit, iframeRef, currentUrl, canGoBack, canGoForward, onNavigate, onGoBack, onGoForward, onReload } = props;
+
+  // Local state for URL input
+  const [urlInput, setUrlInput] = useState(currentUrl);
+
+  // Sync URL input with current URL
+  useEffect(() => {
+    setUrlInput(currentUrl);
+  }, [currentUrl]);
+
+  const handleUrlSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let url = urlInput.trim();
+    if (!url.startsWith('/')) {
+      url = '/' + url;
+    }
+    onNavigate(url);
+  };
 
   // Calculate content area height based on console state
   const contentStyle = {
@@ -1111,6 +1239,50 @@ const PreviewContent: React.FC<{
               </div>
             )}
 
+            {/* URL Bar */}
+            <div className={`flex-none flex items-center gap-1.5 px-2 py-1.5 bg-slate-900/95 border-b border-white/5 ${previewDevice === 'mobile' ? 'pt-8' : ''}`}>
+              {/* Navigation Buttons */}
+              <button
+                onClick={onGoBack}
+                disabled={!canGoBack}
+                className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Go Back"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onGoForward}
+                disabled={!canGoForward}
+                className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Go Forward"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onReload}
+                className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                title="Reload"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+
+              {/* URL Input */}
+              <form onSubmit={handleUrlSubmit} className="flex-1 flex items-center">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 border border-white/5 rounded-lg">
+                  <Globe className="w-3.5 h-3.5 text-slate-500 flex-none" />
+                  <input
+                    type="text"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Escape' && setUrlInput(currentUrl)}
+                    className="flex-1 bg-transparent text-xs text-slate-300 placeholder-slate-500 outline-none font-mono"
+                    placeholder="/"
+                    spellCheck={false}
+                  />
+                </div>
+              </form>
+            </div>
+
             {(isGenerating || isFixingResp) && (
               <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-sm">
                 <div className="relative">
@@ -1125,7 +1297,7 @@ const PreviewContent: React.FC<{
               </div>
             )}
 
-            <iframe key={iframeKey} srcDoc={iframeSrc} title="Preview" className={`w-full h-full bg-white transition-opacity duration-500 ${isGenerating ? 'opacity-40' : 'opacity-100'}`} sandbox="allow-scripts allow-same-origin" />
+            <iframe ref={iframeRef} key={iframeKey} srcDoc={iframeSrc} title="Preview" className={`flex-1 w-full bg-white transition-opacity duration-500 ${isGenerating ? 'opacity-40' : 'opacity-100'}`} sandbox="allow-scripts allow-same-origin" />
 
             {isEditMode && (
               <div className="absolute left-1/2 -translate-x-1/2 w-[90%] md:w-[600px] z-50 animate-in slide-in-from-bottom-4 duration-300 bottom-8">
@@ -1241,6 +1413,32 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
     console.error = (...args) => { notify('error', args.join(' ')); };
     window.onerror = function(msg) { notify('error', msg); return false; };
 
+    // Patch URL constructor FIRST - before any library loads
+    (function() {
+      var OriginalURL = window.URL;
+      window.URL = function URL(url, base) {
+        // Handle various edge cases
+        if (url === undefined || url === null || url === '') {
+          url = '/';
+        }
+        url = String(url);
+        // If url is relative, provide default base
+        if ((url.startsWith('/') || !url.includes('://')) && !base) {
+          base = 'http://localhost';
+        }
+        try {
+          return new OriginalURL(url, base);
+        } catch (e) {
+          // Last resort fallback
+          return new OriginalURL('http://localhost' + (url.startsWith('/') ? url : '/' + url));
+        }
+      };
+      window.URL.prototype = OriginalURL.prototype;
+      window.URL.createObjectURL = OriginalURL.createObjectURL;
+      window.URL.revokeObjectURL = OriginalURL.revokeObjectURL;
+      window.URL.canParse = OriginalURL.canParse;
+    })();
+
     // Inspect Mode
     window.__INSPECT_MODE__ = ${isInspectMode};
     ${isInspectMode ? `
@@ -1348,21 +1546,195 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
     })();
     ` : ''}
 
-    // Simple in-memory router state
+    // Enhanced in-memory router state with full URL support
     window.__SANDBOX_ROUTER__ = {
       currentPath: '/',
+      currentState: null,
+      search: '',
+      hash: '',
       listeners: [],
-      navigate: function(path) {
-        this.currentPath = path;
-        this.listeners.forEach(fn => fn(path));
-        console.log('[Router] Navigated to: ' + path);
+
+      navigate: function(path, state, skipNotify) {
+        if (state === undefined) state = null;
+        // Ensure path is a string
+        path = String(path || '/');
+        if (!path.startsWith('/')) path = '/' + path;
+
+        // Parse URL manually (URL constructor is unreliable in sandbox)
+        var pathname = path;
+        var search = '';
+        var hash = '';
+
+        // Extract hash
+        var hashIndex = path.indexOf('#');
+        if (hashIndex >= 0) {
+          hash = path.substring(hashIndex);
+          pathname = path.substring(0, hashIndex);
+        }
+
+        // Extract search/query
+        var searchIndex = pathname.indexOf('?');
+        if (searchIndex >= 0) {
+          search = pathname.substring(searchIndex);
+          pathname = pathname.substring(0, searchIndex);
+        }
+
+        this.currentPath = pathname || '/';
+        this.search = search;
+        this.hash = hash;
+        this.currentState = state;
+
+        const location = this.getLocation();
+        this.listeners.forEach(fn => fn(location));
+        console.log('[Router] Navigated to: ' + this.currentPath + this.search + this.hash);
+
+        // Notify parent of URL change (unless skipped for internal operations)
+        if (!skipNotify) {
+          this.notifyParent();
+        }
       },
+
+      notifyParent: function() {
+        var historyInfo = window.__HISTORY_INFO__ || { index: 0, length: 1 };
+        window.parent.postMessage({
+          type: 'URL_CHANGE',
+          url: this.currentPath + this.search + this.hash,
+          canGoBack: historyInfo.index > 0,
+          canGoForward: historyInfo.index < historyInfo.length - 1
+        }, '*');
+      },
+
+      getLocation: function() {
+        return {
+          pathname: this.currentPath,
+          search: this.search,
+          hash: this.hash,
+          state: this.currentState,
+          key: Math.random().toString(36).substring(2, 8)
+        };
+      },
+
       subscribe: function(fn) {
         this.listeners.push(fn);
-        return () => { this.listeners = this.listeners.filter(l => l !== fn); };
+        return function() {
+          window.__SANDBOX_ROUTER__.listeners = window.__SANDBOX_ROUTER__.listeners.filter(function(l) { return l !== fn; });
+        };
       },
+
       getPath: function() { return this.currentPath; }
     };
+
+    // History API emulation for React Router compatibility
+    (function() {
+      var historyStack = [{ state: null, title: '', url: '/' }];
+      var historyIndex = 0;
+
+      // Update global history info for URL bar
+      function updateHistoryInfo() {
+        window.__HISTORY_INFO__ = {
+          index: historyIndex,
+          length: historyStack.length
+        };
+      }
+      updateHistoryInfo();
+
+      // Store our custom history implementation
+      var customHistory = {
+        get length() { return historyStack.length; },
+        get state() { return historyStack[historyIndex] ? historyStack[historyIndex].state : null; },
+        get scrollRestoration() { return 'auto'; },
+        set scrollRestoration(val) { /* noop */ },
+
+        pushState: function(state, title, url) {
+          historyStack = historyStack.slice(0, historyIndex + 1);
+          historyStack.push({ state: state, title: title, url: url || '/' });
+          historyIndex = historyStack.length - 1;
+          updateHistoryInfo();
+          window.__SANDBOX_ROUTER__.navigate(url || '/', state);
+          // Dispatch popstate to trigger React Router re-render
+          window.dispatchEvent(new PopStateEvent('popstate', { state: state }));
+        },
+
+        replaceState: function(state, title, url) {
+          historyStack[historyIndex] = { state: state, title: title, url: url || '/' };
+          updateHistoryInfo();
+          window.__SANDBOX_ROUTER__.navigate(url || '/', state);
+          // Dispatch popstate to trigger React Router re-render
+          window.dispatchEvent(new PopStateEvent('popstate', { state: state }));
+        },
+
+        back: function() {
+          if (historyIndex > 0) {
+            historyIndex--;
+            updateHistoryInfo();
+            var entry = historyStack[historyIndex];
+            window.__SANDBOX_ROUTER__.navigate(entry.url, entry.state);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: entry.state }));
+          }
+        },
+
+        forward: function() {
+          if (historyIndex < historyStack.length - 1) {
+            historyIndex++;
+            updateHistoryInfo();
+            var entry = historyStack[historyIndex];
+            window.__SANDBOX_ROUTER__.navigate(entry.url, entry.state);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: entry.state }));
+          }
+        },
+
+        go: function(delta) {
+          var newIndex = historyIndex + delta;
+          if (newIndex >= 0 && newIndex < historyStack.length) {
+            historyIndex = newIndex;
+            updateHistoryInfo();
+            var entry = historyStack[historyIndex];
+            window.__SANDBOX_ROUTER__.navigate(entry.url, entry.state);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: entry.state }));
+          }
+        }
+      };
+
+      // Make it globally accessible
+      window.__SANDBOX_HISTORY__ = customHistory;
+
+      // Try to override native history methods (safer approach)
+      try {
+        var nativeHistory = window.history;
+        Object.defineProperty(window, 'history', {
+          get: function() { return customHistory; },
+          configurable: true
+        });
+        console.log('[Sandbox] History API fully overridden');
+      } catch (e) {
+        // If we can't override window.history, at least override its methods
+        try {
+          window.history.pushState = customHistory.pushState;
+          window.history.replaceState = customHistory.replaceState;
+          window.history.back = customHistory.back;
+          window.history.forward = customHistory.forward;
+          window.history.go = customHistory.go;
+          console.log('[Sandbox] History methods overridden');
+        } catch (e2) {
+          console.warn('[Sandbox] Could not override history API, using fallback');
+        }
+      }
+
+      // Listen for navigation commands from parent window
+      window.addEventListener('message', function(event) {
+        if (!event.data || !event.data.type) return;
+
+        if (event.data.type === 'NAVIGATE') {
+          customHistory.pushState(null, '', event.data.url);
+        } else if (event.data.type === 'GO_BACK') {
+          customHistory.back();
+        } else if (event.data.type === 'GO_FORWARD') {
+          customHistory.forward();
+        }
+      });
+
+      console.log('[Sandbox] History API emulation initialized');
+    })();
 
     // Intercept all link clicks to prevent navigation outside sandbox
     document.addEventListener('click', function(e) {
@@ -1378,18 +1750,19 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
             // External links - open in new tab
             window.open(href, '_blank', 'noopener,noreferrer');
             console.log('[Sandbox] External link opened in new tab: ' + href);
-          } else if (href.startsWith('#')) {
-            // Hash navigation - scroll to element
-            const id = href.substring(1);
-            const el = document.getElementById(id);
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-            window.__SANDBOX_ROUTER__.navigate(href);
           } else if (href.startsWith('mailto:') || href.startsWith('tel:')) {
             // Allow mailto/tel links
             window.open(href, '_self');
+          } else if (href.startsWith('#')) {
+            // Hash navigation - scroll to element and update hash
+            const id = href.substring(1);
+            const el = document.getElementById(id);
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+            // Use our custom history for proper history tracking
+            window.__SANDBOX_HISTORY__.pushState(null, '', href);
           } else {
-            // Internal navigation - use sandbox router
-            window.__SANDBOX_ROUTER__.navigate(href);
+            // Internal navigation - use our custom history
+            window.__SANDBOX_HISTORY__.pushState(null, '', href);
           }
         }
       }
@@ -1403,49 +1776,78 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
         const action = form.getAttribute('action') || '/';
         const method = form.getAttribute('method') || 'GET';
         console.log('[Sandbox] Form submitted: ' + method + ' ' + action);
-        window.__SANDBOX_ROUTER__.navigate(action);
+        // Use our custom history
+        window.__SANDBOX_HISTORY__.pushState(null, '', action);
       }
     }, true);
 
-    // Block window.location changes (wrapped in try-catch as location is non-configurable in some browsers)
-    try {
-      Object.defineProperty(window, 'location', {
-        get: function() {
-          return {
-            href: 'sandbox://app' + window.__SANDBOX_ROUTER__.currentPath,
-            pathname: window.__SANDBOX_ROUTER__.currentPath,
-            search: '',
-            hash: '',
-            origin: 'sandbox://app',
-            host: 'app',
-            hostname: 'app',
-            port: '',
-            protocol: 'sandbox:',
-            assign: function(url) { window.__SANDBOX_ROUTER__.navigate(url); },
-            replace: function(url) { window.__SANDBOX_ROUTER__.navigate(url); },
-            reload: function() { console.log('[Sandbox] Page reload blocked'); }
-          };
-        },
-        set: function(url) {
-          window.__SANDBOX_ROUTER__.navigate(url);
-        },
-        configurable: true
-      });
-    } catch (e) {
-      // location is non-configurable - use navigation interception instead
-    }
+    // Override window.location for React Router to read correct pathname
+    // Note: SecurityError occurs when navigating, not reading - so we use our custom history for writes
+    (function() {
+      var fakeLocation = {
+        get href() { return 'http://localhost' + window.__SANDBOX_ROUTER__.currentPath + window.__SANDBOX_ROUTER__.search + window.__SANDBOX_ROUTER__.hash; },
+        get pathname() { return window.__SANDBOX_ROUTER__.currentPath; },
+        get search() { return window.__SANDBOX_ROUTER__.search; },
+        get hash() { return window.__SANDBOX_ROUTER__.hash; },
+        get origin() { return 'http://localhost'; },
+        get host() { return 'localhost'; },
+        get hostname() { return 'localhost'; },
+        get port() { return ''; },
+        get protocol() { return 'http:'; },
+        assign: function(url) { window.__SANDBOX_HISTORY__.pushState(null, '', url); },
+        replace: function(url) { window.__SANDBOX_HISTORY__.replaceState(null, '', url); },
+        reload: function() { console.log('[Sandbox] Reload blocked'); },
+        toString: function() { return this.href; }
+      };
+
+      try {
+        Object.defineProperty(window, 'location', {
+          get: function() { return fakeLocation; },
+          set: function(url) { window.__SANDBOX_HISTORY__.pushState(null, '', url); },
+          configurable: true
+        });
+        console.log('[Sandbox] Location override successful');
+      } catch (e) {
+        console.warn('[Sandbox] Could not override location:', e.message);
+      }
+    })();
 
     // Provide useLocation and useNavigate hooks for React Router-like experience
     window.__SANDBOX_HOOKS__ = {
       useLocation: function() {
         const React = window.React;
-        if (!React) return { pathname: window.__SANDBOX_ROUTER__.currentPath };
-        const [path, setPath] = React.useState(window.__SANDBOX_ROUTER__.currentPath);
-        React.useEffect(() => window.__SANDBOX_ROUTER__.subscribe(setPath), []);
-        return { pathname: path, search: '', hash: '', state: null };
+        if (!React) return window.__SANDBOX_ROUTER__.getLocation();
+        const [location, setLocation] = React.useState(window.__SANDBOX_ROUTER__.getLocation());
+        React.useEffect(function() {
+          return window.__SANDBOX_ROUTER__.subscribe(function(loc) {
+            setLocation(loc);
+          });
+        }, []);
+        return location;
       },
       useNavigate: function() {
-        return function(to) { window.__SANDBOX_ROUTER__.navigate(to); };
+        return function(to, options) {
+          var hist = window.__SANDBOX_HISTORY__;
+          if (options && options.replace) {
+            hist.replaceState(options.state || null, '', to);
+          } else {
+            hist.pushState(options && options.state || null, '', to);
+          }
+        };
+      },
+      useParams: function() {
+        // Basic params extraction - apps should use React Router for full functionality
+        return {};
+      },
+      useSearchParams: function() {
+        const React = window.React;
+        const location = window.__SANDBOX_HOOKS__.useLocation();
+        const searchParams = new URLSearchParams(location.search);
+        const setSearchParams = function(params) {
+          const newSearch = '?' + new URLSearchParams(params).toString();
+          window.__SANDBOX_HISTORY__.pushState(null, '', location.pathname + newSearch + location.hash);
+        };
+        return [searchParams, setSearchParams];
       },
       Link: function(props) {
         const React = window.React;
@@ -1454,7 +1856,31 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
           href: props.to || props.href,
           onClick: function(e) {
             e.preventDefault();
-            window.__SANDBOX_ROUTER__.navigate(props.to || props.href);
+            var hist = window.__SANDBOX_HISTORY__;
+            if (props.replace) {
+              hist.replaceState(props.state || null, '', props.to || props.href);
+            } else {
+              hist.pushState(props.state || null, '', props.to || props.href);
+            }
+            if (props.onClick) props.onClick(e);
+          }
+        }, props.children);
+      },
+      NavLink: function(props) {
+        const React = window.React;
+        const location = window.__SANDBOX_HOOKS__.useLocation();
+        const isActive = location.pathname === props.to;
+        const className = typeof props.className === 'function'
+          ? props.className({ isActive: isActive })
+          : (isActive && props.activeClassName) || props.className;
+        return React.createElement('a', {
+          ...props,
+          className: className,
+          href: props.to || props.href,
+          'aria-current': isActive ? 'page' : undefined,
+          onClick: function(e) {
+            e.preventDefault();
+            window.__SANDBOX_HISTORY__.pushState(props.state || null, '', props.to || props.href);
             if (props.onClick) props.onClick(e);
           }
         }, props.children);
@@ -1464,12 +1890,79 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
   <script type="text/babel" data-presets="react,typescript">
     (async () => {
       const files = JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(files))}"));
+      // Create a custom react-router-dom wrapper that makes BrowserRouter work in sandbox
+      const routerShimCode = \`
+        import * as ReactRouterDom from 'https://esm.sh/react-router-dom@6.28.0?external=react,react-dom';
+        import React from 'https://esm.sh/react@19.0.0';
+
+        // Re-export everything from react-router-dom
+        export * from 'https://esm.sh/react-router-dom@6.28.0?external=react,react-dom';
+
+        // Custom BrowserRouter that uses MemoryRouter internally for sandbox compatibility
+        export function BrowserRouter({ children, ...props }) {
+          const [location, setLocation] = React.useState(window.__SANDBOX_ROUTER__.getLocation());
+
+          React.useEffect(() => {
+            return window.__SANDBOX_ROUTER__.subscribe((loc) => {
+              setLocation({ ...loc });
+            });
+          }, []);
+
+          return React.createElement(
+            ReactRouterDom.MemoryRouter,
+            {
+              initialEntries: [location.pathname + location.search + location.hash],
+              ...props
+            },
+            React.createElement(SandboxRouterSync, { location }, children)
+          );
+        }
+
+        // Internal component to sync MemoryRouter with our sandbox router
+        function SandboxRouterSync({ location, children }) {
+          const navigate = ReactRouterDom.useNavigate();
+          const routerLocation = ReactRouterDom.useLocation();
+
+          React.useEffect(() => {
+            const fullPath = location.pathname + location.search + location.hash;
+            const currentPath = routerLocation.pathname + routerLocation.search + routerLocation.hash;
+            if (fullPath !== currentPath) {
+              navigate(fullPath, { replace: true });
+            }
+          }, [location, navigate, routerLocation]);
+
+          return children;
+        }
+
+        // Override useNavigate to use our sandbox history
+        const originalUseNavigate = ReactRouterDom.useNavigate;
+        export function useNavigate() {
+          const memoryNavigate = originalUseNavigate();
+          return (to, options) => {
+            // Update our sandbox router
+            if (typeof to === 'string') {
+              if (options?.replace) {
+                window.__SANDBOX_HISTORY__.replaceState(options?.state || null, '', to);
+              } else {
+                window.__SANDBOX_HISTORY__.pushState(options?.state || null, '', to);
+              }
+            } else if (typeof to === 'number') {
+              window.__SANDBOX_HISTORY__.go(to);
+            }
+          };
+        }
+      \`;
+      const routerShimUrl = URL.createObjectURL(new Blob([routerShimCode], { type: 'application/javascript' }));
+
       const importMap = {
         imports: {
           // React core
           "react": "https://esm.sh/react@19.0.0",
           "react-dom": "https://esm.sh/react-dom@19.0.0",
           "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+          // React Router - using our custom shim for sandbox compatibility
+          "react-router-dom": routerShimUrl,
+          "react-router": "https://esm.sh/react-router@6.28.0?external=react",
           // Icons
           "lucide-react": "https://esm.sh/lucide-react@0.469.0",
           // Utilities

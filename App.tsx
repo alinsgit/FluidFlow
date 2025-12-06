@@ -7,10 +7,11 @@ import { TailwindPalette } from './components/TailwindPalette';
 import { ComponentTree } from './components/ComponentTree';
 import { DeployModal } from './components/DeployModal';
 import { ShareModal, loadProjectFromUrl } from './components/ShareModal';
+import { AISettingsModal } from './components/AISettingsModal';
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { diffLines } from 'diff';
-import { Check, Split, FileCode, AlertCircle } from 'lucide-react';
+import { Check, Split, FileCode, AlertCircle, Undo2, Redo2 } from 'lucide-react';
 import { FileSystem, TabType } from './types';
 
 // Re-export types for backwards compatibility
@@ -232,7 +233,7 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [resetKey, setResetKey] = useState(0);
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState('models/gemini-2.5-flash');
   const [activeTab, setActiveTab] = useState<TabType>('preview');
 
   // Command Palette State
@@ -242,6 +243,7 @@ export default function App() {
   const [isComponentTreeOpen, setIsComponentTreeOpen] = useState(false);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
 
   // Diff Review State
   const [pendingReview, setPendingReview] = useState<{
@@ -298,6 +300,9 @@ export default function App() {
         break;
       case 'share':
         setIsShareModalOpen(true);
+        break;
+      case 'ai-settings':
+        setIsAISettingsOpen(true);
         break;
       case 'undo':
         if (canUndo) undo();
@@ -406,6 +411,7 @@ export default function App() {
             reviewChange={reviewChange}
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
+            onOpenAISettings={() => setIsAISettingsOpen(true)}
           />
           <PreviewPanel
             files={files}
@@ -493,6 +499,44 @@ export default function App() {
          onClose={() => setIsShareModalOpen(false)}
          files={files}
        />
+
+       {/* AI Settings Modal */}
+       <AISettingsModal
+         isOpen={isAISettingsOpen}
+         onClose={() => setIsAISettingsOpen(false)}
+         onProviderChange={(providerId, modelId) => setSelectedModel(modelId)}
+       />
+
+       {/* Floating Undo/Redo Toolbar */}
+       {(canUndo || canRedo) && (
+         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-1 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-2xl">
+           <button
+             onClick={undo}
+             disabled={!canUndo}
+             className={`p-2 rounded-lg transition-all ${
+               canUndo
+                 ? 'hover:bg-white/10 text-white'
+                 : 'text-slate-600 cursor-not-allowed'
+             }`}
+             title="Undo (Ctrl+Z)"
+           >
+             <Undo2 className="w-4 h-4" />
+           </button>
+           <div className="w-px h-5 bg-white/10" />
+           <button
+             onClick={redo}
+             disabled={!canRedo}
+             className={`p-2 rounded-lg transition-all ${
+               canRedo
+                 ? 'hover:bg-white/10 text-white'
+                 : 'text-slate-600 cursor-not-allowed'
+             }`}
+             title="Redo (Ctrl+Y)"
+           >
+             <Redo2 className="w-4 h-4" />
+           </button>
+         </div>
+       )}
     </div>
   );
 }
