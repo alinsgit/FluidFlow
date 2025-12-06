@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { ControlPanel } from './components/ControlPanel';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { ControlPanel, ControlPanelRef } from './components/ControlPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { SnippetsPanel } from './components/SnippetsPanel';
@@ -8,11 +8,13 @@ import { ComponentTree } from './components/ComponentTree';
 import { DeployModal } from './components/DeployModal';
 import { ShareModal, loadProjectFromUrl } from './components/ShareModal';
 import { AISettingsModal } from './components/AISettingsModal';
+import { HistoryPanel } from './components/HistoryPanel';
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { diffLines } from 'diff';
-import { Check, Split, FileCode, AlertCircle, Undo2, Redo2 } from 'lucide-react';
+import { Check, Split, FileCode, AlertCircle, Undo2, Redo2, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FileSystem, TabType } from './types';
+import { InspectedElement } from './components/PreviewPanel/ComponentInspector';
 
 // Re-export types for backwards compatibility
 export type { FileSystem } from './types';
@@ -216,7 +218,10 @@ export default function App() {
     }, null, 2)
   };
 
-  const { files, setFiles, undo, redo, canUndo, canRedo, reset: resetFiles } = useVersionHistory(defaultFiles);
+  const {
+    files, setFiles, undo, redo, canUndo, canRedo, reset: resetFiles,
+    history, currentIndex, goToIndex, saveSnapshot, historyLength
+  } = useVersionHistory(defaultFiles);
   const [activeFile, setActiveFile] = useState<string>('src/App.tsx');
 
   // Load project from URL if present
@@ -244,6 +249,17 @@ export default function App() {
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+
+  // ControlPanel ref for inspect edit handler
+  const controlPanelRef = useRef<ControlPanelRef>(null);
+
+  // Handler for inspect edit from PreviewPanel
+  const handleInspectEdit = useCallback(async (prompt: string, element: InspectedElement) => {
+    if (controlPanelRef.current) {
+      await controlPanelRef.current.handleInspectEdit(prompt, element);
+    }
+  }, []);
 
   // Diff Review State
   const [pendingReview, setPendingReview] = useState<{
@@ -310,6 +326,9 @@ export default function App() {
       case 'redo':
         if (canRedo) redo();
         break;
+      case 'history':
+        setIsHistoryPanelOpen(true);
+        break;
       // Other actions handled by child components
     }
   }, [canUndo, canRedo, undo, redo]);
@@ -332,9 +351,17 @@ export default function App() {
       key: 'Escape',
       action: () => {
         if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
+        else if (isHistoryPanelOpen) setIsHistoryPanelOpen(false);
         else if (pendingReview) setPendingReview(null);
       },
       description: 'Close modal'
+    },
+    {
+      key: 'h',
+      ctrl: true,
+      shift: true,
+      action: () => setIsHistoryPanelOpen(prev => !prev),
+      description: 'Toggle History Panel'
     },
     {
       key: '1',
@@ -386,7 +413,7 @@ export default function App() {
       action: () => { if (canRedo) redo(); },
       description: 'Redo'
     },
-  ], [isCommandPaletteOpen, pendingReview, canUndo, canRedo, undo, redo]);
+  ], [isCommandPaletteOpen, isHistoryPanelOpen, pendingReview, canUndo, canRedo, undo, redo]);
 
   useKeyboardShortcuts(shortcuts);
 
@@ -399,6 +426,7 @@ export default function App() {
 
        <main className="flex flex-col md:flex-row flex-1 min-h-0 w-full p-4 gap-4 z-10 overflow-hidden">
           <ControlPanel
+            ref={controlPanelRef}
             key={resetKey}
             resetApp={resetApp}
             files={files}
@@ -425,6 +453,7 @@ export default function App() {
             selectedModel={selectedModel}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
+            onInspectEdit={handleInspectEdit}
           />
        </main>
 
@@ -507,36 +536,78 @@ export default function App() {
          onProviderChange={(providerId, modelId) => setSelectedModel(modelId)}
        />
 
-       {/* Floating Undo/Redo Toolbar */}
-       {(canUndo || canRedo) && (
-         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-1 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-2xl">
-           <button
-             onClick={undo}
-             disabled={!canUndo}
-             className={`p-2 rounded-lg transition-all ${
-               canUndo
-                 ? 'hover:bg-white/10 text-white'
-                 : 'text-slate-600 cursor-not-allowed'
-             }`}
-             title="Undo (Ctrl+Z)"
-           >
-             <Undo2 className="w-4 h-4" />
-           </button>
-           <div className="w-px h-5 bg-white/10" />
-           <button
-             onClick={redo}
-             disabled={!canRedo}
-             className={`p-2 rounded-lg transition-all ${
-               canRedo
-                 ? 'hover:bg-white/10 text-white'
-                 : 'text-slate-600 cursor-not-allowed'
-             }`}
-             title="Redo (Ctrl+Y)"
-           >
-             <Redo2 className="w-4 h-4" />
-           </button>
-         </div>
-       )}
+       {/* Floating History Toolbar */}
+       <div className={`fixed bottom-6 z-50 flex items-center gap-1 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-2xl transition-all duration-300 ${isHistoryPanelOpen ? 'right-[21rem]' : 'right-6'}`}>
+         {/* Undo */}
+         <button
+           onClick={undo}
+           disabled={!canUndo}
+           className={`p-2 rounded-lg transition-all ${
+             canUndo
+               ? 'hover:bg-white/10 text-white'
+               : 'text-slate-600 cursor-not-allowed'
+           }`}
+           title="Undo (Ctrl+Z)"
+         >
+           <Undo2 className="w-4 h-4" />
+         </button>
+
+         {/* Position Indicator */}
+         <button
+           onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+           className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors group"
+           title="History Timeline (Ctrl+Shift+H)"
+         >
+           <ChevronLeft
+             className={`w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors ${!canUndo ? 'opacity-30' : ''}`}
+           />
+           <span className="text-xs font-mono text-slate-400 group-hover:text-white transition-colors min-w-[3rem] text-center">
+             {currentIndex + 1} / {historyLength}
+           </span>
+           <ChevronRight
+             className={`w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors ${!canRedo ? 'opacity-30' : ''}`}
+           />
+         </button>
+
+         {/* Redo */}
+         <button
+           onClick={redo}
+           disabled={!canRedo}
+           className={`p-2 rounded-lg transition-all ${
+             canRedo
+               ? 'hover:bg-white/10 text-white'
+               : 'text-slate-600 cursor-not-allowed'
+           }`}
+           title="Redo (Ctrl+Y)"
+         >
+           <Redo2 className="w-4 h-4" />
+         </button>
+
+         <div className="w-px h-5 bg-white/10" />
+
+         {/* History Panel Toggle */}
+         <button
+           onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+           className={`p-2 rounded-lg transition-all ${
+             isHistoryPanelOpen
+               ? 'bg-blue-500/20 text-blue-400'
+               : 'hover:bg-white/10 text-slate-400 hover:text-white'
+           }`}
+           title="History Timeline (Ctrl+Shift+H)"
+         >
+           <History className="w-4 h-4" />
+         </button>
+       </div>
+
+       {/* History Panel */}
+       <HistoryPanel
+         isOpen={isHistoryPanelOpen}
+         onClose={() => setIsHistoryPanelOpen(false)}
+         history={history}
+         currentIndex={currentIndex}
+         onGoToIndex={goToIndex}
+         onSaveSnapshot={saveSnapshot}
+       />
     </div>
   );
 }

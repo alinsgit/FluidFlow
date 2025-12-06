@@ -1,15 +1,24 @@
 import { useState, useCallback, useRef } from 'react';
 import { FileSystem } from '../types';
 
-interface VersionHistoryState {
-  past: FileSystem[];
-  present: FileSystem;
-  future: FileSystem[];
+// History entry with metadata
+export interface HistoryEntry {
+  files: FileSystem;
+  label: string;
+  timestamp: number;
+  type: 'auto' | 'manual' | 'snapshot';
+  changedFiles?: string[];
 }
 
-interface UseVersionHistoryReturn {
+interface VersionHistoryState {
+  past: HistoryEntry[];
+  present: HistoryEntry;
+  future: HistoryEntry[];
+}
+
+export interface UseVersionHistoryReturn {
   files: FileSystem;
-  setFiles: (newFiles: FileSystem | ((prev: FileSystem) => FileSystem)) => void;
+  setFiles: (newFiles: FileSystem | ((prev: FileSystem) => FileSystem), label?: string) => void;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -17,32 +26,73 @@ interface UseVersionHistoryReturn {
   reset: (initialFiles: FileSystem) => void;
   historyLength: number;
   currentIndex: number;
+  // New features
+  history: HistoryEntry[];
+  goToIndex: (index: number) => void;
+  saveSnapshot: (name: string) => void;
+  getChangedFiles: (index: number) => string[];
+  currentEntry: HistoryEntry;
 }
 
 const MAX_HISTORY_SIZE = 50;
 
+// Calculate changed files between two file systems
+function calculateChangedFiles(oldFiles: FileSystem, newFiles: FileSystem): string[] {
+  const changed: string[] = [];
+  const allKeys = new Set([...Object.keys(oldFiles), ...Object.keys(newFiles)]);
+
+  allKeys.forEach(key => {
+    if (oldFiles[key] !== newFiles[key]) {
+      changed.push(key);
+    }
+  });
+
+  return changed;
+}
+
 export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryReturn {
+  const initialEntry: HistoryEntry = {
+    files: initialFiles,
+    label: 'Initial State',
+    timestamp: Date.now(),
+    type: 'auto',
+    changedFiles: Object.keys(initialFiles)
+  };
+
   const [state, setState] = useState<VersionHistoryState>({
     past: [],
-    present: initialFiles,
+    present: initialEntry,
     future: [],
   });
 
   // Debounce timer for batching rapid changes
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingFilesRef = useRef<FileSystem | null>(null);
+  const pendingFilesRef = useRef<{ files: FileSystem; label?: string } | null>(null);
 
   // Commit pending changes to history
   const commitPendingChanges = useCallback(() => {
     if (pendingFilesRef.current) {
-      const pendingFiles = pendingFilesRef.current;
+      const { files: pendingFiles, label } = pendingFilesRef.current;
       pendingFilesRef.current = null;
 
       setState(prevState => {
         // Don't add to history if nothing changed
-        if (JSON.stringify(prevState.present) === JSON.stringify(pendingFiles)) {
+        if (JSON.stringify(prevState.present.files) === JSON.stringify(pendingFiles)) {
           return prevState;
         }
+
+        const changedFiles = calculateChangedFiles(prevState.present.files, pendingFiles);
+        const autoLabel = changedFiles.length > 0
+          ? `Modified ${changedFiles.length} file${changedFiles.length > 1 ? 's' : ''}`
+          : 'Changes';
+
+        const newEntry: HistoryEntry = {
+          files: pendingFiles,
+          label: label || autoLabel,
+          timestamp: Date.now(),
+          type: label ? 'manual' : 'auto',
+          changedFiles
+        };
 
         const newPast = [...prevState.past, prevState.present];
         // Limit history size
@@ -52,7 +102,7 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
 
         return {
           past: newPast,
-          present: pendingFiles,
+          present: newEntry,
           future: [], // Clear future on new change
         };
       });
@@ -60,14 +110,14 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
   }, []);
 
   // Set files with debounced history
-  const setFiles = useCallback((newFilesOrUpdater: FileSystem | ((prev: FileSystem) => FileSystem)) => {
+  const setFiles = useCallback((newFilesOrUpdater: FileSystem | ((prev: FileSystem) => FileSystem), label?: string) => {
     setState(prevState => {
       const newFiles = typeof newFilesOrUpdater === 'function'
-        ? newFilesOrUpdater(prevState.present)
+        ? newFilesOrUpdater(prevState.present.files)
         : newFilesOrUpdater;
 
-      // Store pending changes
-      pendingFilesRef.current = newFiles;
+      // Store pending changes with label
+      pendingFilesRef.current = { files: newFiles, label };
 
       // Clear existing timer
       if (debounceTimerRef.current) {
@@ -82,7 +132,10 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
       // Immediately update present for UI responsiveness
       return {
         ...prevState,
-        present: newFiles,
+        present: {
+          ...prevState.present,
+          files: newFiles,
+        },
       };
     });
   }, [commitPendingChanges]);
@@ -128,6 +181,67 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
     });
   }, []);
 
+  // Go to specific index in history
+  const goToIndex = useCallback((targetIndex: number) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pendingFilesRef.current = null;
+
+    setState(prevState => {
+      const allHistory = [...prevState.past, prevState.present, ...prevState.future];
+      const currentIdx = prevState.past.length;
+
+      if (targetIndex < 0 || targetIndex >= allHistory.length || targetIndex === currentIdx) {
+        return prevState;
+      }
+
+      return {
+        past: allHistory.slice(0, targetIndex),
+        present: allHistory[targetIndex],
+        future: allHistory.slice(targetIndex + 1),
+      };
+    });
+  }, []);
+
+  // Save named snapshot
+  const saveSnapshot = useCallback((name: string) => {
+    // Commit any pending changes first
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      commitPendingChanges();
+    }
+
+    setState(prevState => {
+      const snapshotEntry: HistoryEntry = {
+        files: { ...prevState.present.files },
+        label: `📌 ${name}`,
+        timestamp: Date.now(),
+        type: 'snapshot',
+        changedFiles: []
+      };
+
+      const newPast = [...prevState.past, prevState.present];
+      if (newPast.length > MAX_HISTORY_SIZE) {
+        newPast.shift();
+      }
+
+      return {
+        past: newPast,
+        present: snapshotEntry,
+        future: [],
+      };
+    });
+  }, [commitPendingChanges]);
+
+  // Get changed files for a specific index
+  const getChangedFiles = useCallback((index: number): string[] => {
+    const allHistory = [...state.past, state.present, ...state.future];
+    if (index < 0 || index >= allHistory.length) return [];
+    return allHistory[index].changedFiles || [];
+  }, [state]);
+
   // Reset to new initial state
   const reset = useCallback((initialFiles: FileSystem) => {
     if (debounceTimerRef.current) {
@@ -138,20 +252,35 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
 
     setState({
       past: [],
-      present: initialFiles,
+      present: {
+        files: initialFiles,
+        label: 'Initial State',
+        timestamp: Date.now(),
+        type: 'auto',
+        changedFiles: Object.keys(initialFiles)
+      },
       future: [],
     });
   }, []);
 
+  // Build full history array for UI
+  const history: HistoryEntry[] = [...state.past, state.present, ...state.future];
+
   return {
-    files: state.present,
+    files: state.present.files,
     setFiles,
     undo,
     redo,
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
     reset,
-    historyLength: state.past.length + 1 + state.future.length,
+    historyLength: history.length,
     currentIndex: state.past.length,
+    // New features
+    history,
+    goToIndex,
+    saveSnapshot,
+    getChangedFiles,
+    currentEntry: state.present,
   };
 }

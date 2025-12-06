@@ -1,16 +1,22 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Layers, Trash2 } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
 import { cleanGeneratedCode } from '../../utils/cleanCode';
 import { generateContextForPrompt } from '../../utils/codemap';
 import { debugLog } from '../../hooks/useDebugStore';
 import { getProviderManager, GenerationRequest } from '../../services/ai';
+import { InspectedElement } from '../PreviewPanel/ComponentInspector';
 
 // Sub-components
 import { ChatPanel } from './ChatPanel';
 import { ChatInput } from './ChatInput';
 import { SettingsPanel } from './SettingsPanel';
 import { ModeToggle } from './ModeToggle';
+
+// Ref interface for external access
+export interface ControlPanelRef {
+  handleInspectEdit: (prompt: string, element: InspectedElement) => Promise<void>;
+}
 
 interface ControlPanelProps {
   files: FileSystem;
@@ -56,7 +62,7 @@ function calculateFileChanges(oldFiles: FileSystem, newFiles: FileSystem): FileC
   return changes;
 }
 
-export const ControlPanel: React.FC<ControlPanelProps> = ({
+export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   files,
   setFiles,
   setSuggestions,
@@ -67,7 +73,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   selectedModel,
   onModelChange,
   onOpenAISettings
-}) => {
+}, ref) => {
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConsultantMode, setIsConsultantMode] = useState(false);
@@ -77,6 +83,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   // Streaming state
   const [streamingStatus, setStreamingStatus] = useState<string>('');
   const [streamingChars, setStreamingChars] = useState(0);
+  const [streamingFiles, setStreamingFiles] = useState<string[]>([]);
 
   const existingApp = files['src/App.tsx'];
 
@@ -238,6 +245,7 @@ Write a clear markdown explanation including:
         // Use streaming for better UX
         setStreamingStatus(`🚀 Starting generation with ${providerName}...`);
         setStreamingChars(0);
+        setStreamingFiles([]);
 
         const genRequestId = debugLog.request('generation', {
           model: currentModel,
@@ -269,13 +277,16 @@ Write a clear markdown explanation including:
               });
             }
 
-            // Try to detect file paths as they appear
-            const fileMatches = fullText.match(/"src\/[^"]+\.tsx?"/g);
+            // Try to detect file paths as they appear (match any file path in JSON)
+            const fileMatches = fullText.match(/"([^"]+\.(tsx?|jsx?|css|json|md|sql))"\s*:/g);
             if (fileMatches) {
-              const newMatchedFiles = fileMatches.map(m => m.replace(/"/g, '')).filter(f => !detectedFiles.includes(f));
+              const newMatchedFiles = fileMatches
+                .map(m => m.replace(/[":\s]/g, ''))
+                .filter(f => !detectedFiles.includes(f) && !f.includes('\\'));
               if (newMatchedFiles.length > 0) {
                 detectedFiles = [...detectedFiles, ...newMatchedFiles];
-                setStreamingStatus(`📁 ${detectedFiles.length} files detected: ${detectedFiles[detectedFiles.length - 1]}`);
+                setStreamingFiles([...detectedFiles]);
+                setStreamingStatus(`📁 ${detectedFiles.length} files detected`);
               }
             }
 
@@ -410,6 +421,157 @@ Write a clear markdown explanation including:
     );
   };
 
+  // Handle inspect edit from PreviewPanel - with chat history and streaming
+  const handleInspectEdit = useCallback(async (prompt: string, element: InspectedElement) => {
+    const appCode = files['src/App.tsx'];
+    if (!appCode) return;
+
+    // Add user message showing the inspect edit request
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      timestamp: Date.now(),
+      prompt: `🎯 **Inspect Edit**: ${element.componentName || element.tagName}\n\n${prompt}`,
+    };
+    setMessages(prev => [...prev, userMessage]);
+    setIsGenerating(true);
+
+    // Setup streaming state
+    const manager = getProviderManager();
+    const activeProvider = manager.getActiveConfig();
+    const currentModel = activeProvider?.defaultModel || selectedModel;
+    const providerName = activeProvider?.name || 'AI';
+
+    setStreamingStatus(`🔍 Analyzing ${element.componentName || element.tagName}...`);
+    setStreamingChars(0);
+    setStreamingFiles([]);
+
+    const elementContext = `
+Target Element:
+- Tag: <${element.tagName.toLowerCase()}>
+- Component: ${element.componentName || 'Unknown'}
+- Classes: ${element.className || 'none'}
+- ID: ${element.id || 'none'}
+- Text content: "${element.textContent?.slice(0, 100) || ''}"
+${element.parentComponents ? `- Parent components: ${element.parentComponents.join(' > ')}` : ''}
+`;
+
+    const systemInstruction = `You are an expert React developer. The user has selected a specific element/component in their app and wants to modify it.
+
+Based on the element information provided, identify which file and component needs to be modified, then make the requested changes.
+
+**RESPONSE FORMAT**: Return a JSON object with:
+1. "explanation": Brief markdown explaining what you changed
+2. "files": Object with file paths as keys and updated code as values
+
+Only return files that need changes. Maintain all existing functionality.`;
+
+    const request: GenerationRequest = {
+      prompt: `${elementContext}\n\nUser Request: ${prompt}\n\nCurrent files:\n${JSON.stringify(files, null, 2)}`,
+      systemInstruction,
+      responseFormat: 'json'
+    };
+
+    try {
+      let fullText = '';
+      let detectedFiles: string[] = [];
+
+      await manager.generateStream(
+        request,
+        (chunk) => {
+          const chunkText = chunk.text || '';
+          fullText += chunkText;
+          setStreamingChars(fullText.length);
+
+          // Detect file paths
+          const fileMatches = fullText.match(/"([^"]+\.(tsx?|jsx?|css|json|md))"\s*:/g);
+          if (fileMatches) {
+            const newMatchedFiles = fileMatches
+              .map(m => m.replace(/[":\s]/g, ''))
+              .filter(f => !detectedFiles.includes(f) && !f.includes('\\'));
+            if (newMatchedFiles.length > 0) {
+              detectedFiles = [...detectedFiles, ...newMatchedFiles];
+              setStreamingFiles([...detectedFiles]);
+              setStreamingStatus(`📁 Modifying ${detectedFiles.length} file(s)`);
+            }
+          }
+
+          if (detectedFiles.length === 0) {
+            setStreamingStatus(`⚡ Generating changes... (${Math.round(fullText.length / 1024)}KB)`);
+          }
+        },
+        currentModel
+      );
+
+      setStreamingStatus('✨ Applying changes...');
+
+      const cleanedText = cleanGeneratedCode(fullText);
+      const result = JSON.parse(cleanedText);
+      const explanation = result.explanation || 'Component updated successfully.';
+      const newFilesFromResult = result.files || {};
+
+      if (Object.keys(newFilesFromResult).length > 0) {
+        // Clean code in each file
+        for (const [path, content] of Object.entries(newFilesFromResult)) {
+          if (typeof content === 'string') {
+            newFilesFromResult[path] = cleanGeneratedCode(content);
+          }
+        }
+
+        const mergedFiles = { ...files, ...newFilesFromResult };
+        const fileChanges = calculateFileChanges(files, mergedFiles);
+
+        setStreamingStatus(`✅ Modified ${Object.keys(newFilesFromResult).length} file(s)`);
+
+        // Add assistant message
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: Date.now(),
+          explanation,
+          files: newFilesFromResult,
+          fileChanges,
+          snapshotFiles: { ...files }
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Show diff modal
+        reviewChange(`Inspect Edit: ${element.componentName || element.tagName}`, mergedFiles);
+      } else {
+        // No changes made
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: Date.now(),
+          explanation: explanation || 'No changes were needed for this component.'
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      }
+    } catch (error) {
+      console.error('Inspect edit failed:', error);
+      setStreamingStatus('❌ Edit failed');
+
+      const errorMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        timestamp: Date.now(),
+        error: error instanceof Error ? error.message : 'Failed to process inspect edit'
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsGenerating(false);
+      setTimeout(() => {
+        setStreamingStatus('');
+        setStreamingFiles([]);
+      }, 2000);
+    }
+  }, [files, selectedModel, reviewChange, setIsGenerating]);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleInspectEdit
+  }), [handleInspectEdit]);
+
   const handleReset = () => {
     setMessages([]);
     resetApp();
@@ -448,6 +610,7 @@ Write a clear markdown explanation including:
         isGenerating={isGenerating}
         streamingStatus={streamingStatus}
         streamingChars={streamingChars}
+        streamingFiles={streamingFiles}
       />
 
       {/* Mode Toggle */}
@@ -482,4 +645,6 @@ Write a clear markdown explanation including:
       />
     </aside>
   );
-};
+});
+
+ControlPanel.displayName = 'ControlPanel';

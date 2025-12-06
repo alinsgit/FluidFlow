@@ -2,9 +2,21 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { DebugLogEntry, DebugState } from '@/types';
 
 const MAX_LOGS = 500;
+const DEBUG_ENABLED_KEY = 'fluidflow_debug_enabled';
+
+// Load initial enabled state from localStorage
+function getInitialEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const stored = localStorage.getItem(DEBUG_ENABLED_KEY);
+    return stored === 'true';
+  } catch {
+    return false;
+  }
+}
 
 const initialState: DebugState = {
-  enabled: false,
+  enabled: getInitialEnabled(),
   logs: [],
   maxLogs: MAX_LOGS,
   filter: {
@@ -103,6 +115,12 @@ export function useDebugStore() {
 
   const setEnabled = useCallback((enabled: boolean) => {
     globalDebugState = { ...globalDebugState, enabled };
+    // Persist to localStorage
+    try {
+      localStorage.setItem(DEBUG_ENABLED_KEY, String(enabled));
+    } catch {
+      // Ignore localStorage errors
+    }
     globalListeners.forEach(listener => listener());
   }, []);
 

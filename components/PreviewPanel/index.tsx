@@ -40,11 +40,12 @@ interface PreviewPanelProps {
   selectedModel: string;
   activeTab?: TabType;
   setActiveTab?: (tab: TabType) => void;
+  onInspectEdit?: (prompt: string, element: InspectedElement) => Promise<void>;
 }
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   files, setFiles, activeFile, setActiveFile, suggestions, setSuggestions, isGenerating, reviewChange, selectedModel,
-  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab
+  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit
 }) => {
   // State
   const [iframeSrc, setIframeSrc] = useState<string>('');
@@ -131,6 +132,10 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [hoveredElement, setHoveredElement] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [inspectedElement, setInspectedElement] = useState<InspectedElement | null>(null);
   const [isInspectEditing, setIsInspectEditing] = useState(false);
+
+  // Confirmation dialogs for docs/tests generation
+  const [showDocsConfirm, setShowDocsConfirm] = useState(false);
+  const [showTestsConfirm, setShowTestsConfirm] = useState(false);
 
   // URL Bar state
   const [currentUrl, setCurrentUrl] = useState('/');
@@ -253,15 +258,21 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
           timestamp: new Date(event.data.timestamp).toLocaleTimeString([], { hour12: false })
         }]);
       } else if (event.data.type === 'INSPECT_HOVER') {
-        // Element hovered in inspect mode
-        setHoveredElement(event.data.rect);
+        // Element hovered in inspect mode - ignore if editing
+        if (!isInspectEditing) {
+          setHoveredElement(event.data.rect);
+        }
       } else if (event.data.type === 'INSPECT_SELECT') {
-        // Element selected in inspect mode
-        setInspectedElement(event.data.element);
-        setHoveredElement(null);
+        // Element selected in inspect mode - ignore if already editing
+        if (!isInspectEditing) {
+          setInspectedElement(event.data.element);
+          setHoveredElement(null);
+        }
       } else if (event.data.type === 'INSPECT_LEAVE') {
         // Mouse left element
-        setHoveredElement(null);
+        if (!isInspectEditing) {
+          setHoveredElement(null);
+        }
       } else if (event.data.type === 'URL_CHANGE') {
         // URL changed in sandbox
         setCurrentUrl(event.data.url || '/');
@@ -271,7 +282,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [autoFixEnabled, autoFixError, isAutoFixing]);
+  }, [autoFixEnabled, autoFixError, isAutoFixing, isInspectEditing]);
 
   // Build iframe content
   useEffect(() => {
@@ -296,6 +307,21 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     if (!appCode) return;
     setIsInspectEditing(true);
 
+    // If external handler provided (with chat history support), use it
+    if (onInspectEdit) {
+      try {
+        await onInspectEdit(prompt, element);
+        setInspectedElement(null);
+        setIsInspectMode(false);
+      } catch (error) {
+        console.error('Inspect edit failed:', error);
+      } finally {
+        setIsInspectEditing(false);
+      }
+      return;
+    }
+
+    // Fallback to local implementation
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -742,19 +768,36 @@ Thumbs.db
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
+    // Reset confirmation dialogs when changing tabs
+    setShowDocsConfirm(false);
+    setShowTestsConfirm(false);
+
     // Database tab now opens DB Studio directly
     if (tab === 'database') {
       // DB Studio handles everything - no auto-generation
     } else if (tab === 'tests' && !files['src/App.test.tsx'] && appCode) {
-      generateUnitTests();
+      // Show confirmation instead of auto-generating
+      setShowTestsConfirm(true);
     } else if (tab === 'tests' && files['src/App.test.tsx']) {
       setActiveFile('src/App.test.tsx');
       setActiveTab('code');
     } else if (tab === 'docs' && !files['README.md'] && appCode) {
-      generateDocs();
+      // Show confirmation instead of auto-generating
+      setShowDocsConfirm(true);
     } else if (tab === 'docs' && files['README.md']) {
       setActiveFile('README.md');
     }
+  };
+
+  // Handle confirmed generation
+  const handleConfirmDocsGeneration = () => {
+    setShowDocsConfirm(false);
+    generateDocs();
+  };
+
+  const handleConfirmTestsGeneration = () => {
+    setShowTestsConfirm(false);
+    generateUnitTests();
   };
 
   return (
@@ -1073,19 +1116,103 @@ Thumbs.db
                 </div>
               </div>
 
-              {isGeneratingDB || isGeneratingTests || isGeneratingDocs ? (
-                <div className="w-full h-full flex flex-col items-center justify-center text-blue-400 gap-4">
-                  <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-                  <p className="text-sm font-medium animate-pulse">
+              {/* Generation Progress Toast - Non-blocking */}
+              {(isGeneratingDB || isGeneratingTests || isGeneratingDocs) && (
+                <div className="absolute top-2 right-2 z-50 flex items-center gap-2 px-3 py-2 bg-blue-500/20 backdrop-blur-xl border border-blue-500/30 rounded-lg shadow-lg animate-in slide-in-from-top-2 duration-300">
+                  <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                  <span className="text-xs font-medium text-blue-300">
                     {isGeneratingDB && 'Generating SQL Schema...'}
                     {isGeneratingTests && 'Writing Tests...'}
                     {isGeneratingDocs && 'Writing Documentation...'}
-                  </p>
+                  </span>
                 </div>
-              ) : files[activeFile] ? (
-                <div className={`flex-1 flex min-h-0 ${isSplitView ? 'flex-row' : 'flex-col'}`}>
+              )}
+
+              {/* Docs Confirmation Dialog */}
+              {showDocsConfirm && (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4 p-8">
+                  <div className="p-4 rounded-full bg-orange-500/10 border border-orange-500/20">
+                    <FileText className="w-10 h-10 text-orange-400" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-white mb-2">Generate Documentation?</h3>
+                    <p className="text-sm text-slate-400 max-w-md">
+                      No README.md found. Would you like me to generate documentation for this project?
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      onClick={() => setShowDocsConfirm(false)}
+                      className="px-4 py-2 text-sm text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmDocsGeneration}
+                      disabled={isGeneratingDocs}
+                      className="px-4 py-2 text-sm text-white bg-orange-600 hover:bg-orange-500 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isGeneratingDocs ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4" />
+                          Generate README
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tests Confirmation Dialog */}
+              {showTestsConfirm && (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4 p-8">
+                  <div className="p-4 rounded-full bg-purple-500/10 border border-purple-500/20">
+                    <FlaskConical className="w-10 h-10 text-purple-400" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-white mb-2">Generate Tests?</h3>
+                    <p className="text-sm text-slate-400 max-w-md">
+                      No test files found. Would you like me to generate unit tests for this project?
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      onClick={() => setShowTestsConfirm(false)}
+                      className="px-4 py-2 text-sm text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmTestsGeneration}
+                      disabled={isGeneratingTests}
+                      className="px-4 py-2 text-sm text-white bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isGeneratingTests ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <FlaskConical className="w-4 h-4" />
+                          Generate Tests
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Normal content - show when no confirmation dialogs */}
+              {!showDocsConfirm && !showTestsConfirm && files[activeFile] ? (
+                <div className={`flex-1 flex min-h-0 overflow-hidden ${isSplitView ? 'flex-row' : 'flex-col'}`}>
                   {/* Primary Editor / Preview */}
-                  <div className={isSplitView ? 'flex-1 min-w-0 border-r border-white/5' : 'flex-1'}>
+                  <div className={isSplitView ? 'flex-1 min-w-0 min-h-0 h-full overflow-hidden border-r border-white/5' : 'flex-1 min-h-0 h-full overflow-hidden'}>
                     {activeFile.endsWith('.md') ? (
                       <MarkdownPreview content={files[activeFile]} fileName={activeFile.split('/').pop() || activeFile} />
                     ) : (
@@ -1095,12 +1222,12 @@ Thumbs.db
 
                   {/* Split Editor */}
                   {isSplitView && splitFile && files[splitFile] && (
-                    <div className="flex-1 min-w-0 flex flex-col">
+                    <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
                       {/* Split file selector */}
                       <select
                         value={splitFile}
                         onChange={(e) => setSplitFile(e.target.value)}
-                        className="w-full px-2 py-1 bg-slate-800/50 border-b border-white/5 text-xs text-slate-400 outline-none"
+                        className="flex-none w-full px-2 py-1 bg-slate-800/50 border-b border-white/5 text-xs text-slate-400 outline-none"
                       >
                         {Object.keys(files)
                           .filter(f => f !== activeFile)
@@ -1108,7 +1235,7 @@ Thumbs.db
                             <option key={f} value={f}>{f}</option>
                           ))}
                       </select>
-                      <div className="flex-1 min-h-0">
+                      <div className="flex-1 min-h-0 h-full overflow-hidden">
                         {splitFile.endsWith('.md') ? (
                           <MarkdownPreview content={files[splitFile]} fileName={splitFile.split('/').pop() || splitFile} />
                         ) : (
@@ -1118,12 +1245,12 @@ Thumbs.db
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : !showDocsConfirm && !showTestsConfirm ? (
                 <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 gap-3">
                   <Code2 className="w-10 h-10 opacity-50" />
                   <p className="text-sm font-medium">Select a file to edit</p>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         )}
@@ -1297,7 +1424,17 @@ const PreviewContent: React.FC<{
               </div>
             )}
 
-            <iframe ref={iframeRef} key={iframeKey} srcDoc={iframeSrc} title="Preview" className={`flex-1 w-full bg-white transition-opacity duration-500 ${isGenerating ? 'opacity-40' : 'opacity-100'}`} sandbox="allow-scripts allow-same-origin" />
+            {/* iframe container with inspect overlay */}
+            <div className="flex-1 relative overflow-hidden">
+              <iframe ref={iframeRef} key={iframeKey} srcDoc={iframeSrc} title="Preview" className={`w-full h-full bg-white transition-opacity duration-500 ${isGenerating ? 'opacity-40' : 'opacity-100'}`} sandbox="allow-scripts allow-same-origin" />
+
+              {/* Inspect Mode Overlay - positioned relative to iframe only */}
+              <InspectionOverlay
+                isActive={isInspectMode}
+                hoveredRect={hoveredElement}
+                selectedRect={inspectedElement?.rect || null}
+              />
+            </div>
 
             {isEditMode && (
               <div className="absolute left-1/2 -translate-x-1/2 w-[90%] md:w-[600px] z-50 animate-in slide-in-from-bottom-4 duration-300 bottom-8">
@@ -1317,13 +1454,6 @@ const PreviewContent: React.FC<{
                 </div>
               </div>
             )}
-
-            {/* Inspect Mode Overlay */}
-            <InspectionOverlay
-              isActive={isInspectMode}
-              hoveredRect={hoveredElement}
-              selectedRect={inspectedElement?.rect || null}
-            />
 
             {/* Component Inspector Panel */}
             {inspectedElement && (
@@ -2009,8 +2139,164 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
         return null;
       }
 
+      // Common lucide-react icons that are known to exist
+      // This is a subset - add more as needed
+      const KNOWN_LUCIDE_ICONS = new Set([
+        // Common UI icons
+        'Activity', 'AlertCircle', 'AlertTriangle', 'Archive', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp',
+        'Award', 'BarChart', 'BarChart2', 'Bell', 'Book', 'Bookmark', 'Box', 'Briefcase', 'Calendar', 'Camera',
+        'Check', 'CheckCircle', 'ChevronDown', 'ChevronLeft', 'ChevronRight', 'ChevronUp', 'Circle', 'Clipboard',
+        'Clock', 'Cloud', 'Code', 'Code2', 'Coffee', 'Cog', 'Command', 'Copy', 'CreditCard', 'Database', 'Delete',
+        'Download', 'Edit', 'Edit2', 'Edit3', 'ExternalLink', 'Eye', 'EyeOff', 'Facebook', 'File', 'FileText',
+        'Filter', 'Flag', 'Folder', 'FolderOpen', 'Gift', 'Github', 'Globe', 'Grid', 'Hash', 'Heart', 'HelpCircle',
+        'Home', 'Image', 'Inbox', 'Info', 'Instagram', 'Key', 'Layers', 'Layout', 'LayoutDashboard', 'Link', 'Link2',
+        'List', 'Loader', 'Loader2', 'Lock', 'LogIn', 'LogOut', 'Mail', 'Map', 'MapPin', 'Maximize', 'Maximize2',
+        'Menu', 'MessageCircle', 'MessageSquare', 'Mic', 'Minimize', 'Minimize2', 'Minus', 'Monitor', 'Moon', 'MoreHorizontal',
+        'MoreVertical', 'Move', 'Music', 'Navigation', 'Package', 'Paperclip', 'Pause', 'PenTool', 'Percent', 'Phone',
+        'PieChart', 'Pin', 'Play', 'Plus', 'PlusCircle', 'Pocket', 'Power', 'Printer', 'Radio', 'RefreshCw', 'Repeat',
+        'RotateCcw', 'RotateCw', 'Rss', 'Save', 'Search', 'Send', 'Server', 'Settings', 'Settings2', 'Share', 'Share2',
+        'Shield', 'ShieldCheck', 'ShoppingBag', 'ShoppingCart', 'Shuffle', 'Sidebar', 'SkipBack', 'SkipForward', 'Slack',
+        'Sliders', 'Smartphone', 'Smile', 'Sparkles', 'Speaker', 'Square', 'Star', 'Stop', 'Sun', 'Sunrise', 'Sunset',
+        'Table', 'Tablet', 'Tag', 'Target', 'Terminal', 'ThumbsDown', 'ThumbsUp', 'ToggleLeft', 'ToggleRight', 'Tool',
+        'Trash', 'Trash2', 'TrendingDown', 'TrendingUp', 'Triangle', 'Truck', 'Tv', 'Twitter', 'Type', 'Umbrella',
+        'Underline', 'Unlock', 'Upload', 'UploadCloud', 'User', 'UserCheck', 'UserMinus', 'UserPlus', 'Users', 'UserX',
+        'Video', 'VideoOff', 'Voicemail', 'Volume', 'Volume1', 'Volume2', 'VolumeX', 'Watch', 'Wifi', 'WifiOff', 'Wind',
+        'X', 'XCircle', 'Youtube', 'Zap', 'ZapOff', 'ZoomIn', 'ZoomOut',
+        // Additional common icons
+        'Accessibility', 'AlignCenter', 'AlignJustify', 'AlignLeft', 'AlignRight', 'Anchor', 'Aperture', 'App',
+        'Apple', 'ArrowBigDown', 'ArrowBigLeft', 'ArrowBigRight', 'ArrowBigUp', 'ArrowDownCircle', 'ArrowLeftCircle',
+        'ArrowRightCircle', 'ArrowUpCircle', 'AtSign', 'Axe', 'Baby', 'Backpack', 'Badge', 'BadgeCheck', 'BadgeDollarSign',
+        'BadgeInfo', 'BadgeMinus', 'BadgePlus', 'Banknote', 'Battery', 'BatteryCharging', 'BatteryFull', 'BatteryLow',
+        'BatteryMedium', 'Beaker', 'Bean', 'Bed', 'Beer', 'BellMinus', 'BellOff', 'BellPlus', 'BellRing', 'Bike',
+        'Binary', 'Bird', 'Bitcoin', 'Blend', 'Blocks', 'Bluetooth', 'Bold', 'Bomb', 'Bone', 'BookCopy', 'BookDashed',
+        'BookDown', 'BookImage', 'BookKey', 'BookLock', 'BookMarked', 'BookMinus', 'BookOpen', 'BookOpenCheck', 'BookOpenText',
+        'BookPlus', 'BookText', 'BookUp', 'BookUser', 'Bot', 'Boxes', 'Brain', 'BrainCircuit', 'Brush', 'Bug', 'Building',
+        'Building2', 'Bus', 'Cable', 'Cake', 'Calculator', 'CalendarCheck', 'CalendarClock', 'CalendarDays', 'CalendarHeart',
+        'CalendarMinus', 'CalendarOff', 'CalendarPlus', 'CalendarRange', 'CalendarSearch', 'CalendarX', 'CameraOff', 'Candy',
+        'Car', 'Carrot', 'Cat', 'Cigarette', 'CircleDashed', 'CircleDot', 'CircleOff', 'CircleSlash', 'Citrus', 'Clapperboard',
+        'ClipboardCheck', 'ClipboardCopy', 'ClipboardEdit', 'ClipboardList', 'ClipboardSignature', 'ClipboardType', 'ClipboardX',
+        'CloudCog', 'CloudDownload', 'CloudDrizzle', 'CloudFog', 'CloudHail', 'CloudLightning', 'CloudMoon', 'CloudMoonRain',
+        'CloudOff', 'CloudRain', 'CloudRainWind', 'CloudSnow', 'CloudSun', 'CloudSunRain', 'CloudUpload', 'Clover', 'Club',
+        'Coins', 'Columns', 'Combine', 'Compass', 'Component', 'Computer', 'ConciergeBell', 'Cone', 'Construction', 'Contact',
+        'Container', 'Contrast', 'Cookie', 'CopyCheck', 'CopyMinus', 'CopyPlus', 'CopySlash', 'CopyX', 'Copyright', 'CornerDownLeft',
+        'CornerDownRight', 'CornerLeftDown', 'CornerLeftUp', 'CornerRightDown', 'CornerRightUp', 'CornerUpLeft', 'CornerUpRight',
+        'Cpu', 'Croissant', 'Crop', 'Cross', 'Crosshair', 'Crown', 'Cup', 'Currency', 'DatabaseBackup', 'Diamond', 'Dice1',
+        'Dice2', 'Dice3', 'Dice4', 'Dice5', 'Dice6', 'Dices', 'Diff', 'Disc', 'Disc2', 'Divide', 'DivideCircle', 'DivideSquare',
+        'Dna', 'DnaOff', 'Dog', 'DollarSign', 'Donut', 'DoorClosed', 'DoorOpen', 'Dot', 'DownloadCloud', 'Dribbble', 'Droplet',
+        'Droplets', 'Drum', 'Drumstick', 'Dumbbell', 'Ear', 'EarOff', 'Eclipse', 'Egg', 'EggFried', 'EggOff', 'Equal', 'EqualNot',
+        'Eraser', 'Euro', 'Expand', 'Factory', 'Fan', 'FastForward', 'Feather', 'Fence', 'FerrisWheel', 'Figma', 'FileArchive',
+        'FileAudio', 'FileAxis3d', 'FileBadge', 'FileBadge2', 'FileBarChart', 'FileBarChart2', 'FileBox', 'FileCheck', 'FileCheck2',
+        'FileClock', 'FileCode', 'FileCode2', 'FileCog', 'FileDiff', 'FileDigit', 'FileDown', 'FileEdit', 'FileHeart', 'FileImage',
+        'FileInput', 'FileJson', 'FileJson2', 'FileKey', 'FileKey2', 'FileLineChart', 'FileLock', 'FileLock2', 'FileMinus',
+        'FileMinus2', 'FileMusic', 'FileOutput', 'FilePieChart', 'FilePlus', 'FilePlus2', 'FileQuestion', 'FileScan', 'FileSearch',
+        'FileSearch2', 'FileSliders', 'FileSpreadsheet', 'FileStack', 'FileSymlink', 'FileTerminal', 'FileType', 'FileType2',
+        'FileUp', 'FileVideo', 'FileVideo2', 'FileVolume', 'FileVolume2', 'FileWarning', 'FileX', 'FileX2', 'Files', 'Film',
+        'Fingerprint', 'Fish', 'FishOff', 'FishSymbol', 'Flame', 'FlameKindling', 'Flashlight', 'FlashlightOff', 'Flask',
+        'FlaskConical', 'FlaskRound', 'FlipHorizontal', 'FlipHorizontal2', 'FlipVertical', 'FlipVertical2', 'Flower', 'Flower2',
+        'Focus', 'FolderArchive', 'FolderCheck', 'FolderClock', 'FolderClosed', 'FolderCog', 'FolderDot', 'FolderDown',
+        'FolderEdit', 'FolderGit', 'FolderGit2', 'FolderHeart', 'FolderInput', 'FolderKanban', 'FolderKey', 'FolderLock',
+        'FolderMinus', 'FolderOutput', 'FolderPlus', 'FolderRoot', 'FolderSearch', 'FolderSearch2', 'FolderSymlink', 'FolderSync',
+        'FolderTree', 'FolderUp', 'FolderX', 'Folders', 'Footprints', 'Forklift', 'FormInput', 'Forward', 'Frame', 'Framer',
+        'Frown', 'Fuel', 'Fullscreen', 'FunctionSquare', 'GalleryHorizontal', 'GalleryHorizontalEnd', 'GalleryThumbnails',
+        'GalleryVertical', 'GalleryVerticalEnd', 'Gamepad', 'Gamepad2', 'Gauge', 'Gavel', 'Gem', 'Ghost', 'GiftCard', 'GitBranch',
+        'GitBranchPlus', 'GitCommit', 'GitCompare', 'GitFork', 'GitMerge', 'GitPullRequest', 'GitPullRequestClosed',
+        'GitPullRequestDraft', 'Glasses', 'Globe2', 'Goal', 'Grab', 'GraduationCap', 'Grape', 'Grid2X2', 'Grid3X3', 'Grip',
+        'GripHorizontal', 'GripVertical', 'Group', 'Hammer', 'Hand', 'HandMetal', 'HardDrive', 'HardDriveDownload',
+        'HardDriveUpload', 'HardHat', 'Haze', 'HdmiPort', 'Heading', 'Heading1', 'Heading2', 'Heading3', 'Heading4', 'Heading5',
+        'Heading6', 'Headphones', 'HeartCrack', 'HeartHandshake', 'HeartOff', 'HeartPulse', 'Heater', 'Hexagon', 'Highlighter',
+        'History', 'Hop', 'HopOff', 'Hotel', 'Hourglass', 'IceCream', 'IceCream2', 'ImageDown', 'ImageMinus', 'ImageOff',
+        'ImagePlus', 'Import', 'Indent', 'IndianRupee', 'Infinity', 'Inspect', 'Italic', 'JapaneseYen', 'Joystick', 'Kanban',
+        'KanbanSquare', 'KanbanSquareDashed', 'KeyRound', 'KeySquare', 'Keyboard', 'Lamp', 'LampCeiling', 'LampDesk', 'LampFloor',
+        'LampWallDown', 'LampWallUp', 'LandPlot', 'Landmark', 'Languages', 'Laptop', 'Laptop2', 'Lasso', 'LassoSelect', 'Laugh',
+        'LayoutGrid', 'LayoutList', 'LayoutPanelLeft', 'LayoutPanelTop', 'LayoutTemplate', 'Leaf', 'LeafyGreen', 'Library',
+        'LifeBuoy', 'Ligature', 'Lightbulb', 'LightbulbOff', 'LineChart', 'ListCheck', 'ListChecks', 'ListCollapse', 'ListEnd',
+        'ListFilter', 'ListMinus', 'ListMusic', 'ListOrdered', 'ListPlus', 'ListRestart', 'ListStart', 'ListTodo', 'ListTree',
+        'ListVideo', 'ListX', 'Locate', 'LocateFixed', 'LocateOff', 'LockKeyhole', 'LockKeyholeOpen', 'LockOpen', 'Lollipop',
+        'Luggage', 'Magnet', 'MailCheck', 'MailMinus', 'MailOpen', 'MailPlus', 'MailQuestion', 'MailSearch', 'MailWarning',
+        'MailX', 'Mailbox', 'Mails', 'MapPinOff', 'Martini', 'Megaphone', 'MegaphoneOff', 'Meh', 'MemoryStick', 'MenuSquare',
+        'Merge', 'MessageCircleCode', 'MessageSquareCode', 'MessageSquareDashed', 'MessageSquareDot', 'MessageSquareHeart',
+        'MessageSquareMore', 'MessageSquareOff', 'MessageSquarePlus', 'MessageSquareQuote', 'MessageSquareReply',
+        'MessageSquareShare', 'MessageSquareText', 'MessageSquareWarning', 'MessageSquareX', 'MessagesSquare', 'MicOff',
+        'Microchip', 'Microscope', 'Microwave', 'Milestone', 'Milk', 'MilkOff', 'MinusCircle', 'MinusSquare', 'MonitorCheck',
+        'MonitorDot', 'MonitorDown', 'MonitorOff', 'MonitorPause', 'MonitorPlay', 'MonitorSmartphone', 'MonitorSpeaker',
+        'MonitorStop', 'MonitorUp', 'MonitorX', 'MoonStar', 'Mountain', 'MountainSnow', 'Mouse', 'MousePointer', 'MousePointer2',
+        'MousePointerClick', 'MoveDown', 'MoveDownLeft', 'MoveDownRight', 'MoveDiagonal', 'MoveDiagonal2', 'MoveHorizontal',
+        'MoveLeft', 'MoveRight', 'MoveUp', 'MoveUpLeft', 'MoveUpRight', 'MoveVertical', 'Music2', 'Music3', 'Music4',
+        'Navigation2', 'NavigationOff', 'Network', 'Newspaper', 'Nfc', 'Notebook', 'NotebookPen', 'NotebookTabs', 'NotebookText',
+        'NotepadText', 'NotepadTextDashed', 'Nut', 'NutOff', 'Octagon', 'Option', 'Orbit', 'Outdent', 'PackageCheck',
+        'PackageMinus', 'PackageOpen', 'PackagePlus', 'PackageSearch', 'PackageX', 'PaintBucket', 'Paintbrush', 'Paintbrush2',
+        'Palette', 'PalmTree', 'PanelBottom', 'PanelBottomClose', 'PanelBottomDashed', 'PanelBottomOpen', 'PanelLeft',
+        'PanelLeftClose', 'PanelLeftDashed', 'PanelLeftOpen', 'PanelRight', 'PanelRightClose', 'PanelRightDashed',
+        'PanelRightOpen', 'PanelTop', 'PanelTopClose', 'PanelTopDashed', 'PanelTopOpen', 'Paperclip', 'Parentheses',
+        'ParkingCircle', 'ParkingCircleOff', 'ParkingMeter', 'ParkingSquare', 'ParkingSquareOff', 'PartyPopper', 'PauseCircle',
+        'PauseOctagon', 'PawPrint', 'PcCase', 'Pen', 'PenLine', 'Pencil', 'PencilLine', 'Pentagon', 'PercentCircle',
+        'PercentDiamond', 'PercentSquare', 'PersonStanding', 'PhoneCall', 'PhoneForwarded', 'PhoneIncoming', 'PhoneMissed',
+        'PhoneOff', 'PhoneOutgoing', 'Pi', 'Piano', 'Pickaxe', 'PictureInPicture', 'PictureInPicture2', 'PiggyBank', 'Pilcrow',
+        'PilcrowSquare', 'Pill', 'PinOff', 'Pipette', 'Pizza', 'Plane', 'PlaneLanding', 'PlaneTakeoff', 'PlayCircle', 'PlaySquare',
+        'Plug', 'Plug2', 'PlugZap', 'PlugZap2', 'PlusSquare', 'Podcast', 'Pointer', 'PointerOff', 'Popcorn', 'Popsicle', 'PoundSterling',
+        'PowerOff', 'Presentation', 'PrinterCheck', 'Projector', 'Proportions', 'Puzzle', 'Pyramid', 'QrCode', 'Quote', 'Rabbit',
+        'Radar', 'Radiation', 'RadioReceiver', 'RadioTower', 'Rainbow', 'Rat', 'Ratio', 'Receipt', 'ReceiptCent', 'ReceiptEuro',
+        'ReceiptIndianRupee', 'ReceiptJapaneseYen', 'ReceiptPoundSterling', 'ReceiptRussianRuble', 'ReceiptSwissFranc', 'ReceiptText',
+        'RectangleHorizontal', 'RectangleVertical', 'Recycle', 'Redo', 'Redo2', 'RefreshCcw', 'RefreshCcwDot', 'RefreshCwOff',
+        'Refrigerator', 'Regex', 'RemoveFormatting', 'Repeat1', 'Repeat2', 'Replace', 'ReplaceAll', 'Reply', 'ReplyAll', 'Rewind',
+        'Ribbon', 'Rocket', 'RockingChair', 'RollerCoaster', 'Rotate3d', 'Route', 'RouteOff', 'Router', 'Rows', 'Ruler', 'RussianRuble',
+        'Sailboat', 'Salad', 'Sandwich', 'Satellite', 'SatelliteDish', 'Scale', 'Scale3d', 'Scaling', 'Scan', 'ScanBarcode', 'ScanEye',
+        'ScanFace', 'ScanLine', 'ScanSearch', 'ScanText', 'School', 'School2', 'Scissors', 'ScissorsLineDashed', 'ScreenShare',
+        'ScreenShareOff', 'Scroll', 'ScrollText', 'SearchCheck', 'SearchCode', 'SearchSlash', 'SearchX', 'Section', 'SendHorizontal',
+        'SendToBack', 'SeparatorHorizontal', 'SeparatorVertical', 'ServerCog', 'ServerCrash', 'ServerOff', 'Shapes', 'ShieldAlert',
+        'ShieldBan', 'ShieldClose', 'ShieldEllipsis', 'ShieldHalf', 'ShieldMinus', 'ShieldOff', 'ShieldPlus', 'ShieldQuestion', 'ShieldX',
+        'Ship', 'ShipWheel', 'Shirt', 'ShoppingBasket', 'Shovel', 'ShowerHead', 'Shrink', 'Shrub', 'SidebarClose', 'SidebarOpen',
+        'Sigma', 'Signal', 'SignalHigh', 'SignalLow', 'SignalMedium', 'SignalZero', 'Signpost', 'SignpostBig', 'Siren', 'SkipBack',
+        'SlidersHorizontal', 'SmilePlus', 'Snail', 'Snowflake', 'Sofa', 'Soup', 'Space', 'Spade', 'Sparkle', 'Speech', 'SpellCheck',
+        'SpellCheck2', 'Spline', 'Split', 'SprayCan', 'Sprout', 'SquareAsterisk', 'SquareCode', 'SquareDashedBottom',
+        'SquareDashedBottomCode', 'SquareDot', 'SquareEqual', 'SquareGantt', 'SquareKanban', 'SquareLibrary', 'SquareM', 'SquareMenu',
+        'SquareMinus', 'SquareParking', 'SquareParkingOff', 'SquarePen', 'SquarePercent', 'SquarePi', 'SquarePlay', 'SquarePlus',
+        'SquarePower', 'SquareRadical', 'SquareScissors', 'SquareSigma', 'SquareSlash', 'SquareSplitHorizontal', 'SquareSplitVertical',
+        'SquareStack', 'SquareTerminal', 'SquareUser', 'SquareUserRound', 'SquareX', 'Squircle', 'Squirrel', 'Stamp', 'StarHalf',
+        'StarOff', 'Stars', 'StepBack', 'StepForward', 'Stethoscope', 'Sticker', 'StickyNote', 'Stopwatch', 'Store', 'StretchHorizontal',
+        'StretchVertical', 'Strikethrough', 'Subscript', 'Subtitles', 'SunDim', 'SunMedium', 'SunMoon', 'SunSnow', 'Sunglasses',
+        'Superscript', 'SwatchBook', 'SwissFranc', 'SwitchCamera', 'Sword', 'Swords', 'Syringe', 'Table2', 'TableCellsMerge',
+        'TableCellsSplit', 'TableProperties', 'Tablets', 'Tally1', 'Tally2', 'Tally3', 'Tally4', 'Tally5', 'Tangent', 'Tape',
+        'TargetOff', 'Telescope', 'Tent', 'TentTree', 'TerminalSquare', 'TestTube', 'TestTube2', 'TestTubes', 'Text', 'TextCursor',
+        'TextCursorInput', 'TextQuote', 'TextSearch', 'TextSelect', 'Theater', 'Thermometer', 'ThermometerSnowflake', 'ThermometerSun',
+        'TicketCheck', 'TicketMinus', 'TicketPercent', 'TicketPlus', 'TicketSlash', 'TicketX', 'Tickets', 'TicketsPlane', 'Timer',
+        'TimerOff', 'TimerReset', 'ToggleLeft', 'Tornado', 'Torus', 'Touchpad', 'TouchpadOff', 'TowerControl', 'ToyBrick', 'Tractor',
+        'TrafficCone', 'Train', 'TrainFront', 'TrainFrontTunnel', 'TrainTrack', 'TramFront', 'TreeDeciduous', 'TreePalm', 'TreePine',
+        'Trees', 'Trello', 'TriangleAlert', 'TriangleRight', 'Trophy', 'Turtle', 'TvMinimal', 'TvMinimalPlay', 'Twitch', 'TypeOutline',
+        'Umbrella', 'UmbrellaOff', 'Underline', 'Undo', 'Undo2', 'UndoDot', 'UnfoldHorizontal', 'UnfoldVertical', 'Ungroup', 'University',
+        'Unlink', 'Unlink2', 'Unplug', 'Upload', 'Usb', 'UserCircle', 'UserCircle2', 'UserCog', 'UserRound', 'UserRoundCheck', 'UserRoundCog',
+        'UserRoundMinus', 'UserRoundPlus', 'UserRoundSearch', 'UserRoundX', 'UserSearch', 'UserSquare', 'UserSquare2', 'UsersRound',
+        'Utensils', 'UtensilsCrossed', 'UtilityPole', 'Variable', 'Vault', 'Vegan', 'VenetianMask', 'Vibrate', 'VibrateOff', 'Video',
+        'VideoOff', 'Videotape', 'View', 'Wallet', 'Wallet2', 'WalletCards', 'WalletMinimal', 'Wallpaper', 'Wand', 'Wand2', 'Warehouse',
+        'WashingMachine', 'Waves', 'Waypoints', 'Webcam', 'Webhook', 'Weight', 'Wheat', 'WheatOff', 'WholeWord', 'WineOff', 'Workflow',
+        'Worm', 'WrapText', 'Wrench', 'X', 'XOctagon', 'XSquare', 'Zap'
+      ]);
+
+      // Transform lucide-react imports to replace unknown icons with HelpCircle
+      function transformLucideImports(code) {
+        return code.replace(
+          /import\\s*{([^}]+)}\\s*from\\s*['"]lucide-react['"]/g,
+          (match, imports) => {
+            const iconList = imports.split(',').map(s => s.trim()).filter(Boolean);
+            const transformed = iconList.map(icon => {
+              // Handle 'as' aliasing like "Star as StarIcon"
+              const [iconName, alias] = icon.split(/\\s+as\\s+/).map(s => s.trim());
+              if (KNOWN_LUCIDE_ICONS.has(iconName)) {
+                return icon; // Keep as is
+              }
+              // Replace unknown icon with HelpCircle
+              console.warn('[Lucide] Unknown icon "' + iconName + '" replaced with HelpCircle');
+              return alias ? 'HelpCircle as ' + alias : 'HelpCircle as ' + iconName;
+            });
+            return 'import { ' + transformed.join(', ') + " } from 'lucide-react'";
+          }
+        );
+      }
+
       // Transform imports in code to use absolute paths
       function transformImports(code, fromFile) {
+        // First transform lucide imports
+        code = transformLucideImports(code);
         return code.replace(
           /(import\\s+(?:[\\w{},\\s*]+\\s+from\\s+)?['"])([^'"]+)(['"])/g,
           (match, prefix, importPath, suffix) => {

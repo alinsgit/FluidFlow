@@ -100,7 +100,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileN
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0d1117] overflow-hidden">
+    <div className="flex flex-col h-full w-full min-h-0 bg-[#0d1117]">
       {/* Header */}
       <div className="flex-none flex items-center justify-between px-4 py-2 bg-[#0a0e16] border-b border-white/5">
         <div className="flex items-center gap-2">
@@ -133,7 +133,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileN
       </div>
 
       {/* Content - scrollable area */}
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
         {showSource ? (
           <pre className="p-6 text-sm font-mono text-slate-300 whitespace-pre-wrap break-words">
             {content}

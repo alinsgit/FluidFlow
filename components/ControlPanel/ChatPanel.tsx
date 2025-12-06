@@ -9,6 +9,7 @@ interface ChatPanelProps {
   isGenerating: boolean;
   streamingStatus?: string;
   streamingChars?: number;
+  streamingFiles?: string[];
 }
 
 // HTML entity escaping to prevent XSS attacks
@@ -130,7 +131,7 @@ const FileChangesSummary: React.FC<{ changes: FileChange[] }> = ({ changes }) =>
   );
 };
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, onRetry, isGenerating, streamingStatus, streamingChars }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, onRetry, isGenerating, streamingStatus, streamingChars, streamingFiles }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new messages or streaming updates
@@ -138,7 +139,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, onRetr
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, streamingStatus, streamingChars]);
+  }, [messages, streamingStatus, streamingChars, streamingFiles]);
 
   if (messages.length === 0) {
     return (
@@ -289,6 +290,27 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onRevert, onRetr
                     <div className="flex justify-between text-[10px] text-slate-600">
                       <span>{Math.round(streamingChars / 1024)}KB received</span>
                       <span className="animate-pulse">streaming...</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Streaming Files List */}
+                {streamingFiles && streamingFiles.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-xs font-medium text-slate-400">File Changes Detected ({streamingFiles.length})</span>
+                    </div>
+                    <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                      {[...streamingFiles].reverse().map((file, idx) => (
+                        <div
+                          key={file}
+                          className={`flex items-center gap-2 text-xs font-mono text-slate-300 px-2 py-1 rounded ${idx === 0 ? 'animate-in slide-in-from-top-2 duration-200 bg-emerald-500/10 border border-emerald-500/20' : 'bg-slate-900/50'}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${idx === 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                          {file}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
