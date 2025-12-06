@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { DebugLogEntry, DebugState } from '@/types';
 
 const MAX_LOGS = 500;
@@ -90,16 +90,16 @@ function addLog(entry: DebugLogEntry) {
 }
 
 export function useDebugStore() {
-  const [, forceUpdate] = useState({});
+  const [updateCount, forceUpdate] = useState(0);
 
-  // Subscribe to global state changes
-  useState(() => {
-    const listener = () => forceUpdate({});
+  // Subscribe to global state changes - use useEffect for proper cleanup
+  useEffect(() => {
+    const listener = () => forceUpdate(c => c + 1);
     globalListeners.add(listener);
     return () => {
       globalListeners.delete(listener);
     };
-  });
+  }, []);
 
   const setEnabled = useCallback((enabled: boolean) => {
     globalDebugState = { ...globalDebugState, enabled };
@@ -119,6 +119,7 @@ export function useDebugStore() {
     globalListeners.forEach(listener => listener());
   }, []);
 
+  // Include updateCount in deps to recompute when global state changes trigger re-render
   const filteredLogs = useMemo(() => {
     const { types, categories, searchQuery } = globalDebugState.filter;
     return globalDebugState.logs.filter(log => {
@@ -140,7 +141,7 @@ export function useDebugStore() {
       }
       return true;
     });
-  }, []);
+  }, [updateCount]);
 
   return {
     enabled: globalDebugState.enabled,

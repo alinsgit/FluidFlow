@@ -23,6 +23,15 @@ export function useDebouncedCallback<T extends (...args: any[]) => void>(
 ): T {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   const debouncedCallback = useCallback(
     (...args: Parameters<T>) => {
       if (timeoutRef.current) {

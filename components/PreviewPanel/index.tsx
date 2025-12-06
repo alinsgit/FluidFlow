@@ -96,6 +96,14 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFixedErrorRef = useRef<string | null>(null);
 
+  // Cleanup timeouts on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (autoFixTimeoutRef.current) clearTimeout(autoFixTimeoutRef.current);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
+
   // Inspect Mode
   const [isInspectMode, setIsInspectMode] = useState(false);
   const [hoveredElement, setHoveredElement] = useState<{ top: number; left: number; width: number; height: number } | null>(null);

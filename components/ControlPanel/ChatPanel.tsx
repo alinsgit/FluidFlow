@@ -11,6 +11,18 @@ interface ChatPanelProps {
   streamingChars?: number;
 }
 
+// HTML entity escaping to prevent XSS attacks
+const escapeHtml = (text: string): string => {
+  const htmlEntities: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  };
+  return text.replace(/[&<>"']/g, char => htmlEntities[char]);
+};
+
 // Simple markdown renderer for explanations
 const renderMarkdown = (text: string): React.ReactNode => {
   const lines = text.split('\n');
@@ -55,9 +67,10 @@ const renderMarkdown = (text: string): React.ReactNode => {
         <li key={idx} className="text-slate-300 text-sm ml-4 list-disc">{line.slice(2)}</li>
       );
     }
-    // Bold and inline code
+    // Bold and inline code - escape HTML first to prevent XSS
     else if (line.trim()) {
-      const formatted = line
+      const escaped = escapeHtml(line);
+      const formatted = escaped
         .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>')
         .replace(/`(.+?)`/g, '<code class="bg-slate-800 px-1 rounded text-blue-300">$1</code>');
       elements.push(
