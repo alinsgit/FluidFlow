@@ -11,11 +11,12 @@ import { AISettingsModal } from './components/AISettingsModal';
 import { HistoryPanel } from './components/HistoryPanel';
 import { ProjectManager } from './components/ProjectManager';
 import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
+import { CreditsModal } from './components/CreditsModal';
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { useProject } from './hooks/useProject';
 import { diffLines } from 'diff';
-import { Check, Split, FileCode, AlertCircle, Undo2, Redo2, History, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, Split, FileCode, AlertCircle, Undo2, Redo2, History, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { FileSystem, TabType } from './types';
 import { InspectedElement } from './components/PreviewPanel/ComponentInspector';
 import { gitApi, projectApi } from './services/projectApi';
@@ -570,6 +571,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     }
   }, []);
 
+  // Check if first visit and show credits
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('fluidflow-visited');
+    if (!hasVisited) {
+      // Mark as visited
+      localStorage.setItem('fluidflow-visited', 'true');
+      // Show credits modal after a short delay
+      setTimeout(() => {
+        setIsCreditsModalOpen(true);
+      }, 1000);
+    }
+  }, []);
+
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [resetKey, setResetKey] = useState(0);
@@ -621,6 +635,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
+  const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
 
   // ControlPanel ref for inspect edit handler
   const controlPanelRef = useRef<ControlPanelRef>(null);
@@ -1197,6 +1212,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
          >
            <History className="w-4 h-4" />
          </button>
+
+         <div className="w-px h-5 bg-white/10" />
+
+         {/* Credits */}
+         <button
+           onClick={() => setIsCreditsModalOpen(true)}
+           className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+           title="About FluidFlow"
+         >
+           <Info className="w-4 h-4" />
+         </button>
        </div>
 
        {/* History Panel */}
@@ -1275,6 +1301,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
          onDeleteProject={project.deleteProject}
          onDuplicateProject={project.duplicateProject}
          onRefresh={project.refreshProjects}
+       />
+
+       {/* Credits Modal */}
+       <CreditsModal
+         isOpen={isCreditsModalOpen}
+         onClose={() => setIsCreditsModalOpen(false)}
+         showOnFirstLaunch={true}
        />
 
     </div>
