@@ -205,34 +205,48 @@ export const ProjectPanel: React.FC<ProjectPanelProps> = ({
       )}
 
       {isOpen && (
-        <div
-          id="project-panel"
-          className="absolute bottom-16 left-6 right-6 bg-slate-950/95 backdrop-blur-xl rounded-xl border border-white/10 animate-in fade-in slide-in-from-bottom-2 duration-200 shadow-2xl z-50 overflow-hidden"
-          style={{ maxHeight: 'calc(100vh - 200px)' }}
-        >
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            id="project-panel"
+            className="w-full max-w-2xl bg-slate-950/98 backdrop-blur-xl rounded-2xl border border-white/10 animate-in zoom-in-95 duration-200 shadow-2xl overflow-hidden mx-4"
+            style={{ maxHeight: 'calc(100vh - 100px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-medium text-white">Projects</span>
-              <span className="text-xs text-slate-500">({projects.length})</span>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <FolderOpen className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-white">Projects</h2>
+                <p className="text-xs text-slate-500">{projects.length} projects</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {/* Server status badge */}
-              <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] ${
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs ${
                 isServerOnline
                   ? 'bg-emerald-500/10 text-emerald-400'
                   : 'bg-red-500/10 text-red-400'
               }`}>
-                {isServerOnline ? <Cloud className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
+                {isServerOnline ? <Cloud className="w-3.5 h-3.5" /> : <CloudOff className="w-3.5 h-3.5" />}
                 {isServerOnline ? 'Online' : 'Offline'}
               </div>
               <button
                 onClick={onRefreshProjects}
                 disabled={isLoadingProjects}
-                className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Refresh projects"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingProjects ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${isLoadingProjects ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -489,6 +503,9 @@ export const ProjectPanel: React.FC<ProjectPanelProps> = ({
               </div>
             </div>
           )}
+          </div>
+          {/* Click outside to close */}
+          <div className="absolute inset-0 -z-10" onClick={() => setIsOpen(false)} />
         </div>
       )}
     </div>
