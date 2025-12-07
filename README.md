@@ -6,10 +6,7 @@
 
 Transform wireframes and sketches into functional React applications using AI.
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)](https://vitejs.dev/)
-[![Multi-AI](https://img.shields.io/badge/AI-Multi--Provider-8B5CF6)](https://ai.google.dev/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)](https://vitejs.dev/) [![Multi-AI](https://img.shields.io/badge/AI-Multi--Provider-8B5CF6)](https://ai.google.dev/)
 
 [Features](#features) | [Installation](#installation) | [Usage](#usage) | [Architecture](#architecture)
 
@@ -34,7 +31,7 @@ Transform wireframes and sketches into functional React applications using AI.
 | **Google Gemini** | Gemini 3 Pro Preview, Gemini 2.5 Flash, Gemini 2.5 Pro |
 | **OpenAI** | GPT-5.1 Codex, GPT-5.1, GPT-4o, GPT-4o Mini |
 | **Anthropic** | Claude 4.5 Sonnet, Claude 4.5 Opus |
-| **Z.AI (GLM)** | GLM-4.6, GLM-4.5, GLM-4.5-air |
+| **ZAI (GLM)** | GLM-4.6, GLM-4.5, GLM-4.5-air [Coding Plans](https://z.ai/subscribe?ic=JQZ7TPPRA6) |
 | **OpenRouter** | Access to 100+ models |
 
 ### Project Management
@@ -44,17 +41,28 @@ Transform wireframes and sketches into functional React applications using AI.
 - **WIP Persistence** - Uncommitted changes survive page refresh (IndexedDB)
 - **Discard Changes** - Restore to last commit with one click
 - **AI Commit Messages** - Generate commit messages with AI
+- **Unsaved Work Detection** - Smart detection when switching projects with unsaved changes
+
+### Context Management
+
+- **Token Tracking** - Real-time monitoring of conversation context size
+- **Auto-Compaction** - AI-powered summarization when context exceeds limits
+- **Multi-Context Support** - Separate contexts for different features (chat, prompt improver, git, etc.)
+- **Compaction Logs** - Track all context compactions with before/after stats
+- **Model-Aware Limits** - Dynamic context limits based on selected AI model
 
 ### AI-Powered Features
 
 | Feature | Description |
 |---------|-------------|
 | **Consultant Mode** | Get UX/UI suggestions before generating code |
+| **Prompt Improver** | Interactive AI assistant to refine and enhance your prompts |
 | **Auto-Fix** | Automatically detects and fixes runtime errors |
 | **Quick Edit** | Make targeted changes via natural language prompts |
 | **Inspect & Edit** | Click elements to modify specific components |
 | **Accessibility Audit** | WCAG 2.1 compliance checking with auto-fix |
 | **Responsiveness Fix** | AI-powered mobile optimization |
+| **Context Compaction** | AI summarizes long conversations to stay within token limits |
 
 ### Export Options
 
@@ -159,21 +167,35 @@ fluidflow/
 │   │   ├── ChatPanel.tsx      # Message display
 │   │   ├── ChatInput.tsx      # Input with attachments
 │   │   ├── SettingsPanel.tsx  # Model & mode settings
-│   │   └── ModeToggle.tsx     # Engineer/Consultant toggle
+│   │   ├── ModeToggle.tsx     # Engineer/Consultant toggle
+│   │   ├── ProjectPanel.tsx   # Project management UI
+│   │   └── PromptImproverModal.tsx  # Interactive prompt enhancement
 │   │
-│   └── PreviewPanel/          # Right panel
-│       ├── index.tsx          # Preview + AI features
-│       ├── CodeEditor.tsx     # Monaco editor
-│       ├── ConsolePanel.tsx   # DevTools console
-│       ├── FileExplorer.tsx   # Virtual file tree
-│       ├── DebugPanel.tsx     # API call inspector
-│       └── ...                # Modals and utilities
+│   ├── PreviewPanel/          # Right panel
+│   │   ├── index.tsx          # Preview + AI features
+│   │   ├── CodeEditor.tsx     # Monaco editor
+│   │   ├── ConsolePanel.tsx   # DevTools console
+│   │   ├── FileExplorer.tsx   # Virtual file tree
+│   │   ├── DebugPanel.tsx     # API call inspector
+│   │   └── GitPanel.tsx       # Git integration UI
+│   │
+│   ├── ContextIndicator.tsx   # Token usage & context management
+│   ├── CompactionConfirmModal.tsx  # Context compaction UI
+│   └── ...                    # Other modals and utilities
 │
 ├── hooks/
 │   ├── useVersionHistory.ts   # Undo/redo state
 │   ├── useDebugStore.ts       # Debug logging state
+│   ├── useProject.ts          # Project & git management
+│   ├── useAIHistory.ts        # AI interaction history
 │   ├── useKeyboardShortcuts.ts
 │   └── useDebounce.ts
+│
+├── services/
+│   ├── ai/                    # Multi-provider AI abstraction
+│   ├── conversationContext.ts # Context management & compaction
+│   ├── fluidflowConfig.ts     # App configuration & logs
+│   └── projectApi.ts          # Backend API client
 │
 ├── utils/
 │   ├── cleanCode.ts           # AI response cleaning
@@ -215,6 +237,47 @@ type FileSystem = Record<string, string>;
   "src/index.css": "@tailwind base;..."
 }
 ```
+
+---
+
+## Context Management
+
+FluidFlow includes an intelligent context management system to handle long conversations efficiently.
+
+### How It Works
+
+1. **Token Tracking** - Each conversation context tracks estimated token usage (~4 chars = 1 token)
+2. **Threshold Monitoring** - Visual indicator shows when context approaches model limits
+3. **AI Compaction** - When limits are reached, older messages are summarized by AI
+4. **Separate Contexts** - Different features maintain independent contexts:
+   - `main-chat` - Primary code generation chat
+   - `prompt-improver` - Prompt enhancement sessions
+   - `git-commit` - Commit message generation
+   - `quick-edit` - Inline code modifications
+
+### Context Indicator
+
+The context indicator in the chat panel shows:
+- Current token usage vs. model limit
+- Color-coded status (green → yellow → red)
+- Click to open full context manager modal
+
+### Compaction Process
+
+When context exceeds limits:
+1. Recent messages are preserved (last 2-4 messages)
+2. Older messages are summarized by AI
+3. Summary replaces old messages as a system message
+4. Compaction is logged with before/after stats
+
+### Model Context Limits
+
+| Model | Context Window |
+|-------|----------------|
+| Gemini 2.5 | 1,000,000 tokens |
+| GPT-4o | 128,000 tokens |
+| Claude 4.5 | 200,000 tokens |
+| GLM-4 | 128,000 tokens |
 
 ---
 

@@ -422,7 +422,8 @@ Only return files that need changes. Maintain all existing functionality.`,
       const docs = cleanGeneratedCode(response.text || '');
       setFiles({ ...files, 'README.md': docs });
       setActiveFile('README.md');
-      setActiveTab('code');
+      // Keep the user in the current tab to show the README.md content
+      // Don't change tabs, let the user stay where they are
     } catch (e) {
       console.error("Docs Generation Error", e);
     } finally {
@@ -1257,7 +1258,12 @@ Thumbs.db
                   {/* Primary Editor / Preview */}
                   <div className={isSplitView ? 'flex-1 min-w-0 min-h-0 h-full overflow-hidden border-r border-white/5' : 'flex-1 min-h-0 h-full overflow-hidden'}>
                     {activeFile.endsWith('.md') ? (
-                      <MarkdownPreview content={files[activeFile]} fileName={activeFile.split('/').pop() || activeFile} />
+                      <MarkdownPreview
+                        content={files[activeFile]}
+                        fileName={activeFile.split('/').pop() || activeFile}
+                        onRegenerate={activeFile === 'README.md' ? generateDocs : undefined}
+                        isGenerating={isGeneratingDocs}
+                      />
                     ) : (
                       <CodeEditor files={files} setFiles={setFiles} activeFile={activeFile} />
                     )}
@@ -1280,7 +1286,12 @@ Thumbs.db
                       </select>
                       <div className="flex-1 min-h-0 h-full overflow-hidden">
                         {splitFile.endsWith('.md') ? (
-                          <MarkdownPreview content={files[splitFile]} fileName={splitFile.split('/').pop() || splitFile} />
+                          <MarkdownPreview
+                            content={files[splitFile]}
+                            fileName={splitFile.split('/').pop() || splitFile}
+                            onRegenerate={splitFile === 'README.md' ? generateDocs : undefined}
+                            isGenerating={isGeneratingDocs}
+                          />
                         ) : (
                           <CodeEditor files={files} setFiles={setFiles} activeFile={splitFile} />
                         )}

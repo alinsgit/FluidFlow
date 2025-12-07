@@ -112,6 +112,25 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
     return `Project: ${fileList.length} files, ${components.length} components (${componentNames.join(', ')}${components.length > 8 ? '...' : ''}), ${hasTypeScript ? 'TypeScript' : 'JavaScript'}, React + Tailwind CSS`;
   };
 
+  // Clean up old prompt improver contexts
+  const cleanupOldPromptImproverContexts = () => {
+    const allContexts = contextManager.listContexts();
+    const promptImproverContexts = allContexts.filter(ctx =>
+      ctx.id.startsWith(CONTEXT_IDS.PROMPT_IMPROVER) && ctx.id !== sessionIdRef.current
+    );
+
+    // Delete old prompt improver contexts (keep only the current one)
+    promptImproverContexts.forEach(ctx => {
+      console.log(`[PromptImprover] Cleaning up old context: ${ctx.id}`);
+      contextManager.deleteContext(ctx.id);
+    });
+
+    // Also log how many were cleaned up
+    if (promptImproverContexts.length > 0) {
+      console.log(`[PromptImprover] Cleaned up ${promptImproverContexts.length} old context(s)`);
+    }
+  };
+
   // Handle context compaction
   const handleCompaction = async () => {
     const sessionId = sessionIdRef.current;
@@ -291,6 +310,8 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
   // Start conversation when modal opens
   useEffect(() => {
     if (isOpen && originalPrompt.trim() && messages.length === 0) {
+      // Clean up old prompt improver contexts before starting new session
+      cleanupOldPromptImproverContexts();
       sendToAI();
     }
   }, [isOpen, originalPrompt]);
@@ -298,6 +319,8 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
   // Reset when modal closes
   useEffect(() => {
     if (!isOpen) {
+      // Clean up the current session context
+      contextManager.deleteContext(sessionIdRef.current);
       setMessages([]);
       setInputValue('');
       setFinalPrompt(null);

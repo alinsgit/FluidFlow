@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react';
-import { FileText, Eye, Code2, Copy, Check } from 'lucide-react';
+import { FileText, Eye, Code2, Copy, Check, RefreshCw } from 'lucide-react';
 
 interface MarkdownPreviewProps {
   content: string;
   fileName: string;
+  onRegenerate?: () => void;
+  isGenerating?: boolean;
 }
 
 // HTML entity escaping
@@ -87,7 +89,7 @@ function parseMarkdown(markdown: string): string {
   return html;
 }
 
-export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileName }) => {
+export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileName, onRegenerate, isGenerating = false }) => {
   const [showSource, setShowSource] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -111,6 +113,20 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileN
           </span>
         </div>
         <div className="flex items-center gap-1">
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              disabled={isGenerating}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                isGenerating
+                  ? 'bg-orange-500/20 text-orange-400 cursor-not-allowed'
+                  : 'bg-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+              {isGenerating ? 'Generating...' : 'Re-generate'}
+            </button>
+          )}
           <button
             onClick={() => setShowSource(!showSource)}
             className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg transition-colors ${
@@ -133,7 +149,15 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileN
       </div>
 
       {/* Content - scrollable area */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar relative">
+        {isGenerating && (
+          <div className="absolute inset-0 bg-[#0d1117]/90 backdrop-blur-sm z-10 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-3 border-orange-500/30 border-t-orange-500 rounded-full animate-spin"></div>
+              <span className="text-sm font-medium text-orange-400">Generating README.md...</span>
+            </div>
+          </div>
+        )}
         {showSource ? (
           <pre className="p-6 text-sm font-mono text-slate-300 whitespace-pre-wrap break-words">
             {content}
