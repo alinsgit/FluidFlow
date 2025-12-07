@@ -1,6 +1,7 @@
 // AI Service - Provider Management
 import { AIProvider, ProviderConfig, ProviderType, DEFAULT_PROVIDERS, GenerationRequest, GenerationResponse, StreamChunk } from './types';
 import { GeminiProvider, OpenAIProvider, AnthropicProvider, OllamaProvider, LMStudioProvider } from './providers';
+import { settingsApi } from '../projectApi';
 
 export * from './types';
 export * from './providers';
@@ -26,19 +27,19 @@ export function createProvider(config: ProviderConfig): AIProvider {
   }
 }
 
-// Storage key for provider configurations
+// Storage key for provider configurations (localStorage fallback)
 const STORAGE_KEY = 'fluidflow_ai_providers';
 const ACTIVE_PROVIDER_KEY = 'fluidflow_active_provider';
 
-// Load saved providers from localStorage
-export function loadProviders(): ProviderConfig[] {
+// Load saved providers from localStorage (fallback)
+export function loadProvidersFromLocalStorage(): ProviderConfig[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       return JSON.parse(saved);
     }
   } catch (e) {
-    console.error('Failed to load providers:', e);
+    console.error('Failed to load providers from localStorage:', e);
   }
 
   // Return default Gemini config if nothing saved
@@ -51,39 +52,50 @@ export function loadProviders(): ProviderConfig[] {
   return [defaultConfig];
 }
 
-// Save providers to localStorage
-export function saveProviders(providers: ProviderConfig[]): void {
+// Save providers to localStorage (fallback)
+export function saveProvidersToLocalStorage(providers: ProviderConfig[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
   } catch (e) {
-    console.error('Failed to save providers:', e);
+    console.error('Failed to save providers to localStorage:', e);
   }
 }
 
-// Get active provider ID
-export function getActiveProviderId(): string {
+// Get active provider ID from localStorage
+export function getActiveProviderIdFromLocalStorage(): string {
   return localStorage.getItem(ACTIVE_PROVIDER_KEY) || 'default-gemini';
 }
 
-// Set active provider ID
-export function setActiveProviderId(id: string): void {
+// Set active provider ID in localStorage
+export function setActiveProviderIdInLocalStorage(id: string): void {
   localStorage.setItem(ACTIVE_PROVIDER_KEY, id);
 }
+
+// Legacy exports for backwards compatibility
+export const loadProviders = loadProvidersFromLocalStorage;
+export const saveProviders = saveProvidersToLocalStorage;
+export const getActiveProviderId = getActiveProviderIdFromLocalStorage;
+export const setActiveProviderId = setActiveProviderIdInLocalStorage;
 
 // Provider Manager class for easier state management
 export class ProviderManager {
   private providers: Map<string, ProviderConfig> = new Map();
   private instances: Map<string, AIProvider> = new Map();
   private activeProviderId: string = '';
+  private isInitialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
-    this.load();
+    // Load from localStorage immediately for fast startup
+    this.loadFromLocalStorage();
+    // Then async load from backend to get latest
+    this.initPromise = this.loadFromBackend();
   }
 
-  private load(): void {
-    const configs = loadProviders();
+  private loadFromLocalStorage(): void {
+    const configs = loadProvidersFromLocalStorage();
     configs.forEach(c => this.providers.set(c.id, c));
-    this.activeProviderId = getActiveProviderId();
+    this.activeProviderId = getActiveProviderIdFromLocalStorage();
 
     // Ensure active provider exists
     if (!this.providers.has(this.activeProviderId) && this.providers.size > 0) {
@@ -91,9 +103,53 @@ export class ProviderManager {
     }
   }
 
+  private async loadFromBackend(): Promise<void> {
+    try {
+      const { providers, activeId } = await settingsApi.getAIProviders();
+      if (providers && providers.length > 0) {
+        this.providers.clear();
+        this.instances.clear();
+        // Cast from storage type to full ProviderConfig - JSON preserves full structure
+        (providers as unknown as ProviderConfig[]).forEach((c) => this.providers.set(c.id, c));
+        this.activeProviderId = activeId || this.activeProviderId;
+
+        // Sync to localStorage (also needs cast)
+        saveProvidersToLocalStorage(providers as unknown as ProviderConfig[]);
+        setActiveProviderIdInLocalStorage(this.activeProviderId);
+
+        console.log('[AI] Loaded providers from backend:', providers.length);
+      }
+    } catch (e) {
+      console.log('[AI] Backend not available, using localStorage');
+    }
+    this.isInitialized = true;
+  }
+
+  // Wait for initialization (useful for ensuring backend data is loaded)
+  async waitForInit(): Promise<void> {
+    if (this.initPromise) {
+      await this.initPromise;
+    }
+  }
+
   private save(): void {
-    saveProviders(Array.from(this.providers.values()));
-    setActiveProviderId(this.activeProviderId);
+    // Save to localStorage immediately
+    saveProvidersToLocalStorage(Array.from(this.providers.values()));
+    setActiveProviderIdInLocalStorage(this.activeProviderId);
+
+    // Async save to backend
+    this.saveToBackend();
+  }
+
+  private async saveToBackend(): Promise<void> {
+    try {
+      // Cast to storage type for API call
+      const providers = Array.from(this.providers.values()) as unknown as import('../projectApi').StoredProviderConfig[];
+      await settingsApi.saveAIProviders(providers, this.activeProviderId);
+      console.log('[AI] Saved providers to backend');
+    } catch (e) {
+      console.warn('[AI] Failed to save providers to backend:', e);
+    }
   }
 
   getConfigs(): ProviderConfig[] {

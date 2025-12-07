@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Copy, Check, ChevronRight, Code2, Layout, Database, Zap, X, Sparkles } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Search, Copy, Check, ChevronRight, Code2, Layout, Database, Zap, X, Sparkles, Plus, Trash2, Star } from 'lucide-react';
+import { settingsApi, CustomSnippet } from '../services/projectApi';
 
 interface Snippet {
   id: string;
@@ -8,6 +9,7 @@ interface Snippet {
   category: string;
   code: string;
   tags: string[];
+  isCustom?: boolean;
 }
 
 interface SnippetsPanelProps {
@@ -370,6 +372,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
 const CATEGORIES = [
   { id: 'all', name: 'All', icon: <Sparkles className="w-4 h-4" /> },
+  { id: 'Custom', name: 'My Snippets', icon: <Star className="w-4 h-4" /> },
   { id: 'React', name: 'React', icon: <Code2 className="w-4 h-4" /> },
   { id: 'Tailwind', name: 'Tailwind', icon: <Layout className="w-4 h-4" /> },
   { id: 'Data', name: 'Data', icon: <Database className="w-4 h-4" /> },
@@ -381,9 +384,77 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
   const [category, setCategory] = useState('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [customSnippets, setCustomSnippets] = useState<Snippet[]>([]);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newSnippet, setNewSnippet] = useState({ name: '', code: '', category: 'Custom' });
+
+  const loadCustomSnippets = useCallback(async () => {
+    try {
+      const snippets = await settingsApi.getSnippets();
+      setCustomSnippets(snippets.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: `Custom snippet • ${new Date(s.createdAt).toLocaleDateString()}`,
+        category: s.category || 'Custom',
+        code: s.code,
+        tags: ['custom'],
+        isCustom: true,
+      })));
+    } catch (e) {
+      console.log('[Snippets] Backend not available, using local only');
+    }
+  }, []);
+
+  // Load custom snippets from backend
+  useEffect(() => {
+    if (isOpen) {
+      loadCustomSnippets();
+    }
+  }, [isOpen, loadCustomSnippets]);
+
+  const handleAddSnippet = async () => {
+    if (!newSnippet.name.trim() || !newSnippet.code.trim()) return;
+
+    try {
+      const created = await settingsApi.addSnippet({
+        name: newSnippet.name,
+        code: newSnippet.code,
+        category: newSnippet.category,
+      });
+
+      setCustomSnippets(prev => [...prev, {
+        id: created.id,
+        name: created.name,
+        description: `Custom snippet • ${new Date(created.createdAt).toLocaleDateString()}`,
+        category: created.category,
+        code: created.code,
+        tags: ['custom'],
+        isCustom: true,
+      }]);
+
+      setNewSnippet({ name: '', code: '', category: 'Custom' });
+      setIsAddingNew(false);
+    } catch (e) {
+      console.error('[Snippets] Failed to add snippet:', e);
+    }
+  };
+
+  const handleDeleteSnippet = async (id: string) => {
+    try {
+      await settingsApi.deleteSnippet(id);
+      setCustomSnippets(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+      console.error('[Snippets] Failed to delete snippet:', e);
+    }
+  };
+
+  // Combine built-in and custom snippets
+  const allSnippets = useMemo(() => {
+    return [...customSnippets, ...SNIPPETS];
+  }, [customSnippets]);
 
   const filteredSnippets = useMemo(() => {
-    return SNIPPETS.filter(snippet => {
+    return allSnippets.filter(snippet => {
       const matchesCategory = category === 'all' || snippet.category === category;
       const matchesSearch = search === '' ||
         snippet.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -391,7 +462,7 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
         snippet.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase()));
       return matchesCategory && matchesSearch;
     });
-  }, [search, category]);
+  }, [search, category, allSnippets]);
 
   const handleCopy = async (snippet: Snippet) => {
     await navigator.clipboard.writeText(snippet.code);
@@ -421,13 +492,66 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
             <Code2 className="w-5 h-5 text-blue-400" />
             <h2 className="text-lg font-semibold text-white">Code Snippets</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsAddingNew(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Snippet
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Add New Snippet Form */}
+        {isAddingNew && (
+          <div className="px-4 py-3 border-b border-white/5 bg-slate-800/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-white">New Custom Snippet</span>
+              <button
+                onClick={() => setIsAddingNew(false)}
+                className="p-1 rounded hover:bg-white/10 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={newSnippet.name}
+              onChange={e => setNewSnippet(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Snippet name..."
+              className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 outline-none focus:border-blue-500/50"
+            />
+            <textarea
+              value={newSnippet.code}
+              onChange={e => setNewSnippet(prev => ({ ...prev, code: e.target.value }))}
+              placeholder="Paste your code here..."
+              rows={5}
+              className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 outline-none focus:border-blue-500/50 font-mono resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsAddingNew(false)}
+                className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddSnippet}
+                disabled={!newSnippet.name.trim() || !newSnippet.code.trim()}
+                className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors"
+              >
+                Save Snippet
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Search & Filters */}
         <div className="px-4 py-3 border-b border-white/5 space-y-3">
@@ -483,7 +607,14 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-400">
+                    {snippet.isCustom && (
+                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    )}
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${
+                      snippet.isCustom
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'bg-slate-700 text-slate-400'
+                    }`}>
                       {snippet.category}
                     </span>
                     <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform ${
@@ -498,30 +629,44 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
                     <pre className="p-4 text-xs text-slate-300 overflow-x-auto bg-slate-950/50">
                       <code>{snippet.code}</code>
                     </pre>
-                    <div className="flex justify-end gap-2 px-4 py-2 bg-slate-900/50 border-t border-white/5">
-                      <button
-                        onClick={() => handleCopy(snippet)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                      >
-                        {copiedId === snippet.id ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-green-400" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            Copy
-                          </>
+                    <div className="flex justify-between px-4 py-2 bg-slate-900/50 border-t border-white/5">
+                      {/* Delete button for custom snippets */}
+                      <div>
+                        {snippet.isCustom && (
+                          <button
+                            onClick={() => handleDeleteSnippet(snippet.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
                         )}
-                      </button>
-                      <button
-                        onClick={() => handleInsert(snippet)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                        Insert
-                      </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleCopy(snippet)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                        >
+                          {copiedId === snippet.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleInsert(snippet)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                          Insert
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

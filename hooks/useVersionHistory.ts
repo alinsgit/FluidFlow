@@ -32,6 +32,9 @@ export interface UseVersionHistoryReturn {
   saveSnapshot: (name: string) => void;
   getChangedFiles: (index: number) => string[];
   currentEntry: HistoryEntry;
+  // Export/restore for backend persistence
+  exportHistory: () => { history: HistoryEntry[]; currentIndex: number };
+  restoreHistory: (history: HistoryEntry[], currentIndex: number) => void;
 }
 
 const MAX_HISTORY_SIZE = 50;
@@ -263,6 +266,49 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
     });
   }, []);
 
+  // Export full history for backend persistence
+  const exportHistory = useCallback(() => {
+    // Commit any pending changes first
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (pendingFilesRef.current) {
+      // We need to include pending changes in export
+      commitPendingChanges();
+    }
+
+    const allHistory = [...state.past, state.present, ...state.future];
+    return {
+      history: allHistory,
+      currentIndex: state.past.length
+    };
+  }, [state, commitPendingChanges]);
+
+  // Restore history from backend
+  const restoreHistory = useCallback((history: HistoryEntry[], currentIndex: number) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pendingFilesRef.current = null;
+
+    if (!history || history.length === 0) {
+      return;
+    }
+
+    // Ensure currentIndex is valid
+    const validIndex = Math.max(0, Math.min(currentIndex, history.length - 1));
+
+    setState({
+      past: history.slice(0, validIndex),
+      present: history[validIndex],
+      future: history.slice(validIndex + 1),
+    });
+
+    console.log('[VersionHistory] Restored', history.length, 'entries, current index:', validIndex);
+  }, []);
+
   // Build full history array for UI
   const history: HistoryEntry[] = [...state.past, state.present, ...state.future];
 
@@ -282,5 +328,8 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
     saveSnapshot,
     getChangedFiles,
     currentEntry: state.present,
+    // Export/restore for backend persistence
+    exportHistory,
+    restoreHistory,
   };
 }

@@ -1,3 +1,19 @@
+// Paths that should never be included in virtual file system
+const IGNORED_PATHS = ['.git', 'node_modules', '.next', '.nuxt', 'dist', 'build', '.cache', '.DS_Store', 'Thumbs.db'];
+
+/**
+ * Checks if a file path should be ignored (e.g., .git, node_modules)
+ */
+export function isIgnoredFilePath(filePath: string): boolean {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  return IGNORED_PATHS.some(ignored =>
+    normalizedPath === ignored ||
+    normalizedPath.startsWith(ignored + '/') ||
+    normalizedPath.includes('/' + ignored + '/') ||
+    normalizedPath.includes('/' + ignored)
+  );
+}
+
 /**
  * Cleans AI-generated code by removing markdown artifacts and code block markers
  */
@@ -91,6 +107,12 @@ export function parseMultiFileResponse(response: string): Record<string, string>
       for (const [path, content] of Object.entries(parsed)) {
         // Skip non-file keys like "explanation"
         if (path === 'explanation' || path === 'description') continue;
+
+        // Skip ignored paths like .git, node_modules
+        if (isIgnoredFilePath(path)) {
+          console.log('[cleanCode] Skipping ignored path:', path);
+          continue;
+        }
 
         if (typeof content === 'string') {
           cleaned[path] = cleanGeneratedCode(content);

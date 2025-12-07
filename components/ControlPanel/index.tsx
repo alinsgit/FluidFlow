@@ -12,10 +12,18 @@ import { ChatPanel } from './ChatPanel';
 import { ChatInput } from './ChatInput';
 import { SettingsPanel } from './SettingsPanel';
 import { ModeToggle } from './ModeToggle';
+import { ProjectPanel } from './ProjectPanel';
+import type { ProjectMeta } from '@/services/projectApi';
 
 // Ref interface for external access
 export interface ControlPanelRef {
   handleInspectEdit: (prompt: string, element: InspectedElement) => Promise<void>;
+}
+
+interface GitStatus {
+  initialized: boolean;
+  branch?: string;
+  clean?: boolean;
 }
 
 interface ControlPanelProps {
@@ -31,6 +39,23 @@ interface ControlPanelProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   onOpenAISettings?: () => void;
+  // Project props
+  currentProject?: ProjectMeta | null;
+  projects?: ProjectMeta[];
+  isServerOnline?: boolean;
+  isSyncing?: boolean;
+  lastSyncedAt?: number | null;
+  isLoadingProjects?: boolean;
+  onCreateProject?: (name?: string, description?: string) => Promise<ProjectMeta | null>;
+  onOpenProject?: (id: string) => Promise<boolean>;
+  onDeleteProject?: (id: string) => Promise<boolean>;
+  onDuplicateProject?: (id: string) => Promise<ProjectMeta | null>;
+  onRefreshProjects?: () => Promise<void>;
+  onCloseProject?: () => void;
+  // Git status props for ProjectPanel
+  gitStatus?: GitStatus | null;
+  hasUncommittedChanges?: boolean;
+  onOpenGitTab?: () => void;
 }
 
 // Calculate file changes between two file systems
@@ -72,7 +97,24 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   reviewChange,
   selectedModel,
   onModelChange,
-  onOpenAISettings
+  onOpenAISettings,
+  // Project props
+  currentProject,
+  projects = [],
+  isServerOnline = false,
+  isSyncing = false,
+  lastSyncedAt,
+  isLoadingProjects = false,
+  onCreateProject,
+  onOpenProject,
+  onDeleteProject,
+  onDuplicateProject,
+  onRefreshProjects,
+  onCloseProject,
+  // Git status props
+  gitStatus,
+  hasUncommittedChanges,
+  onOpenGitTab
 }, ref) => {
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -643,6 +685,27 @@ Only return files that need changes. Maintain all existing functionality.`;
         onProviderChange={handleProviderChange}
         onOpenAISettings={onOpenAISettings}
       />
+
+      {/* Project Panel */}
+      {onCreateProject && onOpenProject && onDeleteProject && onDuplicateProject && onRefreshProjects && onCloseProject && (
+        <ProjectPanel
+          currentProject={currentProject || null}
+          projects={projects}
+          isServerOnline={isServerOnline}
+          isSyncing={isSyncing}
+          lastSyncedAt={lastSyncedAt || null}
+          isLoadingProjects={isLoadingProjects}
+          onCreateProject={onCreateProject}
+          onOpenProject={onOpenProject}
+          onDeleteProject={onDeleteProject}
+          onDuplicateProject={onDuplicateProject}
+          onRefreshProjects={onRefreshProjects}
+          onCloseProject={onCloseProject}
+          gitStatus={gitStatus}
+          hasUncommittedChanges={hasUncommittedChanges}
+          onOpenGitTab={onOpenGitTab}
+        />
+      )}
     </aside>
   );
 });

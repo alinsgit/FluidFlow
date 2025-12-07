@@ -85,12 +85,24 @@ const getFolderIcon = (name: string, isOpen: boolean) => {
     : <Folder className={`${iconClass} text-slate-400`} />;
 };
 
+// Paths to ignore in file explorer
+const IGNORED_PATHS = ['.git', 'node_modules', '.next', '.nuxt', 'dist', 'build', '.cache'];
+const isIgnoredPath = (filePath: string): boolean => {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  return IGNORED_PATHS.some(ignored =>
+    normalizedPath === ignored ||
+    normalizedPath.startsWith(ignored + '/') ||
+    normalizedPath.includes('/' + ignored + '/') ||
+    normalizedPath.includes('/' + ignored)
+  );
+};
+
 // Build tree structure from flat file paths
 function buildTree(files: FileSystem): TreeNode[] {
   const root: TreeNode[] = [];
 
-  // Sort paths to ensure parent folders are processed first
-  const sortedPaths = Object.keys(files).sort();
+  // Sort paths to ensure parent folders are processed first, filter out ignored paths
+  const sortedPaths = Object.keys(files).filter(p => !isIgnoredPath(p)).sort();
 
   for (const filePath of sortedPaths) {
     const parts = filePath.split('/');
@@ -443,9 +455,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     setExpandedFolders(prev => new Set([...prev, folderPath]));
   };
 
-  const fileCount = Object.keys(files).length;
+  const visibleFiles = Object.keys(files).filter(p => !isIgnoredPath(p));
+  const fileCount = visibleFiles.length;
   const folderCount = new Set(
-    Object.keys(files)
+    visibleFiles
       .map(p => p.split('/').slice(0, -1).join('/'))
       .filter(Boolean)
   ).size;

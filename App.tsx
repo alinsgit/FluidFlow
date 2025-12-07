@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ControlPanel, ControlPanelRef } from './components/ControlPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { CommandPalette } from './components/CommandPalette';
@@ -9,8 +9,11 @@ import { DeployModal } from './components/DeployModal';
 import { ShareModal, loadProjectFromUrl } from './components/ShareModal';
 import { AISettingsModal } from './components/AISettingsModal';
 import { HistoryPanel } from './components/HistoryPanel';
+import { ProjectManager } from './components/ProjectManager';
+import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useVersionHistory } from './hooks/useVersionHistory';
+import { useProject } from './hooks/useProject';
 import { diffLines } from 'diff';
 import { Check, Split, FileCode, AlertCircle, Undo2, Redo2, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FileSystem, TabType } from './types';
@@ -18,6 +21,78 @@ import { InspectedElement } from './components/PreviewPanel/ComponentInspector';
 
 // Re-export types for backwards compatibility
 export type { FileSystem } from './types';
+
+// ============ IndexedDB WIP Storage ============
+// Work In Progress is saved locally to survive page refreshes
+// Files only sync to backend on COMMIT (git-centric approach)
+
+const WIP_DB_NAME = 'fluidflow-wip';
+const WIP_DB_VERSION = 1;
+
+interface WIPData {
+  id: string;
+  files: FileSystem;
+  activeFile: string;
+  activeTab: string;
+  savedAt: number;
+}
+
+function openWIPDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(WIP_DB_NAME, WIP_DB_VERSION);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains('wip')) {
+        db.createObjectStore('wip', { keyPath: 'id' });
+      }
+    };
+  });
+}
+
+async function getWIP(projectId: string): Promise<WIPData | null> {
+  try {
+    const db = await openWIPDatabase();
+    const tx = db.transaction('wip', 'readonly');
+    const store = tx.objectStore('wip');
+
+    return new Promise((resolve, reject) => {
+      const request = store.get(projectId);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function clearWIP(projectId: string): Promise<void> {
+  try {
+    const db = await openWIPDatabase();
+    const tx = db.transaction('wip', 'readwrite');
+    const store = tx.objectStore('wip');
+    await store.delete(projectId);
+  } catch (err) {
+    console.warn('[WIP] Failed to clear:', err);
+  }
+}
+
+// ============ End IndexedDB WIP Storage ============
+
+// Files/folders to ignore in virtual file system display
+const IGNORED_PATTERNS = ['.git', '.git/', 'node_modules', 'node_modules/'];
+const isIgnoredPath = (filePath: string): boolean => {
+  return IGNORED_PATTERNS.some(pattern =>
+    filePath === pattern ||
+    filePath.startsWith(pattern) ||
+    filePath.startsWith('.git/') ||
+    filePath.includes('/.git/') ||
+    filePath.includes('/node_modules/')
+  );
+};
 
 interface DiffModalProps {
   originalFiles: FileSystem;
@@ -28,12 +103,15 @@ interface DiffModalProps {
 }
 
 const DiffModal: React.FC<DiffModalProps> = ({ originalFiles, newFiles, label, onConfirm, onCancel }) => {
-  // Determine modified files
+  // Determine modified files (excluding .git and node_modules)
   const changedFiles = useMemo(() => {
      const changes: { file: string; added: number; removed: number }[] = [];
      const allKeys = new Set([...Object.keys(originalFiles), ...Object.keys(newFiles)]);
 
      allKeys.forEach(key => {
+        // Skip ignored paths like .git, node_modules
+        if (isIgnoredPath(key)) return;
+
         if (originalFiles[key] !== newFiles[key]) {
            const oldLines = (originalFiles[key] || '').split('\n').length;
            const newLines = (newFiles[key] || '').split('\n').length;
@@ -205,7 +283,7 @@ const DiffModal: React.FC<DiffModalProps> = ({ originalFiles, newFiles, label, o
 };
 
 export default function App() {
-  const defaultFiles = {
+  const defaultFiles: FileSystem = {
     'package.json': JSON.stringify({
       name: "fluid-flow-project",
       version: "1.0.0",
@@ -218,14 +296,172 @@ export default function App() {
     }, null, 2)
   };
 
+  // Backend project management
+  const project = useProject();
+
+  // Local version history (undo/redo) - works independently of backend
   const {
     files, setFiles, undo, redo, canUndo, canRedo, reset: resetFiles,
-    history, currentIndex, goToIndex, saveSnapshot, historyLength
-  } = useVersionHistory(defaultFiles);
-  const [activeFile, setActiveFile] = useState<string>('src/App.tsx');
+    history, currentIndex, goToIndex, saveSnapshot, historyLength,
+    exportHistory, restoreHistory
+  } = useVersionHistory(project.currentProject ? project.files : defaultFiles);
 
-  // Load project from URL if present
-  React.useEffect(() => {
+  const [activeFile, setActiveFile] = useState<string>('src/App.tsx');
+  const [activeTab, setActiveTab] = useState<TabType>('preview');
+
+  // Track if we've synced files from backend on initial load
+  const hasInitializedFromBackend = useRef(false);
+  const lastProjectIdRef = useRef<string | null>(null);
+
+  // CRITICAL: When project is restored from backend, check WIP first, then reset version history
+  // WIP (uncommitted changes) survives page refresh via IndexedDB
+  useEffect(() => {
+    const currentId = project.currentProject?.id ?? null;
+
+    // Reset flag when project changes (including switching between projects)
+    if (currentId !== lastProjectIdRef.current) {
+      hasInitializedFromBackend.current = false;
+      lastProjectIdRef.current = currentId;
+    }
+
+    // Only sync from backend if:
+    // 1. Project is initialized
+    // 2. We have a current project
+    // 3. We haven't already synced for this project
+    if (project.isInitialized && project.currentProject && !hasInitializedFromBackend.current) {
+      hasInitializedFromBackend.current = true;
+
+      // Check for WIP (uncommitted changes) in IndexedDB first
+      const restoreWithWIP = async () => {
+        try {
+          const wip = await getWIP(project.currentProject!.id);
+
+          // Store last committed files for comparison
+          lastCommittedFilesRef.current = JSON.stringify(project.files);
+
+          if (wip && wip.files && Object.keys(wip.files).length > 0) {
+            // WIP exists - restore uncommitted changes
+            console.log('[App] Restoring WIP from IndexedDB:', Object.keys(wip.files).length, 'files');
+            resetFiles(wip.files);
+            setHasUncommittedChanges(true); // Mark as having uncommitted changes
+
+            // Restore UI state from WIP
+            if (wip.activeFile && wip.files[wip.activeFile]) {
+              setActiveFile(wip.activeFile);
+            }
+            if (wip.activeTab) {
+              setActiveTab(wip.activeTab as TabType);
+            }
+          } else {
+            // No WIP - use backend files (last committed state)
+            const backendFileCount = Object.keys(project.files).length;
+            if (backendFileCount > 0) {
+              console.log('[App] Initializing from backend (no WIP):', backendFileCount, 'files');
+              resetFiles(project.files);
+            }
+            setHasUncommittedChanges(false);
+          }
+        } catch (err) {
+          console.warn('[App] Failed to check WIP, falling back to backend:', err);
+          const backendFileCount = Object.keys(project.files).length;
+          if (backendFileCount > 0) {
+            resetFiles(project.files);
+          }
+          lastCommittedFilesRef.current = JSON.stringify(project.files);
+          setHasUncommittedChanges(false);
+        }
+      };
+
+      restoreWithWIP();
+    }
+  }, [project.isInitialized, project.currentProject?.id, project.files]);
+
+  // GIT-CENTRIC SYNC: Files only sync to backend on COMMIT
+  // No auto-sync - prevents race conditions and data loss
+  // WIP (Work In Progress) is saved to IndexedDB for page refresh survival
+
+  // Save WIP to IndexedDB when files change & track uncommitted changes
+  useEffect(() => {
+    if (!project.currentProject || !hasInitializedFromBackend.current) return;
+
+    const fileCount = Object.keys(files).length;
+    if (fileCount === 0) return;
+
+    // Check if files have changed from last committed state
+    const currentFilesJson = JSON.stringify(files);
+    const hasChanges = lastCommittedFilesRef.current !== '' &&
+                       currentFilesJson !== lastCommittedFilesRef.current;
+    setHasUncommittedChanges(hasChanges);
+
+    // Save WIP to IndexedDB (async, non-blocking)
+    const saveWIP = async () => {
+      try {
+        const db = await openWIPDatabase();
+        const tx = db.transaction('wip', 'readwrite');
+        const store = tx.objectStore('wip');
+        await store.put({
+          id: project.currentProject!.id,
+          files,
+          activeFile,
+          activeTab,
+          savedAt: Date.now()
+        });
+        console.log('[App] WIP saved to IndexedDB');
+      } catch (err) {
+        console.warn('[App] Failed to save WIP:', err);
+      }
+    };
+
+    // Debounce WIP saves
+    const timeout = setTimeout(saveWIP, 1000);
+    return () => clearTimeout(timeout);
+  }, [files, activeFile, activeTab, project.currentProject?.id]);
+
+  // Auto-save context (version history, UI state) on beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (project.currentProject) {
+        const { history: historyToSave, currentIndex: indexToSave } = exportHistory();
+        // Use navigator.sendBeacon for reliable save on page unload
+        const data = JSON.stringify({
+          history: historyToSave,
+          currentIndex: indexToSave,
+          activeFile,
+          activeTab,
+        });
+        const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3200/api';
+        navigator.sendBeacon(
+          `${apiBase}/projects/${project.currentProject.id}/context`,
+          new Blob([data], { type: 'application/json' })
+        );
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [project.currentProject?.id, activeFile, activeTab, exportHistory]);
+
+  // Periodic auto-save of context (every 30 seconds if there are changes)
+  useEffect(() => {
+    if (!project.currentProject) return;
+
+    const interval = setInterval(async () => {
+      const { history: historyToSave, currentIndex: indexToSave } = exportHistory();
+      if (historyToSave.length > 1) { // Only save if there's actual history
+        await project.saveContext({
+          history: historyToSave,
+          currentIndex: indexToSave,
+          activeFile,
+          activeTab,
+        });
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [project.currentProject?.id, activeFile, activeTab, exportHistory, project.saveContext]);
+
+  // Load project from URL if present (for shared projects)
+  useEffect(() => {
     const urlProject = loadProjectFromUrl();
     if (urlProject && Object.keys(urlProject).length > 0) {
       setFiles(urlProject);
@@ -239,7 +475,42 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const [selectedModel, setSelectedModel] = useState('models/gemini-2.5-flash');
-  const [activeTab, setActiveTab] = useState<TabType>('preview');
+
+  // Track uncommitted changes (WIP)
+  const [hasUncommittedChanges, setHasUncommittedChanges] = useState(false);
+  const lastCommittedFilesRef = useRef<string>('');
+
+  // Calculate local changes for display in GitPanel
+  const localChanges = useMemo(() => {
+    if (!hasUncommittedChanges || !lastCommittedFilesRef.current) return [];
+
+    try {
+      const committedFiles = JSON.parse(lastCommittedFilesRef.current) as FileSystem;
+      const changes: { path: string; status: 'added' | 'modified' | 'deleted' }[] = [];
+
+      // Check for added or modified files
+      Object.keys(files).forEach(path => {
+        if (isIgnoredPath(path)) return;
+        if (!committedFiles[path]) {
+          changes.push({ path, status: 'added' });
+        } else if (committedFiles[path] !== files[path]) {
+          changes.push({ path, status: 'modified' });
+        }
+      });
+
+      // Check for deleted files
+      Object.keys(committedFiles).forEach(path => {
+        if (isIgnoredPath(path)) return;
+        if (!files[path]) {
+          changes.push({ path, status: 'deleted' });
+        }
+      });
+
+      return changes;
+    } catch {
+      return [];
+    }
+  }, [files, hasUncommittedChanges]);
 
   // Command Palette State
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -250,6 +521,7 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
 
   // ControlPanel ref for inspect edit handler
   const controlPanelRef = useRef<ControlPanelRef>(null);
@@ -329,9 +601,18 @@ export default function App() {
       case 'history':
         setIsHistoryPanelOpen(true);
         break;
+      case 'projects':
+        setIsProjectManagerOpen(true);
+        break;
+      case 'git':
+        setActiveTab('git');
+        break;
+      case 'save-project':
+        project.syncFiles();
+        break;
       // Other actions handled by child components
     }
-  }, [canUndo, canRedo, undo, redo]);
+  }, [canUndo, canRedo, undo, redo, project]);
 
   // Keyboard shortcuts
   const shortcuts: KeyboardShortcut[] = useMemo(() => [
@@ -413,9 +694,59 @@ export default function App() {
       action: () => { if (canRedo) redo(); },
       description: 'Redo'
     },
-  ], [isCommandPaletteOpen, isHistoryPanelOpen, pendingReview, canUndo, canRedo, undo, redo]);
+    {
+      key: 'o',
+      ctrl: true,
+      action: () => setIsProjectManagerOpen(true),
+      description: 'Open Project Manager'
+    },
+    {
+      key: 'g',
+      ctrl: true,
+      shift: true,
+      action: () => setActiveTab(activeTab === 'git' ? 'preview' : 'git'),
+      description: 'Toggle Git Tab'
+    },
+    {
+      key: 's',
+      ctrl: true,
+      action: () => { project.syncFiles(); },
+      description: 'Save to Server'
+    },
+  ], [isCommandPaletteOpen, isHistoryPanelOpen, pendingReview, canUndo, canRedo, undo, redo, project]);
 
   useKeyboardShortcuts(shortcuts);
+
+  // Discard all uncommitted changes and restore from last commit
+  const handleDiscardChanges = useCallback(async () => {
+    if (!project.currentProject) return;
+
+    try {
+      // Get last committed state
+      if (lastCommittedFilesRef.current) {
+        const committedFiles = JSON.parse(lastCommittedFilesRef.current) as FileSystem;
+
+        // Restore files to last committed state
+        resetFiles(committedFiles);
+
+        // Clear WIP from IndexedDB
+        await clearWIP(project.currentProject.id);
+
+        // Reset uncommitted changes flag
+        setHasUncommittedChanges(false);
+
+        // Reset active file if it was deleted
+        if (!committedFiles[activeFile]) {
+          const firstSrc = Object.keys(committedFiles).find(f => f.startsWith('src/'));
+          setActiveFile(firstSrc || 'package.json');
+        }
+
+        console.log('[App] Discarded changes, restored from last commit');
+      }
+    } catch (err) {
+      console.error('[App] Failed to discard changes:', err);
+    }
+  }, [project.currentProject, activeFile, resetFiles]);
 
   return (
     <div className="flex flex-col min-h-screen h-screen max-h-screen w-full bg-[#020617] text-white overflow-hidden relative selection:bg-blue-500/30 selection:text-blue-50">
@@ -440,6 +771,93 @@ export default function App() {
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
             onOpenAISettings={() => setIsAISettingsOpen(true)}
+            // Project props
+            currentProject={project.currentProject}
+            projects={project.projects}
+            isServerOnline={project.isServerOnline}
+            isSyncing={project.isSyncing}
+            lastSyncedAt={project.lastSyncedAt}
+            isLoadingProjects={project.isLoadingProjects}
+            // Git status props
+            gitStatus={project.gitStatus}
+            hasUncommittedChanges={hasUncommittedChanges}
+            onOpenGitTab={() => setActiveTab('git')}
+            onCreateProject={async (name, description) => {
+              return await project.createProject(name, description, files);
+            }}
+            onOpenProject={async (id) => {
+              // 1. Save current project's full context before switching
+              if (project.currentProject) {
+                const { history: historyToSave, currentIndex: indexToSave } = exportHistory();
+                await project.saveContext({
+                  history: historyToSave,
+                  currentIndex: indexToSave,
+                  activeFile,
+                  activeTab,
+                });
+              }
+
+              // 2. Open new project - this returns files directly!
+              const result = await project.openProject(id);
+
+              if (result.success) {
+                // 3. Check for WIP (uncommitted changes) in IndexedDB
+                const wip = await getWIP(id);
+                let currentFiles = result.files;
+                let restoredFromWIP = false;
+
+                if (wip && wip.files && Object.keys(wip.files).length > 0) {
+                  // WIP exists - use WIP files (uncommitted changes)
+                  console.log('[App] Restoring WIP from IndexedDB:', Object.keys(wip.files).length, 'files');
+                  currentFiles = wip.files;
+                  resetFiles(wip.files);
+                  restoredFromWIP = true;
+
+                  // Restore WIP UI state
+                  if (wip.activeFile && wip.files[wip.activeFile]) {
+                    setActiveFile(wip.activeFile);
+                  }
+                  if (wip.activeTab) {
+                    setActiveTab(wip.activeTab as TabType);
+                  }
+                } else if (result.context?.history && result.context.history.length > 0) {
+                  // No WIP, restore from saved history
+                  restoreHistory(result.context.history, result.context.currentIndex);
+                  const currentHistoryEntry = result.context.history[result.context.currentIndex];
+                  if (currentHistoryEntry?.files) {
+                    currentFiles = currentHistoryEntry.files;
+                  }
+                } else {
+                  // No WIP, no history - use backend files
+                  resetFiles(result.files);
+                }
+
+                // 4. Restore UI context (if not restored from WIP)
+                if (!restoredFromWIP) {
+                  if (result.context?.activeFile && currentFiles[result.context.activeFile]) {
+                    setActiveFile(result.context.activeFile);
+                  } else {
+                    const firstSrc = Object.keys(currentFiles).find(f => f.startsWith('src/'));
+                    setActiveFile(firstSrc || 'package.json');
+                  }
+
+                  if (result.context?.activeTab) {
+                    setActiveTab(result.context.activeTab as TabType);
+                  }
+                }
+
+                // 5. Reset other transient state
+                setSuggestions(null);
+                setPendingReview(null);
+
+                console.log('[App] Switched to project with', Object.keys(currentFiles).length, 'files', restoredFromWIP ? '(from WIP)' : '(from backend)');
+              }
+              return result.success;
+            }}
+            onDeleteProject={project.deleteProject}
+            onDuplicateProject={project.duplicateProject}
+            onRefreshProjects={project.refreshProjects}
+            onCloseProject={project.closeProject}
           />
           <PreviewPanel
             files={files}
@@ -454,6 +872,40 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             onInspectEdit={handleInspectEdit}
+            // Git props
+            projectId={project.currentProject?.id}
+            gitStatus={project.gitStatus}
+            onInitGit={async (force?: boolean) => {
+              // Pass current working files to initGit
+              const success = await project.initGit(force, files);
+              if (success && project.currentProject) {
+                // Clear WIP after successful git init (first commit is made)
+                await clearWIP(project.currentProject.id);
+                // Update last committed state
+                lastCommittedFilesRef.current = JSON.stringify(files);
+                setHasUncommittedChanges(false);
+                console.log('[App] WIP cleared after git init');
+              }
+              return success;
+            }}
+            onCommit={async (message: string) => {
+              // Pass current working files to commit (not stale state.files)
+              const success = await project.commit(message, files);
+              if (success && project.currentProject) {
+                // Clear WIP after successful commit
+                await clearWIP(project.currentProject.id);
+                // Update last committed state
+                lastCommittedFilesRef.current = JSON.stringify(files);
+                setHasUncommittedChanges(false);
+                console.log('[App] WIP cleared after commit');
+              }
+              return success;
+            }}
+            onRefreshGitStatus={project.refreshGitStatus}
+            // Local changes (WIP)
+            hasUncommittedChanges={hasUncommittedChanges}
+            localChanges={localChanges}
+            onDiscardChanges={handleDiscardChanges}
           />
        </main>
 
@@ -465,6 +917,16 @@ export default function App() {
              label={pendingReview.label}
              onConfirm={confirmChange}
              onCancel={() => setPendingReview(null)}
+          />
+       )}
+
+       {/* Sync Confirmation Dialog */}
+       {project.pendingSyncConfirmation && (
+          <SyncConfirmationDialog
+             confirmation={project.pendingSyncConfirmation}
+             onConfirm={project.confirmPendingSync}
+             onCancel={project.cancelPendingSync}
+             isLoading={project.isSyncing}
           />
        )}
 
@@ -608,6 +1070,75 @@ export default function App() {
          onGoToIndex={goToIndex}
          onSaveSnapshot={saveSnapshot}
        />
+
+       {/* Project Manager */}
+       <ProjectManager
+         isOpen={isProjectManagerOpen}
+         onClose={() => setIsProjectManagerOpen(false)}
+         projects={project.projects}
+         currentProjectId={project.currentProject?.id}
+         isLoading={project.isLoadingProjects}
+         isServerOnline={project.isServerOnline}
+         onCreateProject={async (name, description) => {
+           const newProject = await project.createProject(name, description, files);
+           if (newProject) {
+             setIsProjectManagerOpen(false);
+           }
+         }}
+         onOpenProject={async (id) => {
+           // 1. Save current project's full context before switching
+           if (project.currentProject) {
+             const { history: historyToSave, currentIndex: indexToSave } = exportHistory();
+             await project.saveContext({
+               history: historyToSave,
+               currentIndex: indexToSave,
+               activeFile,
+               activeTab,
+             });
+           }
+
+           // 2. Open new project
+           const result = await project.openProject(id);
+
+           if (result.success) {
+             // 3. Check if we have saved history to restore
+             let currentFiles = result.files;
+             if (result.context?.history && result.context.history.length > 0) {
+               // Restore full version history from backend
+               restoreHistory(result.context.history, result.context.currentIndex);
+               // Get files from the current history entry
+               const currentHistoryEntry = result.context.history[result.context.currentIndex];
+               if (currentHistoryEntry?.files) {
+                 currentFiles = currentHistoryEntry.files;
+               }
+             } else {
+               // No saved history, reset to initial state
+               resetFiles(result.files);
+             }
+
+             // 4. Restore UI context
+             if (result.context?.activeFile && currentFiles[result.context.activeFile]) {
+               setActiveFile(result.context.activeFile);
+             } else {
+               const firstSrc = Object.keys(currentFiles).find(f => f.startsWith('src/'));
+               setActiveFile(firstSrc || 'package.json');
+             }
+
+             if (result.context?.activeTab) {
+               setActiveTab(result.context.activeTab as TabType);
+             }
+
+             // 5. Reset transient state
+             setSuggestions(null);
+             setPendingReview(null);
+             setIsProjectManagerOpen(false);
+           }
+         }}
+         onDeleteProject={project.deleteProject}
+         onDuplicateProject={project.duplicateProject}
+         onRefresh={project.refreshProjects}
+       />
+
     </div>
   );
 }

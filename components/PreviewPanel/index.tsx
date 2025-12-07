@@ -3,7 +3,7 @@ import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, Pencil, Send, FileText, Wrench, FlaskConical, Package, Loader2,
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
-  ChevronLeft, ChevronRight, Globe
+  ChevronLeft, ChevronRight, Globe, GitBranch
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getProviderManager } from '../../services/ai';
@@ -27,6 +27,8 @@ import DebugPanel from './DebugPanel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { DBStudio } from './DBStudio';
 import { EnvironmentPanel } from './EnvironmentPanel';
+import { GitPanel } from '../GitPanel';
+import { GitStatus } from '../../services/projectApi';
 
 interface PreviewPanelProps {
   files: FileSystem;
@@ -41,11 +43,23 @@ interface PreviewPanelProps {
   activeTab?: TabType;
   setActiveTab?: (tab: TabType) => void;
   onInspectEdit?: (prompt: string, element: InspectedElement) => Promise<void>;
+  // Git props
+  projectId?: string | null;
+  gitStatus?: GitStatus | null;
+  onInitGit?: (force?: boolean) => Promise<boolean>;
+  onCommit?: (message: string) => Promise<boolean>;
+  onRefreshGitStatus?: () => Promise<void>;
+  // Local changes (WIP)
+  hasUncommittedChanges?: boolean;
+  localChanges?: { path: string; status: 'added' | 'modified' | 'deleted' }[];
+  onDiscardChanges?: () => Promise<void>;
 }
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   files, setFiles, activeFile, setActiveFile, suggestions, setSuggestions, isGenerating, reviewChange, selectedModel,
-  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit
+  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit,
+  projectId, gitStatus, onInitGit, onCommit, onRefreshGitStatus,
+  hasUncommittedChanges, localChanges, onDiscardChanges
 }) => {
   // State
   const [iframeSrc, setIframeSrc] = useState<string>('');
@@ -815,6 +829,7 @@ Thumbs.db
             {[
               { id: 'preview', icon: Eye, label: 'Preview' },
               { id: 'code', icon: Code2, label: 'Code' },
+              { id: 'git', icon: GitBranch, label: 'Git' },
               { id: 'database', icon: Database, label: 'DB Studio' },
               { id: 'tests', icon: FlaskConical, label: 'Tests' },
               { id: 'docs', icon: FileText, label: 'Docs' },
@@ -988,6 +1003,22 @@ Thumbs.db
           <DBStudio files={files} setFiles={setFiles} selectedModel={selectedModel} />
         ) : activeTab === 'env' ? (
           <EnvironmentPanel files={files} setFiles={setFiles} />
+        ) : activeTab === 'git' ? (
+          <div className="flex-1 overflow-auto">
+            {/* Debug: log onInitGit */}
+            {console.log('[PreviewPanel] Git tab - onInitGit:', onInitGit ? 'provided' : 'fallback', ', projectId:', projectId)}
+            <GitPanel
+              projectId={projectId || null}
+              gitStatus={gitStatus || null}
+              onInitGit={onInitGit || (async (_force?: boolean) => { console.log('[PreviewPanel] fallback onInitGit called'); return false; })}
+              onCommit={onCommit || (async () => false)}
+              onRefreshStatus={onRefreshGitStatus || (async () => {})}
+              hasUncommittedChanges={hasUncommittedChanges}
+              localChanges={localChanges}
+              files={files}
+              onDiscardChanges={onDiscardChanges}
+            />
+          </div>
         ) : activeTab === 'preview' ? (
           <PreviewContent
             appCode={appCode}
