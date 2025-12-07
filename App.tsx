@@ -18,6 +18,7 @@ import { diffLines } from 'diff';
 import { Check, Split, FileCode, AlertCircle, Undo2, Redo2, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FileSystem, TabType } from './types';
 import { InspectedElement } from './components/PreviewPanel/ComponentInspector';
+import { gitApi, projectApi } from './services/projectApi';
 
 // Re-export types for backwards compatibility
 export type { FileSystem } from './types';
@@ -748,6 +749,44 @@ export default function App() {
     }
   }, [project.currentProject, activeFile, resetFiles]);
 
+  // Revert to a specific commit
+  const handleRevertToCommit = useCallback(async (commitHash: string): Promise<boolean> => {
+    if (!project.currentProject) return false;
+
+    try {
+      // 1. Checkout to the commit on backend
+      await gitApi.checkout(project.currentProject.id, commitHash);
+
+      // 2. Reload files from backend (they've been reverted on disk)
+      const result = await projectApi.get(project.currentProject.id);
+      if (result.files) {
+        resetFiles(result.files);
+
+        // Update last committed files ref
+        lastCommittedFilesRef.current = JSON.stringify(result.files);
+      }
+
+      // 3. Clear WIP
+      await clearWIP(project.currentProject.id);
+      setHasUncommittedChanges(false);
+
+      // 4. Refresh git status
+      await project.refreshGitStatus();
+
+      // 5. Reset active file if needed
+      if (result.files && !result.files[activeFile]) {
+        const firstSrc = Object.keys(result.files).find(f => f.startsWith('src/'));
+        setActiveFile(firstSrc || 'package.json');
+      }
+
+      console.log('[App] Reverted to commit:', commitHash);
+      return true;
+    } catch (err) {
+      console.error('[App] Failed to revert to commit:', err);
+      return false;
+    }
+  }, [project.currentProject, activeFile, resetFiles, project.refreshGitStatus]);
+
   return (
     <div className="flex flex-col min-h-screen h-screen max-h-screen w-full bg-[#020617] text-white overflow-hidden relative selection:bg-blue-500/30 selection:text-blue-50">
        {/* Background Ambient Effects */}
@@ -906,6 +945,7 @@ export default function App() {
             hasUncommittedChanges={hasUncommittedChanges}
             localChanges={localChanges}
             onDiscardChanges={handleDiscardChanges}
+            onRevertToCommit={handleRevertToCommit}
           />
        </main>
 

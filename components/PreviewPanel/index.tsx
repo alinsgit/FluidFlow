@@ -53,13 +53,14 @@ interface PreviewPanelProps {
   hasUncommittedChanges?: boolean;
   localChanges?: { path: string; status: 'added' | 'modified' | 'deleted' }[];
   onDiscardChanges?: () => Promise<void>;
+  onRevertToCommit?: (commitHash: string) => Promise<boolean>;
 }
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   files, setFiles, activeFile, setActiveFile, suggestions, setSuggestions, isGenerating, reviewChange, selectedModel,
   activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit,
   projectId, gitStatus, onInitGit, onCommit, onRefreshGitStatus,
-  hasUncommittedChanges, localChanges, onDiscardChanges
+  hasUncommittedChanges, localChanges, onDiscardChanges, onRevertToCommit
 }) => {
   // State
   const [iframeSrc, setIframeSrc] = useState<string>('');
@@ -1017,6 +1018,7 @@ Thumbs.db
               localChanges={localChanges}
               files={files}
               onDiscardChanges={onDiscardChanges}
+              onRevertToCommit={onRevertToCommit}
             />
           </div>
         ) : activeTab === 'preview' ? (

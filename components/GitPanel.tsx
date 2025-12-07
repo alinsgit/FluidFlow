@@ -27,6 +27,8 @@ interface GitPanelProps {
   files?: FileSystem;
   // Discard all local changes and restore from last commit
   onDiscardChanges?: () => Promise<void>;
+  // Revert to a specific commit
+  onRevertToCommit?: (commitHash: string) => Promise<boolean>;
 }
 
 export const GitPanel: React.FC<GitPanelProps> = ({
@@ -39,6 +41,7 @@ export const GitPanel: React.FC<GitPanelProps> = ({
   localChanges = [],
   files = {},
   onDiscardChanges,
+  onRevertToCommit,
 }) => {
   // Git initialization state comes from gitStatus - single source of truth
   const isGitInitialized = gitStatus?.initialized ?? false;
@@ -55,6 +58,11 @@ export const GitPanel: React.FC<GitPanelProps> = ({
   // Discard changes state
   const [isDiscarding, setIsDiscarding] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Revert to commit state
+  const [isReverting, setIsReverting] = useState(false);
+  const [showRevertConfirm, setShowRevertConfirm] = useState(false);
+  const [revertTargetCommit, setRevertTargetCommit] = useState<CommitDetails | null>(null);
 
   // Commit details state
   const [selectedCommit, setSelectedCommit] = useState<CommitDetails | null>(null);
@@ -223,6 +231,32 @@ ${changedFilesContext}`;
       setIsGeneratingMessage(false);
     }
   }, [localChanges, gitStatus, files]);
+
+  // Handle revert to commit
+  const handleRevertClick = useCallback((commit: CommitDetails) => {
+    setRevertTargetCommit(commit);
+    setShowRevertConfirm(true);
+  }, []);
+
+  const handleConfirmRevert = useCallback(async () => {
+    if (!revertTargetCommit || !onRevertToCommit) return;
+
+    setIsReverting(true);
+    try {
+      const success = await onRevertToCommit(revertTargetCommit.hash);
+      if (success) {
+        setShowRevertConfirm(false);
+        setRevertTargetCommit(null);
+        setSelectedCommit(null);
+        // Reload commit history
+        loadCommits();
+      }
+    } catch (err) {
+      console.error('Failed to revert:', err);
+    } finally {
+      setIsReverting(false);
+    }
+  }, [revertTargetCommit, onRevertToCommit]);
 
   // No project selected
   if (!projectId) {
@@ -571,6 +605,8 @@ ${changedFilesContext}`;
                 onViewFullDiff={() => loadCommitDiff(selectedCommit.hash)}
                 onCopyHash={() => copyHash(selectedCommit.hash)}
                 copiedHash={copiedHash}
+                onRevert={onRevertToCommit ? handleRevertClick : undefined}
+                isFirstCommit={commits.length > 0 && commits[0].hash === selectedCommit.hash}
               />
             ) : (
               <div className="p-2 space-y-1">
@@ -622,6 +658,87 @@ ${changedFilesContext}`;
           }}
         />
       )}
+
+      {/* Revert Confirmation Modal */}
+      {showRevertConfirm && revertTargetCommit && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-950/98 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden mx-4 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center gap-3 p-5 border-b border-white/10 bg-amber-500/5">
+              <div className="p-2 bg-amber-500/20 rounded-xl">
+                <RotateCcw className="w-6 h-6 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-white">Restore to Commit?</h3>
+                <p className="text-sm text-slate-400">This will change your project files</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRevertConfirm(false);
+                  setRevertTargetCommit(null);
+                }}
+                className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-slate-900/50 rounded-lg border border-white/5">
+                <p className="text-sm font-medium text-white truncate">{revertTargetCommit.message}</p>
+                <p className="text-xs text-slate-500 mt-1 font-mono">{revertTargetCommit.hashShort}</p>
+              </div>
+
+              <p className="text-sm text-slate-300">
+                Your project files will be restored to this commit's state.
+                Any commits after this point will still exist in history.
+              </p>
+
+              {/* Uncommitted Changes Warning */}
+              {hasUncommittedChanges && (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-red-300">Uncommitted Changes</p>
+                      <p className="text-xs text-red-400/80 mt-1">
+                        You have {localChanges.length} uncommitted change{localChanges.length !== 1 ? 's' : ''}.
+                        These will be lost when you restore.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 p-5 border-t border-white/10 bg-slate-900/30">
+              <button
+                onClick={() => {
+                  setShowRevertConfirm(false);
+                  setRevertTargetCommit(null);
+                }}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRevert}
+                disabled={isReverting}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {isReverting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+                {isReverting ? 'Restoring...' : 'Restore'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -635,6 +752,8 @@ interface CommitDetailsViewProps {
   onViewFullDiff: () => void;
   onCopyHash: () => void;
   copiedHash: string | null;
+  onRevert?: (commit: CommitDetails) => void;
+  isFirstCommit?: boolean;
 }
 
 const CommitDetailsView: React.FC<CommitDetailsViewProps> = ({
@@ -644,7 +763,9 @@ const CommitDetailsView: React.FC<CommitDetailsViewProps> = ({
   onViewDiff,
   onViewFullDiff,
   onCopyHash,
-  copiedHash
+  copiedHash,
+  onRevert,
+  isFirstCommit = false
 }) => {
   if (isLoading) {
     return (
@@ -720,6 +841,19 @@ const CommitDetailsView: React.FC<CommitDetailsViewProps> = ({
           </button>
         ))}
       </div>
+
+      {/* Revert Button */}
+      {onRevert && !isFirstCommit && (
+        <div className="mt-4 pt-3 border-t border-white/5">
+          <button
+            onClick={() => onRevert(commit)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded-lg text-sm font-medium transition-colors border border-amber-500/30"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Restore to this commit
+          </button>
+        </div>
+      )}
     </div>
   );
 };
