@@ -3,7 +3,7 @@ import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, Pencil, Send, FileText, Wrench, FlaskConical, Package, Loader2,
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
-  ChevronLeft, ChevronRight, Globe, GitBranch
+  ChevronLeft, ChevronRight, Globe, GitBranch, Play
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getProviderManager } from '../../services/ai';
@@ -28,6 +28,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { DBStudio } from './DBStudio';
 import { EnvironmentPanel } from './EnvironmentPanel';
 import { GitPanel } from '../GitPanel';
+import { RunnerPanel } from './RunnerPanel';
 import { GitStatus } from '../../services/projectApi';
 
 interface PreviewPanelProps {
@@ -831,6 +832,7 @@ Thumbs.db
               { id: 'preview', icon: Eye, label: 'Preview' },
               { id: 'code', icon: Code2, label: 'Code' },
               { id: 'git', icon: GitBranch, label: 'Git' },
+              { id: 'run', icon: Play, label: 'Run' },
               { id: 'database', icon: Database, label: 'DB Studio' },
               { id: 'tests', icon: FlaskConical, label: 'Tests' },
               { id: 'docs', icon: FileText, label: 'Docs' },
@@ -1019,6 +1021,14 @@ Thumbs.db
               files={files}
               onDiscardChanges={onDiscardChanges}
               onRevertToCommit={onRevertToCommit}
+            />
+          </div>
+        ) : activeTab === 'run' ? (
+          <div className="flex-1 overflow-auto flex flex-col">
+            <RunnerPanel
+              projectId={projectId || null}
+              projectName={files['package.json'] ? (() => { try { return JSON.parse(files['package.json']).name; } catch { return undefined; }})() : undefined}
+              hasCommittedFiles={Boolean(gitStatus?.initialized)}
             />
           </div>
         ) : activeTab === 'preview' ? (

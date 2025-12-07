@@ -8,6 +8,10 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3100,
       host: '0.0.0.0',
+      watch: {
+        // Ignore projects folder - file changes there shouldn't trigger HMR
+        ignored: ['**/projects/**', '**/node_modules/**', '**/.git/**'],
+      },
     },
     plugins: [react()],
     define: {

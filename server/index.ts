@@ -4,6 +4,7 @@ import { projectsRouter } from './api/projects.js';
 import { gitRouter } from './api/git.js';
 import { githubRouter } from './api/github.js';
 import { settingsRouter } from './api/settings.js';
+import { runnerRouter } from './api/runner.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -22,7 +23,19 @@ if (!fs.existsSync(PROJECTS_DIR)) {
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3100', 'http://localhost:3101', 'http://localhost:3102', 'http://localhost:5173'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+
+    // Allow localhost ports: 3100-3102 (FluidFlow), 5173 (Vite dev), 3300-3399 (running projects)
+    const allowedPatterns = [
+      /^http:\/\/localhost:(3100|3101|3102|5173)$/,
+      /^http:\/\/localhost:33\d{2}$/, // 3300-3399
+    ];
+
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+    callback(null, isAllowed);
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -37,6 +50,7 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/git', gitRouter);
 app.use('/api/github', githubRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/runner', runnerRouter);
 
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
