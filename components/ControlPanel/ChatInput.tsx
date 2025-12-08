@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Send, Mic, MicOff, Loader2, Wand2, Paperclip, Image, Palette, X, Maximize2, Sparkles } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Mic, MicOff, Loader2, Wand2, Paperclip, Image, Palette, X, Maximize2, Sparkles, Brain } from 'lucide-react';
 import { ChatAttachment, FileSystem } from '../../types';
 import { PromptLibrary, PromptDropdown } from './PromptLibrary';
 import { UploadCards } from './UploadCards';
@@ -12,6 +12,8 @@ interface ChatInputProps {
   hasExistingApp: boolean;
   placeholder?: string;
   files?: FileSystem;
+  onOpenPromptEngineer?: () => void;
+  externalPrompt?: string; // For auto-filling from continuation
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -19,7 +21,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isGenerating,
   hasExistingApp,
   placeholder,
-  files = {}
+  files = {},
+  onOpenPromptEngineer,
+  externalPrompt
 }) => {
   const [prompt, setPrompt] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -30,6 +34,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [showExpandedModal, setShowExpandedModal] = useState(false);
   const [showImproverModal, setShowImproverModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Handle external prompt from continuation
+  useEffect(() => {
+    if (externalPrompt && externalPrompt !== prompt) {
+      setPrompt(externalPrompt);
+    }
+  }, [externalPrompt, prompt]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -141,7 +152,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      handleAttach(attachTypeRef.current, file, reader.result as string);
+      const result = reader.result as string;
+      // Only attach if we got a valid result (not empty string)
+      if (result && result.trim().length > 0) {
+        handleAttach(attachTypeRef.current, file, result);
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -178,11 +193,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className="flex gap-2 px-3 pt-3">
           {attachments.map((att) => (
             <div key={att.type} className="relative group">
-              <img
-                src={att.preview}
-                alt={att.type}
-                className="w-14 h-14 object-cover rounded-lg border border-white/10"
-              />
+              {att.preview && att.preview.trim() ? (
+                <img
+                  src={att.preview}
+                  alt={att.type}
+                  className="w-14 h-14 object-cover rounded-lg border border-white/10"
+                />
+              ) : (
+                <div className="w-14 h-14 bg-slate-800 rounded-lg border border-white/10 flex items-center justify-center">
+                  {att.type === 'sketch' ? <Image className="w-6 h-6 text-blue-400" /> : <Palette className="w-6 h-6 text-purple-400" />}
+                </div>
+              )}
               <button
                 onClick={() => handleRemove(att.type)}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -198,32 +219,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {/* Input area */}
-      <div className="p-3">
-        <div className="flex items-end gap-2">
+      {/* Top toolbar - move icons here */}
+      <div className="px-3 py-2 border-b border-white/5">
+        <div className="flex items-center gap-2">
           {/* Attach button - only show when existing app */}
           {hasExistingApp && (
             <div className="relative">
               <button
                 onClick={() => setShowAttachMenu(!showAttachMenu)}
-                className={`p-2 rounded-lg transition-colors ${
+                className={`p-1.5 rounded-md transition-colors ${
                   attachments.length > 0
                     ? 'bg-blue-500/20 text-blue-400'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
                 title="Attach image"
               >
-                <Paperclip className="w-5 h-5" />
+                <Paperclip className="w-4 h-4" />
               </button>
 
               {/* Attach menu */}
               {showAttachMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowAttachMenu(false)} />
-                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50">
+                  <div className="absolute top-full left-0 mt-1 w-48 bg-slate-800 border border-white/10 rounded-lg shadow-lg overflow-hidden z-50">
                     <button
                       onClick={() => openFileDialog('sketch')}
-                      className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/5 text-sm text-slate-300 w-full"
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-sm text-slate-300 w-full"
                     >
                       <Image className="w-4 h-4 text-blue-400" />
                       <span className="flex-1 text-left">Sketch / Wireframe</span>
@@ -231,7 +252,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     </button>
                     <button
                       onClick={() => openFileDialog('brand')}
-                      className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/5 text-sm text-slate-300 w-full"
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-sm text-slate-300 w-full"
                     >
                       <Palette className="w-4 h-4 text-purple-400" />
                       <span className="flex-1 text-left">Brand Logo</span>
@@ -247,14 +268,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowPromptDropdown(!showPromptDropdown)}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-md transition-colors ${
                 showPromptDropdown
                   ? 'bg-purple-500/20 text-purple-400'
                   : 'hover:bg-white/5 text-slate-400 hover:text-white'
               }`}
               title="Prompt Library"
             >
-              <Wand2 className="w-5 h-5" />
+              <Wand2 className="w-4 h-4" />
             </button>
 
             <PromptDropdown
@@ -265,55 +286,82 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             />
           </div>
 
-          {/* Text input */}
+          {/* AI Prompt Engineer button */}
+          {onOpenPromptEngineer && (
+            <button
+              onClick={onOpenPromptEngineer}
+              className="p-1.5 rounded-md hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+              title="AI Prompt Engineer (Create from scratch)"
+            >
+              <Brain className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Improve button - always visible */}
+          <button
+            onClick={() => setShowImproverModal(true)}
+            disabled={isGenerating || !prompt.trim()}
+            className={`p-1.5 rounded-md transition-colors ${
+              prompt.trim()
+                ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                : 'text-slate-600 cursor-not-allowed'
+            } disabled:opacity-50`}
+            title="Improve prompt with AI (Enhance existing)"
+          >
+            <Sparkles className="w-4 h-4" />
+          </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Voice and expand buttons */}
+          <button
+            onClick={() => setShowExpandedModal(true)}
+            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            title="Expand editor (Ctrl+Shift+E)"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={toggleListening}
+            className={`p-1.5 rounded-md transition-colors ${
+              isListening ? 'text-red-400 bg-red-500/20' : 'text-slate-400 hover:text-white'
+            }`}
+            title={isListening ? 'Stop listening' : 'Voice input'}
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Input area */}
+      <div className="p-3">
+        <div className="flex items-center gap-2">
+          {/* Text input - now much wider */}
           <div className="flex-1 relative">
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder || (hasExistingApp ? "Describe changes..." : "Describe your app (optional)...")}
+              placeholder={placeholder || (hasExistingApp ? "Describe changes or ask questions..." : "Describe your app or paste a prompt...")}
               disabled={isGenerating}
-              rows={1}
-              className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2.5 pr-20 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none disabled:opacity-50"
-              style={{ minHeight: '42px', maxHeight: '120px' }}
+              rows={2}
+              className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 pr-16 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none disabled:opacity-50"
+              style={{ minHeight: '60px', maxHeight: '200px' }}
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              <button
-                onClick={() => setShowExpandedModal(true)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                title="Expand editor (Ctrl+Shift+E)"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={toggleListening}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isListening ? 'text-red-400 bg-red-500/20' : 'text-slate-400 hover:text-white'
-                }`}
-                title={isListening ? 'Stop listening' : 'Voice input'}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-            </div>
+            {/* Character count for very long prompts */}
+            {prompt.length > 500 && (
+              <div className="absolute bottom-2 right-2 text-[10px] text-slate-500">
+                {prompt.length}
+              </div>
+            )}
           </div>
-
-          {/* Improve button - only show when there's a prompt */}
-          {prompt.trim().length > 0 && (
-            <button
-              onClick={() => setShowImproverModal(true)}
-              disabled={isGenerating}
-              className="p-2.5 rounded-xl bg-purple-600/20 hover:bg-purple-500/30 border border-purple-500/30 text-purple-400 transition-colors disabled:opacity-50"
-              title="Improve prompt with AI"
-            >
-              <Sparkles className="w-5 h-5" />
-            </button>
-          )}
 
           {/* Send button */}
           <button
             onClick={handleSend}
             disabled={isGenerating || !canSend}
-            className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors"
+            className="p-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors h-fit"
           >
             {isGenerating ? (
               <Loader2 className="w-5 h-5 animate-spin" />

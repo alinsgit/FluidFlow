@@ -42,7 +42,11 @@ export const UploadCards: React.FC<UploadCardsProps> = ({
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      onAttach(type, file, reader.result as string);
+      const result = reader.result as string;
+      // Only attach if we got a valid result (not empty string)
+      if (result && result.trim().length > 0) {
+        onAttach(type, file, result);
+      }
     };
     reader.readAsDataURL(file);
 
@@ -71,7 +75,11 @@ export const UploadCards: React.FC<UploadCardsProps> = ({
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      onAttach(type, file, reader.result as string);
+      const result = reader.result as string;
+      // Only attach if we got a valid result (not empty string)
+      if (result && result.trim().length > 0) {
+        onAttach(type, file, result);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -96,11 +104,17 @@ export const UploadCards: React.FC<UploadCardsProps> = ({
       >
         {sketchAttachment ? (
           <>
-            <img
-              src={sketchAttachment.preview}
-              alt="Sketch"
-              className="w-full h-24 object-cover"
-            />
+            {sketchAttachment.preview && sketchAttachment.preview.trim() ? (
+              <img
+                src={sketchAttachment.preview}
+                alt="Sketch"
+                className="w-full h-24 object-cover"
+              />
+            ) : (
+              <div className="w-full h-24 bg-slate-800 flex items-center justify-center">
+                <Image className="w-10 h-10 text-blue-400" />
+              </div>
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -155,11 +169,17 @@ export const UploadCards: React.FC<UploadCardsProps> = ({
         {brandAttachment ? (
           <>
             <div className="w-full h-24 flex items-center justify-center bg-white/5 p-2">
-              <img
-                src={brandAttachment.preview}
-                alt="Brand"
-                className="max-w-full max-h-full object-contain"
-              />
+              {brandAttachment.preview && brandAttachment.preview.trim() ? (
+                <img
+                  src={brandAttachment.preview}
+                  alt="Brand"
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Palette className="w-10 h-10 text-purple-400" />
+                </div>
+              )}
             </div>
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-2 flex items-center justify-between">

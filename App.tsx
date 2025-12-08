@@ -13,6 +13,7 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { ProjectManager } from './components/ProjectManager';
 import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
 import { CreditsModal } from './components/CreditsModal';
+import { CodeMapModal } from './components/ControlPanel/CodeMapModal';
 import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { useProject } from './hooks/useProject';
@@ -637,6 +638,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
   const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
+  
+  const [isCodeMapModalOpen, setIsCodeMapModalOpen] = useState(false);
+  const [codeMap, setCodeMap] = useState<CodeMap | null>(null);
+  const [isGeneratingCodeMap, setIsGeneratingCodeMap] = useState(false);
 
   // ControlPanel ref for inspect edit handler
   const controlPanelRef = useRef<ControlPanelRef>(null);
@@ -653,9 +658,22 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
      label: string;
      newFiles: FileSystem;
   } | null>(null);
+  const [autoAcceptChanges, setAutoAcceptChanges] = useState(false);
 
   const reviewChange = (label: string, newFiles: FileSystem) => {
-     setPendingReview({ label, newFiles });
+     if (autoAcceptChanges) {
+        // Auto-accept: apply changes directly without showing modal
+        setFiles(newFiles);
+
+        // If the active file was deleted in the new state, reset it
+        if (!newFiles[activeFile]) {
+           const firstSrc = Object.keys(newFiles).find(f => f.startsWith('src/'));
+           setActiveFile(firstSrc || 'package.json');
+        }
+     } else {
+        // Show review modal
+        setPendingReview({ label, newFiles });
+     }
   };
 
   const confirmChange = () => {
@@ -924,6 +942,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
             onOpenAISettings={() => setIsAISettingsOpen(true)}
+            onOpenCodeMap={() => setIsCodeMapModalOpen(true)}
+            autoAcceptChanges={autoAcceptChanges}
+            onAutoAcceptChangesChange={setAutoAcceptChanges}
             // Project props
             currentProject={project.currentProject}
             projects={project.projects}
@@ -1309,6 +1330,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
          isOpen={isCreditsModalOpen}
          onClose={() => setIsCreditsModalOpen(false)}
          showOnFirstLaunch={true}
+       />
+
+       {/* CodeMap Modal */}
+       <CodeMapModal
+         isOpen={isCodeMapModalOpen}
+         onClose={() => setIsCodeMapModalOpen(false)}
+         projectId={project.currentProject?.id}
        />
 
     </div>

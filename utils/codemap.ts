@@ -216,7 +216,14 @@ function generateSummary(files: FileInfo[], tree: Record<string, string[]>): str
   const allChildren = new Set(Object.values(tree).flat());
   const roots = components.filter(c => !allChildren.has(c.name));
 
-  function printTree(name: string, indent: string = ''): string {
+  function printTree(name: string, indent: string = '', visited: Set<string> = new Set(), depth: number = 0): string {
+    // Prevent infinite recursion
+    if (depth > 50 || visited.has(name)) {
+      return `${indent}- ${name} (max depth reached or circular reference)\n`;
+    }
+
+    visited.add(name);
+
     let result = `${indent}- ${name}`;
     const comp = components.find(c => c.name === name);
     if (comp && comp.props.length > 0) {
@@ -226,13 +233,13 @@ function generateSummary(files: FileInfo[], tree: Record<string, string[]>): str
 
     const children = tree[name] || [];
     for (const child of children) {
-      result += printTree(child, indent + '  ');
+      result += printTree(child, indent + '  ', new Set(visited), depth + 1);
     }
     return result;
   }
 
   for (const root of roots) {
-    summary += printTree(root.name);
+    summary += printTree(root.name, '', new Set(), 0);
   }
 
   summary += `\n## Key Components\n\n`;

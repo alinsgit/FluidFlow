@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { User, Bot, Image, Palette, RotateCcw, FileCode, Plus, Minus, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { User, Bot, Image, Palette, RotateCcw, FileCode, Plus, Minus, Loader2, AlertCircle, RefreshCw, Zap, Clock, Layers } from 'lucide-react';
 import { ChatMessage, FileChange } from '../../types';
 
 interface ChatPanelProps {
@@ -13,6 +13,38 @@ interface ChatPanelProps {
   // AI History restore props
   aiHistoryCount?: number;
   onRestoreFromHistory?: () => void;
+  // Truncation retry props
+  truncatedContent?: {
+    rawResponse: string;
+    prompt: string;
+    systemInstruction: string;
+    partialFiles?: Record<string, string>;
+    attempt: number;
+  } | null;
+  onTruncationRetry?: () => void;
+  // Batch generation props
+  onBatchGeneration?: (files: string[], prompt: string, systemInstruction: string) => void;
+  // External prompt prop for auto-fill
+  onSetExternalPrompt?: (prompt: string) => void;
+  // Smart continuation props
+  continuationState?: {
+    isActive: boolean;
+    generationMeta: {
+      totalFilesPlanned: number;
+      completedFiles: string[];
+      remainingFiles: string[];
+      currentBatch: number;
+      totalBatches: number;
+    };
+  } | null;
+  onContinueGeneration?: () => void;
+  // File plan props (detected from stream)
+  filePlan?: {
+    create: string[];
+    delete: string[];
+    total: number;
+    completed: string[];
+  } | null;
 }
 
 // HTML entity escaping to prevent XSS attacks
@@ -143,9 +175,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   streamingChars,
   streamingFiles,
   aiHistoryCount = 0,
-  onRestoreFromHistory
+  onRestoreFromHistory,
+  truncatedContent,
+  onTruncationRetry,
+  onBatchGeneration,
+  onSetExternalPrompt,
+  continuationState,
+  onContinueGeneration,
+  filePlan
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [autoContinueCountdown, setAutoContinueCountdown] = useState<number>(0);
 
   // Auto-scroll to bottom on new messages or streaming updates
   useEffect(() => {
@@ -153,6 +193,39 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, streamingStatus, streamingChars, streamingFiles]);
+
+  // Auto-continue to next batch after 10 seconds
+  useEffect(() => {
+    // Find the last message with continuation data
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.continuation && !isGenerating && onSetExternalPrompt) {
+      // Start countdown at 10
+      setAutoContinueCountdown(10);
+
+      const countdownInterval = setInterval(() => {
+        setAutoContinueCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      const autoContinueTimer = setTimeout(() => {
+        clearInterval(countdownInterval);
+        setAutoContinueCountdown(0);
+        onSetExternalPrompt(lastMessage.continuation.prompt);
+      }, 10000); // 10 seconds
+
+      return () => {
+        clearTimeout(autoContinueTimer);
+        clearInterval(countdownInterval);
+      };
+    } else {
+      setAutoContinueCountdown(0);
+    }
+  }, [messages, isGenerating, onSetExternalPrompt]);
 
   if (messages.length === 0) {
     return (
@@ -197,11 +270,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   <div className="flex gap-2 mb-2 justify-end">
                     {message.attachments.map((att, idx) => (
                       <div key={idx} className="relative group">
-                        <img
-                          src={att.preview}
-                          alt={att.type}
-                          className="w-16 h-16 object-cover rounded-lg border border-white/10"
-                        />
+                        {att.preview && att.preview.trim() ? (
+                          <img
+                            src={att.preview}
+                            alt={att.type}
+                            className="w-16 h-16 object-cover rounded-lg border border-white/10"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-slate-800 rounded-lg border border-white/10 flex items-center justify-center">
+                            {att.type === 'sketch' ? <Image className="w-6 h-6 text-blue-400" /> : <Palette className="w-6 h-6 text-purple-400" />}
+                          </div>
+                        )}
                         <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[9px] text-center py-0.5 rounded-b-lg flex items-center justify-center gap-1">
                           {att.type === 'sketch' ? <Image className="w-2.5 h-2.5" /> : <Palette className="w-2.5 h-2.5" />}
                           {att.type}
@@ -256,8 +335,95 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   </div>
                 )}
 
+                {/* Token Usage */}
+                {message.tokenUsage && (
+                  <div className="mt-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-yellow-400" />
+                        Token Usage
+                      </h4>
+                      {message.generationTime && (
+                        <div className="flex items-center gap-1 text-xs text-slate-400">
+                          <Clock className="w-3 h-3" />
+                          {(message.generationTime / 1000).toFixed(1)}s
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="flex flex-col">
+                        <span className="text-slate-500">Input</span>
+                        <span className="text-blue-400 font-medium">{message.tokenUsage.inputTokens.toLocaleString()}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-slate-500">Output</span>
+                        <span className="text-green-400 font-medium">{message.tokenUsage.outputTokens.toLocaleString()}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-slate-500">Total</span>
+                        <span className="text-purple-400 font-medium">{message.tokenUsage.totalTokens.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    {message.model && message.provider && (
+                      <div className="mt-2 pt-2 border-t border-slate-700 flex items-center justify-between">
+                        <span className="text-xs text-slate-500">Model</span>
+                        <span className="text-xs text-slate-400">{message.provider} • {message.model}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* File Changes */}
                 {message.fileChanges && <FileChangesSummary changes={message.fileChanges} />}
+
+                {/* Continuation Prompt */}
+                {message.continuation && !message.isGenerating && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <div className="p-1.5 bg-green-500/20 rounded-lg flex-shrink-0">
+                          <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-green-300 mb-2">
+                            Batch {message.continuation.currentBatch} of {message.continuation.totalBatches} complete.
+                            {message.continuation.remainingFiles.length} files remaining.
+                          </p>
+                          <button
+                            onClick={() => {
+                              // Auto-fill the chat input with the continuation prompt
+                              if (onSetExternalPrompt) {
+                                onSetExternalPrompt(message.continuation.prompt);
+                              }
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs rounded-md transition-colors w-full justify-center"
+                          >
+                            <Clock className="w-3 h-3" />
+                            {autoContinueCountdown > 0 && index === messages.length - 1 ? (
+                              `Auto-continue in ${autoContinueCountdown}s`
+                            ) : (
+                              'Continue to Next Batch'
+                            )}
+                          </button>
+                          <details className="mt-2">
+                            <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-300">
+                              View remaining files
+                            </summary>
+                            <div className="mt-1 space-y-1">
+                              {message.continuation.remainingFiles.map((file) => (
+                                <div key={`remaining-${file}`} className="text-xs font-mono text-slate-500 pl-2">
+                                  {file}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Revert Button */}
                 {message.snapshotFiles && !message.isGenerating && index < messages.length - 1 && (
@@ -318,8 +484,158 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   </div>
                 )}
 
-                {/* Streaming Files List */}
-                {streamingFiles && streamingFiles.length > 0 && (
+                {/* Smart Continuation Progress */}
+                {continuationState && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <Layers className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-blue-300">
+                              Multi-batch Generation
+                            </span>
+                            <span className="text-xs text-blue-400">
+                              Batch {continuationState.generationMeta.currentBatch}/{continuationState.generationMeta.totalBatches}
+                            </span>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="h-2 bg-slate-900 rounded-full overflow-hidden mb-2">
+                            <div
+                              className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500"
+                              style={{
+                                width: `${(continuationState.generationMeta.completedFiles.length / continuationState.generationMeta.totalFilesPlanned) * 100}%`
+                              }}
+                            />
+                          </div>
+
+                          <div className="flex justify-between text-[10px] text-slate-400 mb-2">
+                            <span>
+                              {continuationState.generationMeta.completedFiles.length} of {continuationState.generationMeta.totalFilesPlanned} files
+                            </span>
+                            <span>
+                              {continuationState.generationMeta.remainingFiles.length} remaining
+                            </span>
+                          </div>
+
+                          {/* Continue button when paused */}
+                          {!continuationState.isActive && !isGenerating && onContinueGeneration && (
+                            <button
+                              onClick={onContinueGeneration}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-md transition-colors w-full justify-center"
+                            >
+                              <Zap className="w-3 h-3" />
+                              Continue Generation ({continuationState.generationMeta.remainingFiles.length} files)
+                            </button>
+                          )}
+
+                          {/* Active indicator */}
+                          {continuationState.isActive && (
+                            <div className="flex items-center gap-2 text-[10px] text-blue-400">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Auto-continuing...</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Truncation Retry Button */}
+                {truncatedContent && onTruncationRetry && !isGenerating && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-orange-300 mb-2">
+                            Generation was truncated. {truncatedContent.partialFiles ? Object.keys(truncatedContent.partialFiles).length + ' files need recovery.' : ''}
+                          </p>
+                          <button
+                            onClick={onTruncationRetry}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs rounded-md transition-colors"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Retry Generation (attempt {truncatedContent.attempt}/3)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* File Plan Progress (when plan is detected) */}
+                {filePlan && filePlan.create.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileCode className="w-3.5 h-3.5 text-blue-400" />
+                        <span className="text-xs font-medium text-slate-400">File Generation Plan</span>
+                      </div>
+                      <span className="text-xs text-blue-400">
+                        {filePlan.completed.length}/{filePlan.total} complete
+                      </span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-1.5 bg-slate-900 rounded-full overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full transition-all duration-300"
+                        style={{ width: `${(filePlan.completed.length / filePlan.total) * 100}%` }}
+                      />
+                    </div>
+
+                    <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                      {/* Files to create */}
+                      {filePlan.create.map((file) => {
+                        const isCompleted = filePlan.completed.includes(file);
+                        const isCurrentlyStreaming = streamingFiles?.includes(file) && !isCompleted;
+                        return (
+                          <div
+                            key={file}
+                            className={`flex items-center gap-2 text-xs font-mono px-2 py-1 rounded transition-all ${
+                              isCompleted
+                                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+                                : isCurrentlyStreaming
+                                ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300 animate-pulse'
+                                : 'bg-slate-900/50 text-slate-500'
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <span className="w-4 h-4 flex items-center justify-center text-emerald-400">✓</span>
+                            ) : isCurrentlyStreaming ? (
+                              <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                            ) : (
+                              <Clock className="w-3.5 h-3.5 text-slate-600" />
+                            )}
+                            <span className="truncate">{file}</span>
+                          </div>
+                        );
+                      })}
+
+                      {/* Files to delete */}
+                      {filePlan.delete.length > 0 && (
+                        <>
+                          <div className="text-[10px] text-slate-500 mt-2 mb-1">Files to delete:</div>
+                          {filePlan.delete.map((file) => (
+                            <div
+                              key={`del-${file}`}
+                              className="flex items-center gap-2 text-xs font-mono px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-400"
+                            >
+                              <span className="w-4 h-4 flex items-center justify-center">🗑️</span>
+                              <span className="truncate line-through">{file}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Fallback: Streaming Files List (when no plan detected) */}
+                {!filePlan && streamingFiles && streamingFiles.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-white/5">
                     <div className="flex items-center gap-2 mb-2">
                       <FileCode className="w-3.5 h-3.5 text-emerald-400" />

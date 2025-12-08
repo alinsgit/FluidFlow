@@ -1,13 +1,55 @@
 import React, { useState, useCallback, useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
 import { Layers, Trash2, AlertTriangle, X, MessageSquare, FileCode, History } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
-import { cleanGeneratedCode, parseMultiFileResponse } from '../../utils/cleanCode';
+import { cleanGeneratedCode, parseMultiFileResponse, GenerationMeta } from '../../utils/cleanCode';
+import { extractFilesFromTruncatedResponse } from '../../utils/extractPartialFiles';
+
+// Helper function to extract file list from response
+function extractFileListFromResponse(response: string): string[] {
+  const files = new Set<string>();
+
+  // Try JSON parsing first
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}?/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.files) {
+        Object.keys(parsed.files).forEach(file => files.add(file));
+      }
+    }
+  } catch (e) {
+    // Continue with regex extraction
+  }
+
+  // Extract files using regex patterns
+  const patterns = [
+    /"([^"]+\.(tsx?|jsx?|css|json|md|sql|ts|js))":/g,
+    /(?:^|\n)(src\/[^:\n]+\.(tsx?|jsx?|css|json|md|sql|ts|js))\s*:/gm,
+    /(?:create|update|generate)\s+([^"]*\.(?:tsx?|jsx?|css|json|md|sql|ts|js))/gi
+  ];
+
+  patterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(response)) !== null) {
+      const filePath = match[1] || match[2];
+      if (filePath) {
+        files.add(filePath);
+      }
+    }
+  });
+
+  return Array.from(files).sort();
+}
 import { generateContextForPrompt } from '../../utils/codemap';
 import { debugLog } from '../../hooks/useDebugStore';
-import { getProviderManager, GenerationRequest } from '../../services/ai';
+import { useTechStack } from '../../hooks/useTechStack';
+import { getProviderManager, GenerationRequest, GenerationResponse } from '../../services/ai';
 import { InspectedElement } from '../PreviewPanel/ComponentInspector';
 import { useAIHistory } from '../../hooks/useAIHistory';
 import { AIHistoryModal } from '../AIHistoryModal';
+import { TechStackModal } from './TechStackModal';
+import { PromptEngineerModal } from './PromptEngineerModal';
+import { BatchGenerationModal } from './BatchGenerationModal';
 import { getContextManager, CONTEXT_IDS } from '../../services/conversationContext';
 import { ContextIndicator } from '../ContextIndicator';
 import { getFluidFlowConfig } from '../../services/fluidflowConfig';
@@ -19,6 +61,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { ModeToggle } from './ModeToggle';
 import { ProjectPanel } from './ProjectPanel';
 import type { ProjectMeta } from '@/services/projectApi';
+
 
 // Ref interface for external access
 export interface ControlPanelRef {
@@ -44,6 +87,9 @@ interface ControlPanelProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   onOpenAISettings?: () => void;
+  onOpenCodeMap?: () => void;
+  autoAcceptChanges?: boolean;
+  onAutoAcceptChangesChange?: (value: boolean) => void;
   // Project props
   currentProject?: ProjectMeta | null;
   projects?: ProjectMeta[];
@@ -103,6 +149,9 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   selectedModel,
   onModelChange,
   onOpenAISettings,
+  onOpenCodeMap,
+  autoAcceptChanges,
+  onAutoAcceptChangesChange,
   // Project props
   currentProject,
   projects = [],
@@ -130,15 +179,61 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   const [showAIHistory, setShowAIHistory] = useState(false);
 
   // Modal exclusivity state
-  const [openModal, setOpenModal] = useState<'settings' | 'projects' | null>(null);
+  const [openModal, setOpenModal] = useState<'settings' | 'projects' | 'techstack' | 'promptengineer' | 'batchgen' | null>(null);
+
+  // Batch generation modal state
+  const [batchGenModal, setBatchGenModal] = useState<{
+    isOpen: boolean;
+    prompt: string;
+    systemInstruction: string;
+    targetFiles: string[];
+  } | null>(null);
 
   // Streaming state
   const [streamingStatus, setStreamingStatus] = useState<string>('');
   const [streamingChars, setStreamingChars] = useState(0);
   const [streamingFiles, setStreamingFiles] = useState<string[]>([]);
 
+  // File plan state - detected from response start
+  const [filePlan, setFilePlan] = useState<{
+    create: string[];
+    delete: string[];
+    total: number;
+    completed: string[];
+  } | null>(null);
+
+  // Truncation retry state
+  const [truncatedContent, setTruncatedContent] = useState<{
+    rawResponse: string;
+    prompt: string;
+    systemInstruction: string;
+    partialFiles?: {
+      [filePath: string]: {
+        content: string;
+        isComplete: boolean;
+      };
+    };
+    attempt: number;
+  } | null>(null);
+
+  // Smart continuation state for multi-batch generation
+  const [continuationState, setContinuationState] = useState<{
+    isActive: boolean;
+    originalPrompt: string;
+    systemInstruction: string;
+    generationMeta: GenerationMeta;
+    accumulatedFiles: FileSystem;
+    currentBatch: number;
+  } | null>(null);
+
+  // External prompt for auto-fill (e.g., from continuation)
+  const [externalPrompt, setExternalPrompt] = useState<string>('');
+
   // AI History - persists across refreshes
   const aiHistory = useAIHistory(currentProject?.id || null);
+
+  // Tech stack configuration
+  const { generateSystemInstruction } = useTechStack();
 
   // Context management
   const contextManager = getContextManager();
@@ -154,7 +249,7 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     setOpenModal(modalType);
   };
 
-  const handleModalClose = (modalType: 'settings' | 'projects') => {
+  const handleModalClose = (modalType: 'settings' | 'projects' | 'techstack' | 'promptengineer') => {
     setOpenModal(prev => prev === modalType ? null : prev);
   };
 
@@ -209,7 +304,434 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     onModelChange(modelId);
   }, [onModelChange]);
 
+  // Handle prompt generated from PromptEngineerModal
+  const handlePromptGenerated = useCallback((prompt: string) => {
+    // Auto-fill the chat input with the generated prompt
+    const inputElement = document.querySelector('textarea[placeholder*="Type your prompt"]') as HTMLTextAreaElement;
+    if (inputElement) {
+      inputElement.value = prompt;
+      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, []);
+
+  // Handle truncation retry
+  const handleTruncationRetry = async () => {
+    if (!truncatedContent) return;
+
+    const { rawResponse, prompt, systemInstruction, partialFiles, attempt } = truncatedContent;
+
+    // Limit retry attempts to prevent infinite loops
+    if (attempt >= 3) {
+      setStreamingStatus('❌ Maximum retry attempts reached. Please try a shorter prompt.');
+      setTruncatedContent(null);
+      return;
+    }
+
+    setStreamingStatus(`🔄 Retrying generation (attempt ${attempt + 1}/3)...`);
+    setIsGenerating(true);
+
+    try {
+      // Extract what was being generated when truncated
+      const incompleteResponse = rawResponse;
+
+      // Create a continuation prompt
+      const continuationPrompt = `Continue generating from where you left off. Your previous response was truncated:
+
+**Previous incomplete response (first 2000 chars):**
+${incompleteResponse.slice(0, 2000)}
+
+**Last 500 chars of incomplete response:**
+${incompleteResponse.slice(-500)}
+
+Please continue from exactly where you stopped and complete the response. Make sure to:
+1. Complete any incomplete JSON structure
+2. Finish any cut-off file content
+3. Provide all remaining files
+4. Ensure the response is properly formatted JSON
+
+Original prompt: ${prompt}`;
+
+      const manager = getProviderManager();
+      const activeConfig = manager.getActiveConfig();
+      const providerName = activeConfig?.name || 'Unknown';
+      const currentModel = activeConfig?.defaultModel || selectedModel;
+
+      let fullText = '';
+      const startTime = Date.now();
+
+      // Generate continuation
+      const response = await manager.generateStream(
+        {
+          prompt: continuationPrompt,
+          systemInstruction,
+          maxTokens: 32768, // Use max tokens for retry
+          temperature: 0.7
+        },
+        (chunk) => {
+          if (chunk.text) {
+            fullText += chunk.text;
+          }
+        },
+        currentModel
+      );
+
+      // Combine original response with continuation
+      const combinedResponse = incompleteResponse + fullText;
+
+      setStreamingStatus('✨ Parsing combined response...');
+
+      // Try to parse the combined response
+      const parseResult = parseMultiFileResponse(combinedResponse);
+
+      if (parseResult && parseResult.files) {
+        // Merge with any partial files from previous attempt
+        const mergedFiles = { ...parseResult.files };
+
+        // Apply the changes
+        reviewChange('Retried Generation (combined)', mergedFiles);
+        setStreamingStatus('✅ Successfully recovered from truncation!');
+        setTruncatedContent(null);
+      } else {
+        // Still failed, update truncated content for another retry
+        setTruncatedContent({
+          rawResponse: combinedResponse,
+          prompt,
+          systemInstruction,
+          partialFiles,
+          attempt: attempt + 1
+        });
+        setStreamingStatus('⚠️ Response still truncated after retry. Click "Retry" to try again.');
+      }
+    } catch (error) {
+      console.error('Retry failed:', error);
+      setStreamingStatus('❌ Retry failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Smart continuation handler - automatically continues generation for remaining files
+  const handleContinueGeneration = async (
+    contState?: typeof continuationState,
+    existingFiles?: FileSystem
+  ) => {
+    const state = contState || continuationState;
+    if (!state || state.generationMeta.isComplete) {
+      console.log('[Continuation] No continuation needed or already complete');
+      setContinuationState(null);
+      return;
+    }
+
+    const { originalPrompt, systemInstruction, generationMeta, accumulatedFiles } = state;
+    const { remainingFiles, currentBatch, totalBatches, completedFiles } = generationMeta;
+
+    if (remainingFiles.length === 0) {
+      console.log('[Continuation] All files completed');
+      setContinuationState(null);
+      return;
+    }
+
+    setIsGenerating(true);
+    // Seamless progress - user sees smooth generation
+    setStreamingStatus(`✨ Generating... ${completedFiles.length}/${generationMeta.totalFilesPlanned} files`);
+
+    try {
+      const manager = getProviderManager();
+      const activeConfig = manager.getActiveConfig();
+      const currentModel = activeConfig?.defaultModel || selectedModel;
+      const providerName = activeConfig?.name || 'AI';
+
+      // Build continuation prompt (internal - user doesn't see this)
+      const continuationPrompt = `Continue generating the remaining files for the project.
+
+## GENERATION CONTEXT
+Already completed: ${completedFiles.length} files
+Remaining: ${remainingFiles.length} files
+
+### ALREADY COMPLETED FILES:
+${completedFiles.map(f => `- ${f}`).join('\n')}
+
+### REMAINING FILES TO GENERATE:
+${remainingFiles.map(f => `- ${f}`).join('\n')}
+
+### ORIGINAL REQUEST:
+${originalPrompt}
+
+Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
+
+      let fullText = '';
+      let chunkCount = 0;
+
+      const response = await manager.generateStream(
+        {
+          prompt: continuationPrompt,
+          systemInstruction,
+          maxTokens: 32768,
+          temperature: 0.7,
+          responseFormat: 'json'
+        },
+        (chunk) => {
+          fullText += chunk.text || '';
+          chunkCount++;
+          setStreamingChars(fullText.length);
+
+          // Only update status occasionally to avoid flickering
+          if (chunkCount % 50 === 0) {
+            setStreamingStatus(`✨ Generating... ${completedFiles.length}/${generationMeta.totalFilesPlanned} files (${Math.round(fullText.length / 1024)}KB)`);
+          }
+        },
+        currentModel
+      );
+
+      setStreamingStatus('✨ Finalizing...');
+      console.log('[Continuation] Raw response length:', fullText.length);
+
+      const parseResult = parseMultiFileResponse(fullText);
+      console.log('[Continuation] Parse result:', {
+        hasFiles: !!parseResult?.files,
+        fileCount: parseResult ? Object.keys(parseResult.files).length : 0,
+        fileNames: parseResult ? Object.keys(parseResult.files) : []
+      });
+
+      if (!parseResult || !parseResult.files || Object.keys(parseResult.files).length === 0) {
+        console.error('[Continuation] Failed to parse - no files found');
+        throw new Error('Failed to parse continuation response - no files found');
+      }
+
+      // Merge new files with accumulated files
+      const newAccumulatedFiles = { ...accumulatedFiles, ...parseResult.files };
+      const newCompletedFiles = [...new Set([...completedFiles, ...Object.keys(parseResult.files)])]; // Deduplicate
+
+      // Update remaining files - check both exact match and filename match
+      const generatedFileNames = Object.keys(parseResult.files).map(f => f.split('/').pop());
+      const newRemainingFiles = remainingFiles.filter(f => {
+        const fileName = f.split('/').pop();
+        const exactMatch = parseResult.files[f];
+        const nameMatch = generatedFileNames.includes(fileName);
+        return !exactMatch && !nameMatch;
+      });
+
+      // If we generated ANY new files, consider progress made
+      const madeProgress = Object.keys(parseResult.files).length > 0;
+
+      // Check if generation is complete
+      const isComplete = newRemainingFiles.length === 0 ||
+        (parseResult.generationMeta?.isComplete === true);
+
+      console.log('[Continuation] Batch complete:', {
+        newFiles: Object.keys(parseResult.files).length,
+        totalAccumulated: Object.keys(newAccumulatedFiles).length,
+        totalCompleted: newCompletedFiles.length,
+        remaining: newRemainingFiles.length,
+        remainingFiles: newRemainingFiles,
+        isComplete,
+        madeProgress
+      });
+
+      // Seamless progress update
+      setStreamingStatus(`✨ Generating... ${newCompletedFiles.length}/${generationMeta.totalFilesPlanned} files`);
+
+      // Update file plan to show completed files
+      if (filePlan) {
+        setFilePlan({
+          ...filePlan,
+          completed: newCompletedFiles
+        });
+      }
+
+      // Safety: Force complete if we've done too many batches or no progress
+      const maxBatches = 5;
+      const shouldForceComplete = currentBatch >= maxBatches || !madeProgress;
+
+      if (isComplete || shouldForceComplete) {
+        // All done! Show final result
+        if (shouldForceComplete && !isComplete) {
+          console.log('[Continuation] Forcing completion - max batches reached or no progress');
+        }
+
+        // VALIDATE: Filter out empty or malformed files
+        const validFiles: FileSystem = {};
+        const invalidFiles: string[] = [];
+
+        for (const [path, content] of Object.entries(newAccumulatedFiles)) {
+          // Check for valid file path
+          if (!path || path.includes('/.') || !path.match(/\.[a-z]+$/i)) {
+            console.warn('[Continuation] Invalid file path:', path);
+            invalidFiles.push(path);
+            continue;
+          }
+
+          // Check for valid content (more than just extension or very short)
+          const contentStr = typeof content === 'string' ? content : '';
+          if (contentStr.length < 20 || /^(tsx|jsx|ts|js|css|json|md);?$/.test(contentStr.trim())) {
+            console.warn('[Continuation] Empty or malformed file content:', path, '- content:', contentStr.slice(0, 50));
+            invalidFiles.push(path);
+            continue;
+          }
+
+          validFiles[path] = contentStr;
+        }
+
+        // Log validation results
+        console.log('[Continuation] File validation:', {
+          total: Object.keys(newAccumulatedFiles).length,
+          valid: Object.keys(validFiles).length,
+          invalid: invalidFiles
+        });
+
+        // If no valid files, show error
+        if (Object.keys(validFiles).length === 0) {
+          console.error('[Continuation] No valid files generated!');
+          setStreamingStatus('❌ Generation failed - no valid files received');
+          setIsGenerating(false);
+          setContinuationState(null);
+          setFilePlan(null);
+
+          const errorMessage: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            timestamp: Date.now(),
+            error: `Generation failed - files were empty or malformed.\n\nInvalid files: ${invalidFiles.join(', ')}\n\nPlease try again.`,
+            snapshotFiles: { ...files }
+          };
+          setMessages(prev => [...prev, errorMessage]);
+          return;
+        }
+
+        // Merge with existing project files
+        const finalFiles = existingFiles ? { ...existingFiles, ...validFiles } : validFiles;
+        const generatedFileList = Object.keys(validFiles);
+
+        console.log('[Continuation] Complete:', {
+          fileCount: Object.keys(finalFiles).length,
+          validFiles: generatedFileList,
+          invalidFiles,
+          forced: shouldForceComplete && !isComplete
+        });
+
+        // Calculate file changes for display
+        const fileChanges = calculateFileChanges(files, finalFiles);
+
+        // Build comprehensive explanation
+        let explanationText = parseResult.explanation || 'Generation complete.';
+        explanationText += `\n\n**Generated ${generatedFileList.length} files:**\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`;
+
+        if (invalidFiles.length > 0) {
+          explanationText += `\n\n⚠️ **${invalidFiles.length} files were invalid and excluded.**`;
+        }
+
+        // IMPORTANT: Add completion message FIRST (before clearing generating UI)
+        const completionMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: Date.now(),
+          explanation: explanationText,
+          files: validFiles,
+          fileChanges,
+          snapshotFiles: { ...files }
+        };
+        setMessages(prev => [...prev, completionMessage]);
+
+        // Update status to show completion
+        setStreamingStatus(`✅ Generated ${generatedFileList.length} files!`);
+
+        // Small delay to ensure message renders before modal opens
+        setTimeout(() => {
+          setContinuationState(null);
+          setIsGenerating(false);
+          setFilePlan(null);
+
+          // Apply changes (shows diff modal if auto-accept is off)
+          reviewChange('Generated App', finalFiles);
+        }, 100);
+
+        return;
+      } else {
+        // Continue seamlessly - user doesn't notice the transition
+        const newGenerationMeta: GenerationMeta = {
+          totalFilesPlanned: generationMeta.totalFilesPlanned,
+          filesInThisBatch: Object.keys(parseResult.files),
+          completedFiles: newCompletedFiles,
+          remainingFiles: newRemainingFiles,
+          currentBatch: currentBatch + 1,
+          totalBatches,
+          isComplete: false
+        };
+
+        const newContState = {
+          isActive: true,
+          originalPrompt,
+          systemInstruction,
+          generationMeta: newGenerationMeta,
+          accumulatedFiles: newAccumulatedFiles,
+          currentBatch: currentBatch + 1
+        };
+
+        setContinuationState(newContState);
+
+        console.log('[Continuation] Starting next batch:', currentBatch + 1);
+
+        // Continue immediately - seamless experience
+        setTimeout(() => {
+          handleContinueGeneration(newContState, existingFiles);
+        }, 50); // Minimal delay
+      }
+    } catch (error) {
+      console.error('[Continuation] Error:', error);
+
+      // If we have accumulated files, show them anyway
+      if (Object.keys(accumulatedFiles).length > 0) {
+        console.log('[Continuation] Error but have accumulated files:', Object.keys(accumulatedFiles));
+
+        const generatedFileList = Object.keys(accumulatedFiles);
+        const finalFiles = existingFiles ? { ...existingFiles, ...accumulatedFiles } : accumulatedFiles;
+
+        // IMPORTANT: Add completion message FIRST (before clearing generating UI)
+        const completionMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: Date.now(),
+          explanation: `⚠️ **Generation completed with ${generatedFileList.length} files** (some may be missing):\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`,
+          files: accumulatedFiles,
+          snapshotFiles: { ...files }
+        };
+        setMessages(prev => [...prev, completionMessage]);
+
+        // Update status
+        setStreamingStatus(`✅ Generated ${generatedFileList.length} files (partial)`);
+
+        // Small delay to ensure message renders before modal opens
+        setTimeout(() => {
+          setContinuationState(null);
+          setIsGenerating(false);
+          setFilePlan(null);
+          reviewChange('Generated App', finalFiles);
+        }, 100);
+      } else {
+        setStreamingStatus('❌ Generation failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        setIsGenerating(false);
+        setContinuationState(null);
+        setFilePlan(null);
+
+        // Show error message
+        const errorMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: Date.now(),
+          explanation: `❌ **Generation failed:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`,
+          snapshotFiles: { ...files }
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    }
+    // Note: No finally block needed - success path handles setIsGenerating in if(isComplete) block,
+    // multi-batch path keeps generating, and error path handles it above
+  };
+
   const handleSend = async (prompt: string, attachments: ChatAttachment[], _fileContext?: string[]) => {
+    // Track if continuation was started (to prevent finally block from clearing isGenerating)
+    let continuationStarted = false;
+
     // Create user message
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -263,11 +785,12 @@ Output ONLY a raw JSON array of strings containing your specific suggestions. Do
 
         const response = await manager.generate(request, currentModel);
         const text = response.text || '[]';
+        const duration = Date.now() - startTime;
 
         debugLog.response('generation', {
           id: requestId,
           model: currentModel,
-          duration: Date.now() - startTime,
+          duration,
           response: text,
           metadata: { mode: 'consultant', provider: providerName }
         });
@@ -275,13 +798,21 @@ Output ONLY a raw JSON array of strings containing your specific suggestions. Do
           const suggestionsData = JSON.parse(text);
           setSuggestions(Array.isArray(suggestionsData) ? suggestionsData : ['Could not parse suggestions.']);
 
-          // Add assistant message
+          // Add assistant message with token usage
           const assistantMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             timestamp: Date.now(),
             explanation: `## UX Analysis Complete\n\nI found **${Array.isArray(suggestionsData) ? suggestionsData.length : 0} suggestions** to improve your design. Check the suggestions panel on the right.`,
-            snapshotFiles: { ...files }
+            snapshotFiles: { ...files },
+            model: currentModel,
+            provider: providerName,
+            generationTime: duration,
+            tokenUsage: response.usage ? {
+              inputTokens: response.usage.inputTokens || 0,
+              outputTokens: response.usage.outputTokens || 0,
+              totalTokens: (response.usage.inputTokens || 0) + (response.usage.outputTokens || 0)
+            } : undefined
           };
           setMessages(prev => [...prev, assistantMessage]);
         } catch {
@@ -291,25 +822,95 @@ Output ONLY a raw JSON array of strings containing your specific suggestions. Do
         // Generate/Update app mode
         let systemInstruction = `You are an expert React Developer. Your task is to generate or update a React application.
 
-**RESPONSE FORMAT**: You MUST return a JSON object with exactly two keys:
-1. "explanation": A markdown string explaining what you built/changed, the components created, and any important technical decisions.
-2. "files": A JSON object where keys are file paths and values are the code content.
+**CRITICAL: FILE PLAN FIRST**
+Your response MUST start with a plan line before JSON. This enables real-time progress tracking.
+
+**RESPONSE FORMAT (MANDATORY)**:
+Line 1: File plan (MUST be first line, enables streaming progress)
+Line 2+: JSON with files
+
+Example response:
+\`\`\`
+// PLAN: {"create":["src/components/Header.tsx","src/components/Footer.tsx"],"update":["src/App.tsx"],"delete":[],"total":3}
+{
+  "explanation": "Created 2 new files, updated 1 existing...",
+  "files": {
+    "src/App.tsx": "...",
+    "src/components/Header.tsx": "...",
+    "src/components/Footer.tsx": "..."
+  }
+}
+\`\`\`
+
+**PLAN FORMAT**:
+// PLAN: {"create":["file1.tsx",...],"update":["existing.tsx",...],"delete":["old.tsx",...],"total":N}
+
+- "create": NEW files you will generate
+- "update": EXISTING files you will modify
+- "delete": Files to be removed
+- "total": Total number of files (create + update)
+
+**BATCH RULES**:
+- Generate up to 5 files per response (prevents truncation)
+- Keep each file under 300 lines OR under 4000 characters
+- If total > 5 files, include "generationMeta" for continuation:
+
+{
+  "generationMeta": {
+    "totalFilesPlanned": 8,
+    "filesInThisBatch": ["src/App.tsx", "src/components/Header.tsx", "src/components/Footer.tsx"],
+    "completedFiles": ["src/App.tsx", "src/components/Header.tsx", "src/components/Footer.tsx"],
+    "remainingFiles": ["src/components/Sidebar.tsx", "src/components/Card.tsx", "src/styles/globals.css", "src/utils/helpers.ts", "src/types/index.ts"],
+    "currentBatch": 1,
+    "totalBatches": 2,
+    "isComplete": false
+  },
+  "explanation": "Generated 3 files (batch 1/2). 5 more files remaining: Sidebar, Card, globals.css, helpers, types.",
+  "files": {
+    "src/App.tsx": "// file content...",
+    "src/components/Header.tsx": "// file content...",
+    "src/components/Footer.tsx": "// file content..."
+  }
+}
+
+When ALL files are complete:
+{
+  "generationMeta": {
+    "totalFilesPlanned": 8,
+    "filesInThisBatch": ["src/components/Sidebar.tsx", "src/components/Card.tsx", ...],
+    "completedFiles": ["src/App.tsx", "src/components/Header.tsx", ...all 8 files],
+    "remainingFiles": [],
+    "currentBatch": 2,
+    "totalBatches": 2,
+    "isComplete": true
+  },
+  "explanation": "All 8 files generated successfully!",
+  "files": { ... }
+}
+
+**CONTINUATION RULES**:
+- If totalFilesPlanned > 5, split into batches of 5
+- ALWAYS list ALL planned files in first response's generationMeta
+- completedFiles accumulates across batches
+- remainingFiles decreases as batches complete
+- isComplete: true only when remainingFiles is empty
 
 **CODE REQUIREMENTS**:
 - Entry point MUST be 'src/App.tsx'
 - Break UI into logical sub-components in 'src/components/'
 - Use RELATIVE import paths (e.g., './components/Header' from App.tsx, '../Header' from nested components)
-- Use Tailwind CSS for styling
+- Use Tailwind CSS for styling (NO inline styles or CSS-in-JS)
 - Use 'lucide-react' for icons
 - Create realistic mock data (5-8 entries), NO "Lorem Ipsum"
 - Modern, clean aesthetic with generous padding
+- CRITICAL: Keep files SMALL - under 300 lines AND under 4000 characters each
 
 **EXPLANATION REQUIREMENTS**:
 Write a clear markdown explanation including:
-- What was built/changed
+- What was built/changed (with batch progress: "Batch X/Y")
 - List of components created with brief descriptions
 - Any technical decisions or patterns used
-- Tips for customization`;
+- If not complete: list remaining files to be generated`;
 
         if (brandAtt) {
           systemInstruction += `\n\n**BRANDING**: Extract the PRIMARY DOMINANT COLOR from the brand logo and use it for primary actions/accents.`;
@@ -318,6 +919,10 @@ Write a clear markdown explanation including:
         if (isEducationMode) {
           systemInstruction += `\n\n**EDUCATION MODE**: Add detailed inline comments explaining complex Tailwind classes and React hooks.`;
         }
+
+        
+        // Add technology stack instructions
+        systemInstruction += generateSystemInstruction();
 
         // Build prompt parts
         const promptParts: string[] = [];
@@ -338,13 +943,43 @@ Write a clear markdown explanation including:
         if (existingApp) {
           // Generate codemap for better context understanding
           const codeContext = generateContextForPrompt(files);
-          promptParts.push(`${codeContext}\n\n### Full Source Files\n\`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\``);
+
+          // For efficiency, only send file summaries, not full content
+          const fileSummaries = Object.entries(files).map(([path, content]) => {
+            const contentStr = typeof content === 'string' ? content : String(content);
+            return {
+              path,
+              preview: contentStr.length > 200 ? contentStr.substring(0, 200) + '...' : contentStr,
+              size: contentStr.length,
+              lines: contentStr.split('\n').length
+            };
+          });
+
+          promptParts.push(`${codeContext}\n\n### Current Files Summary\n\`\`\`json\n${JSON.stringify(fileSummaries, null, 2)}\n\`\`\``);
           promptParts.push(`USER REQUEST: ${prompt || 'Refine the app based on the attached images.'}`);
-          systemInstruction += `\n\nYou are UPDATING an existing project. The codemap above shows the current structure.
-- Maintain existing component names and prop interfaces
-- Keep import paths consistent with the current structure
-- Return ALL files in the "files" object, including unchanged ones
-- Only modify files that need changes based on the user request`;
+          systemInstruction += `\n\nYou are UPDATING an existing project. Use EFFICIENT file updates to save tokens:
+
+**FILE UPDATE STRATEGY**:
+- ONLY include files that actually need changes in your response
+- For new files: include full content with "isnew": true flag
+- For modified files: include full content (this is required as diff can be unreliable)
+- NEVER include unchanged files
+
+**RESPONSE FORMAT**: Use this enhanced JSON structure:
+{
+  "explanation": "markdown explanation of changes",
+  "files": {
+    "src/App.tsx": "full content of modified file",
+    "src/components/NewComponent.tsx": "full content of new file"
+  },
+  "deletedFiles": ["src/components/OldComponent.tsx"], // optional
+  "fileChanges": { // optional summary of what changed
+    "src/App.tsx": "Added new button and updated styles",
+    "src/components/NewComponent.tsx": "Created new component for feature X"
+  }
+}
+
+**TOKEN OPTIMIZATION**: Only send the files that need modifications. The system will merge your changes with the existing codebase.`;
         } else {
           promptParts.push(`TASK: Create a React app from this design. ${prompt ? `Additional context: ${prompt}` : ''}`);
         }
@@ -360,6 +995,7 @@ Write a clear markdown explanation including:
         setStreamingStatus(`🚀 Starting generation with ${providerName}...`);
         setStreamingChars(0);
         setStreamingFiles([]);
+        setFilePlan(null); // Reset file plan
 
         const genRequestId = debugLog.request('generation', {
           model: currentModel,
@@ -373,6 +1009,9 @@ Write a clear markdown explanation including:
         let fullText = '';
         let detectedFiles: string[] = [];
         let chunkCount = 0;
+        let streamResponse: GenerationResponse | null = null;
+        let currentFilePlan: { create: string[]; delete: string[]; total: number; completed: string[] } | null = null;
+        let planParsed = false;
 
         // Create initial stream log entry (will be updated during streaming)
         const streamLogId = `stream-${genRequestId}`;
@@ -384,13 +1023,93 @@ Write a clear markdown explanation including:
         });
 
         // Use streaming API
-        await manager.generateStream(
+        streamResponse = await manager.generateStream(
           request,
           (chunk) => {
             const chunkText = chunk.text || '';
             fullText += chunkText;
             chunkCount++;
             setStreamingChars(fullText.length);
+
+            // Try to parse file plan from the start of response (// PLAN: {...})
+            if (!planParsed && fullText.length > 50) {
+              // More robust regex to capture JSON with nested arrays
+              const planLineMatch = fullText.match(/\/\/\s*PLAN:\s*(\{.+)/);
+              if (planLineMatch) {
+                try {
+                  let jsonStr = planLineMatch[1];
+                  // Find the balanced closing brace
+                  let braceCount = 0;
+                  let endIdx = 0;
+                  for (let i = 0; i < jsonStr.length; i++) {
+                    if (jsonStr[i] === '{') braceCount++;
+                    if (jsonStr[i] === '}') braceCount--;
+                    if (braceCount === 0) {
+                      endIdx = i + 1;
+                      break;
+                    }
+                  }
+                  if (endIdx > 0) {
+                    jsonStr = jsonStr.substring(0, endIdx);
+                  }
+
+                  // Fix malformed JSON (e.g., "total":} -> remove it)
+                  jsonStr = jsonStr
+                    .replace(/"total"\s*:\s*[}\]]/g, '') // Remove "total":} or "total":]
+                    .replace(/,\s*}/g, '}') // Remove trailing commas before }
+                    .replace(/,\s*]/g, ']'); // Remove trailing commas before ]
+
+                  const plan = JSON.parse(jsonStr);
+                  // Support both "create" and "update" keys
+                  const createFiles = plan.create || [];
+                  const updateFiles = plan.update || [];
+                  const allFiles = [...createFiles, ...updateFiles];
+
+                  if (allFiles.length > 0) {
+                    currentFilePlan = {
+                      create: allFiles, // All files to generate (both new and updates)
+                      delete: plan.delete || [],
+                      total: plan.total || allFiles.length, // Fallback to calculated count
+                      completed: []
+                    };
+                    setFilePlan(currentFilePlan);
+                    planParsed = true;
+                    console.log('[Stream] File plan detected:', currentFilePlan);
+                    setStreamingStatus(`📋 Plan: ${currentFilePlan.total} files (${createFiles.length} new, ${updateFiles.length} update)`);
+                  }
+                } catch (e) {
+                  // Plan not complete yet or malformed - try regex extraction as fallback
+                  const createMatch = fullText.match(/"create"\s*:\s*\[([^\]]*)\]/);
+                  const updateMatch = fullText.match(/"update"\s*:\s*\[([^\]]*)\]/);
+
+                  if (createMatch || updateMatch) {
+                    const extractFiles = (match: RegExpMatchArray | null) => {
+                      if (!match) return [];
+                      return match[1].match(/"([^"]+)"/g)?.map(s => s.replace(/"/g, '')) || [];
+                    };
+
+                    const createFiles = extractFiles(createMatch);
+                    const updateFiles = extractFiles(updateMatch);
+                    const allFiles = [...createFiles, ...updateFiles];
+
+                    if (allFiles.length > 0) {
+                      currentFilePlan = {
+                        create: allFiles,
+                        delete: [],
+                        total: allFiles.length,
+                        completed: []
+                      };
+                      setFilePlan(currentFilePlan);
+                      planParsed = true;
+                      console.log('[Stream] File plan extracted via regex:', currentFilePlan);
+                      setStreamingStatus(`📋 Plan: ${currentFilePlan.total} files`);
+                    }
+                  } else {
+                    console.debug('[Stream] Plan parse attempt failed, waiting for more data');
+                  }
+                }
+              }
+            }
 
             // Update the stream log every 50 chunks (less frequent to avoid re-render issues)
             if (chunkCount % 50 === 0) {
@@ -413,7 +1132,21 @@ Write a clear markdown explanation including:
               if (newMatchedFiles.length > 0) {
                 detectedFiles = [...detectedFiles, ...newMatchedFiles];
                 setStreamingFiles([...detectedFiles]);
-                setStreamingStatus(`📁 ${detectedFiles.length} files detected`);
+
+                // Update completed files in plan
+                if (currentFilePlan) {
+                  currentFilePlan.completed = detectedFiles.filter(f => currentFilePlan!.create.includes(f));
+                  setFilePlan({ ...currentFilePlan });
+
+                  // Show different status based on completion
+                  if (currentFilePlan.completed.length >= currentFilePlan.total) {
+                    setStreamingStatus(`✅ ${currentFilePlan.total} files received, finalizing...`);
+                  } else {
+                    setStreamingStatus(`📁 ${currentFilePlan.completed.length}/${currentFilePlan.total} files received`);
+                  }
+                } else {
+                  setStreamingStatus(`📁 ${detectedFiles.length} files detected`);
+                }
               }
             }
 
@@ -426,6 +1159,12 @@ Write a clear markdown explanation including:
         );
 
         // Mark stream as complete (pass true to immediately notify UI)
+        console.log('[Generation] Stream complete:', {
+          chars: fullText.length,
+          chunks: chunkCount,
+          filesDetected: detectedFiles.length
+        });
+
         try {
           debugLog.streamUpdate(streamLogId, {
             response: `Completed: ${Math.round(fullText.length / 1024)}KB, ${chunkCount} chunks`,
@@ -435,7 +1174,8 @@ Write a clear markdown explanation including:
           console.debug('[Debug] Final stream update failed:', e);
         }
 
-        setStreamingStatus('✨ Parsing response...');
+        // Show parsing status - stream is complete, now processing
+        setStreamingStatus(`✨ Processing ${detectedFiles.length} files...`);
 
         // Save raw response for debugging (stored in window for easy access)
         try {
@@ -458,7 +1198,8 @@ Write a clear markdown explanation including:
           }
 
           const explanation = parseResult.explanation || 'App generated successfully.';
-          const newFiles = parseResult.files;
+          let newFiles = parseResult.files;
+          const deletedFiles = parseResult.deletedFiles || [];
 
           // Warn if response was truncated but we recovered
           if (parseResult.truncated) {
@@ -466,12 +1207,29 @@ Write a clear markdown explanation including:
             setStreamingStatus('⚠️ Response truncated - showing recovered files');
           }
 
+          // Log the efficiency (token savings)
+          if (deletedFiles.length > 0 || (existingApp && Object.keys(newFiles).length < Object.keys(files).length)) {
+            console.log(`🚀 Efficient update: Only ${Object.keys(newFiles).length} files modified, ${deletedFiles.length} deleted`);
+          }
+
           debugLog.response('generation', {
             id: genRequestId,
             model: currentModel,
             duration: Date.now() - genStartTime,
-            response: JSON.stringify({ explanation, fileCount: Object.keys(newFiles).length, files: Object.keys(newFiles) }),
-            metadata: { mode: 'generator', totalChunks: chunkCount, totalChars: fullText.length, provider: providerName }
+            response: JSON.stringify({
+              explanation,
+              fileCount: Object.keys(newFiles).length,
+              deletedCount: deletedFiles.length,
+              files: Object.keys(newFiles),
+              deletedFiles
+            }),
+            metadata: {
+              mode: 'generator',
+              totalChunks: chunkCount,
+              totalChars: fullText.length,
+              provider: providerName,
+              efficientUpdate: existingApp && Object.keys(newFiles).length < Object.keys(files).length
+            }
           });
 
           // Clean code in each file
@@ -481,15 +1239,121 @@ Write a clear markdown explanation including:
             }
           }
 
-          // Ensure we have src/App.tsx
-          if (!newFiles['src/App.tsx']) {
+          // For new projects, ensure we have src/App.tsx
+          if (!existingApp && !newFiles['src/App.tsx']) {
             throw new Error('No src/App.tsx in response');
           }
 
-          const mergedFiles = { ...files, ...newFiles };
+          // Merge files efficiently
+          let mergedFiles: Record<string, string>;
+          if (existingApp) {
+            // Start with existing files and apply updates
+            mergedFiles = { ...files };
+
+            // Apply new/modified files
+            Object.assign(mergedFiles, newFiles);
+
+            // Remove deleted files
+            for (const deletedPath of deletedFiles) {
+              delete mergedFiles[deletedPath];
+            }
+          } else {
+            // New project - just use generated files
+            mergedFiles = newFiles;
+          }
+
           const fileChanges = calculateFileChanges(files, mergedFiles);
 
-          setStreamingStatus(`✅ Generated ${Object.keys(newFiles).length} files!`);
+          // Check for missing files based on filePlan (session-based continuation)
+          if (currentFilePlan && currentFilePlan.create.length > 0) {
+            const receivedFiles = Object.keys(newFiles);
+            const missingFiles = currentFilePlan.create.filter(f => !receivedFiles.includes(f));
+
+            if (missingFiles.length > 0) {
+              console.log('[Generation] Missing files detected from plan:', missingFiles);
+
+              // Create continuation for missing files
+              const genMeta: GenerationMeta = {
+                totalFilesPlanned: currentFilePlan.total,
+                filesInThisBatch: receivedFiles,
+                completedFiles: receivedFiles,
+                remainingFiles: missingFiles,
+                currentBatch: 1,
+                totalBatches: Math.ceil(currentFilePlan.total / 5),
+                isComplete: false
+              };
+
+              // Seamless progress - feels like one continuous generation
+              setStreamingStatus(`✨ Generating... ${receivedFiles.length}/${currentFilePlan.total} files`);
+
+              // Update file plan to show progress
+              setFilePlan({
+                create: currentFilePlan.create,
+                delete: currentFilePlan.delete || [],
+                total: currentFilePlan.total,
+                completed: receivedFiles
+              });
+
+              const contState = {
+                isActive: true,
+                originalPrompt: prompt || 'Generate app',
+                systemInstruction,
+                generationMeta: genMeta,
+                accumulatedFiles: newFiles,
+                currentBatch: 1
+              };
+              setContinuationState(contState);
+              continuationStarted = true; // Prevent finally block from clearing isGenerating
+
+              // Continue silently - user sees only smooth progress
+              setTimeout(() => {
+                handleContinueGeneration(contState, existingApp ? files : undefined);
+              }, 100); // Minimal delay for seamless feel
+
+              return;
+            }
+          }
+
+          // Check for smart continuation (generationMeta from AI response)
+          const genMeta = parseResult.generationMeta;
+          if (genMeta && !genMeta.isComplete && genMeta.remainingFiles.length > 0) {
+            // Multi-batch generation detected - start continuation
+            console.log('[Generation] Multi-batch generation detected:', {
+              batch: `${genMeta.currentBatch}/${genMeta.totalBatches}`,
+              completed: genMeta.completedFiles.length,
+              remaining: genMeta.remainingFiles.length
+            });
+
+            // Seamless progress - feels like one continuous generation
+            setStreamingStatus(`✨ Generating... ${genMeta.completedFiles.length}/${genMeta.totalFilesPlanned} files`);
+
+            // Update file plan to show progress
+            setFilePlan({
+              create: [...genMeta.completedFiles, ...genMeta.remainingFiles],
+              delete: [],
+              total: genMeta.totalFilesPlanned,
+              completed: genMeta.completedFiles
+            });
+
+            // Initialize continuation state
+            const contState = {
+              isActive: true,
+              originalPrompt: prompt || 'Generate app',
+              systemInstruction,
+              generationMeta: genMeta,
+              accumulatedFiles: newFiles,
+              currentBatch: genMeta.currentBatch
+            };
+            setContinuationState(contState);
+            continuationStarted = true; // Prevent finally block from clearing isGenerating
+
+            // Continue silently - user sees only smooth progress
+            setTimeout(() => {
+              handleContinueGeneration(contState, existingApp ? files : undefined);
+            }, 100); // Minimal delay for seamless feel
+
+            return; // Don't show diff modal yet, wait for all batches
+          }
 
           // Save to AI history (persistent)
           aiHistory.addEntry({
@@ -510,26 +1374,472 @@ Write a clear markdown explanation including:
             explanation
           });
 
-          // Add assistant message
+          // Add assistant message with token usage and clear file list
+          const generatedFileList = Object.keys(newFiles);
+          const fileListMarkdown = `\n\n**Generated ${generatedFileList.length} files:**\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`;
+
           const assistantMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             timestamp: Date.now(),
-            explanation,
+            explanation: (explanation || 'Generation complete.') + fileListMarkdown,
             files: newFiles,
             fileChanges,
-            snapshotFiles: { ...files } // Save state before this change for revert
+            snapshotFiles: { ...files }, // Save state before this change for revert
+            model: currentModel,
+            provider: providerName,
+            generationTime: Date.now() - genStartTime,
+            continuation: parseResult.continuation,
+            tokenUsage: streamResponse?.usage ? {
+              inputTokens: streamResponse.usage.inputTokens || 0,
+              outputTokens: streamResponse.usage.outputTokens || 0,
+              totalTokens: (streamResponse.usage.inputTokens || 0) + (streamResponse.usage.outputTokens || 0)
+            } : undefined
           };
+
+          // IMPORTANT: Add message FIRST so user sees it in chat
           setMessages(prev => [...prev, assistantMessage]);
 
-          // Show diff modal
-          reviewChange(existingApp ? 'Updated App' : 'Generated Initial App', mergedFiles);
+          // Update status to show completion
+          setStreamingStatus(`✅ Generated ${generatedFileList.length} files!`);
+
+          console.log('[Generation] Success - adding message and showing diff modal:', {
+            fileCount: generatedFileList.length,
+            files: generatedFileList
+          });
+
+          // Small delay to ensure message renders before modal opens
+          setTimeout(() => {
+            // Clear generating state
+            setFilePlan(null);
+            // Show diff modal
+            reviewChange(existingApp ? 'Updated App' : 'Generated Initial App', mergedFiles);
+          }, 150);
         } catch (e) {
           const errorMsg = e instanceof Error ? e.message : 'Parse error';
           console.error('Parse error:', errorMsg);
           console.error('Response preview:', fullText.slice(0, 500));
           console.error('Response end:', fullText.slice(-200));
-          setStreamingStatus('❌ ' + errorMsg);
+
+          // Check if this is a truncation error
+          const isTruncationError = errorMsg.includes('truncated') || errorMsg.includes('token limits');
+
+          if (isTruncationError && fullText.length > 1000) {
+            // Use the new extraction function
+            const extraction = extractFilesFromTruncatedResponse(fullText, files);
+            const completeCount = Object.keys(extraction.completeFiles).length;
+            const partialCount = Object.keys(extraction.partialFiles).length;
+
+            console.log('[ControlPanel] Extraction result:', {
+              completeFiles: completeCount,
+              partialFiles: partialCount,
+              files: Object.keys(extraction.completeFiles)
+            });
+
+            if (completeCount > 0) {
+              // We have some complete files!
+              const recoveredFiles = { ...files, ...extraction.completeFiles };
+              const recoveredFileNames = Object.keys(extraction.completeFiles);
+
+              // Check if we have a plan and there are missing files
+              if (currentFilePlan && currentFilePlan.create.length > 0) {
+                const missingFromPlan = currentFilePlan.create.filter(f => !recoveredFileNames.includes(f));
+
+                if (missingFromPlan.length > 0) {
+                  // Seamless progress - user sees smooth generation
+                  console.log('[Truncation] Missing files from plan:', missingFromPlan);
+                  setStreamingStatus(`✨ Generating... ${completeCount}/${currentFilePlan.total} files`);
+
+                  // Update file plan to show progress
+                  setFilePlan({
+                    create: currentFilePlan.create,
+                    delete: currentFilePlan.delete || [],
+                    total: currentFilePlan.total,
+                    completed: recoveredFileNames
+                  });
+
+                  const genMeta: GenerationMeta = {
+                    totalFilesPlanned: currentFilePlan.total,
+                    filesInThisBatch: recoveredFileNames,
+                    completedFiles: recoveredFileNames,
+                    remainingFiles: missingFromPlan,
+                    currentBatch: 1,
+                    totalBatches: Math.ceil(currentFilePlan.total / 5),
+                    isComplete: false
+                  };
+
+                  // Create continuation system instruction (original is out of scope in catch block)
+                  const contSystemInstruction = `You are an expert React Developer. Continue generating the remaining files for the project.
+
+**RESPONSE FORMAT**:
+Return JSON with explanation and files:
+{
+  "explanation": "Brief description of what was generated",
+  "files": {
+    "src/path/to/file.tsx": "// complete file content"
+  }
+}
+
+**CRITICAL RULES**:
+- Each file MUST be COMPLETE and FUNCTIONAL
+- Use Tailwind CSS for styling
+- Entry point is 'src/App.tsx'
+- Use relative imports (e.g., './components/Header')
+- Keep files under 300 lines
+- Use 'lucide-react' for icons`;
+
+                  const contState = {
+                    isActive: true,
+                    originalPrompt: prompt || 'Generate app',
+                    systemInstruction: contSystemInstruction,
+                    generationMeta: genMeta,
+                    accumulatedFiles: extraction.completeFiles,
+                    currentBatch: 1
+                  };
+                  setContinuationState(contState);
+                  continuationStarted = true; // Prevent finally block from clearing isGenerating
+
+                  // Continue silently - user sees only smooth progress
+                  setTimeout(() => {
+                    handleContinueGeneration(contState, existingApp ? files : undefined);
+                  }, 100);
+
+                  return;
+                }
+              }
+
+              // SUCCESS PATH: If we have all files from the plan (no missing) and no partial files,
+              // just use what we recovered! Don't try to regenerate.
+              if (currentFilePlan && partialCount === 0) {
+                const planFileNames = currentFilePlan.create.map(f => f.split('/').pop());
+                const recoveredNames = recoveredFileNames.map(f => f.split('/').pop());
+                const allPlanFilesRecovered = planFileNames.every(name => recoveredNames.includes(name));
+
+                if (allPlanFilesRecovered) {
+                  console.log('[Truncation Recovery] All plan files recovered! Using them directly.', {
+                    planFiles: currentFilePlan.create,
+                    recoveredFiles: recoveredFileNames
+                  });
+
+                  // Show success and use the recovered files
+                  setStreamingStatus(`✅ Generated ${completeCount} files!`);
+
+                  // Create completion message
+                  const fileListMarkdown = `\n\n**Generated ${completeCount} files:**\n${recoveredFileNames.map(f => `- \`${f}\``).join('\n')}`;
+                  const assistantMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    timestamp: Date.now(),
+                    explanation: 'Generation complete.' + fileListMarkdown,
+                    files: extraction.completeFiles,
+                    snapshotFiles: { ...files }
+                  };
+                  setMessages(prev => [...prev, assistantMessage]);
+
+                  // Small delay then show diff modal
+                  setTimeout(() => {
+                    setFilePlan(null);
+                    reviewChange('Generated App', recoveredFiles);
+                  }, 150);
+
+                  return;
+                }
+              }
+
+              // Check if any file content looks truncated (even if marked "complete")
+              // Only do this check if we have partial files or missing files from plan
+              const shouldCheckSuspicious = partialCount > 0 || (currentFilePlan && currentFilePlan.create.some(f => !recoveredFileNames.includes(f)));
+
+              let suspiciousTruncation = false;
+              if (shouldCheckSuspicious) {
+                suspiciousTruncation = Object.entries(extraction.completeFiles).some(([path, content]) => {
+                  // Check for unbalanced braces/brackets
+                  const openBraces = (content.match(/\{/g) || []).length;
+                  const closeBraces = (content.match(/\}/g) || []).length;
+                  const openParens = (content.match(/\(/g) || []).length;
+                  const closeParens = (content.match(/\)/g) || []).length;
+
+                  // Check for cut-off escape sequences
+                  const hasIncompleteEscape = /\\$/.test(content.trim());
+
+                  // Check for missing closing tag in JSX files
+                  const isJSXFile = path.endsWith('.tsx') || path.endsWith('.jsx');
+                  const hasIncompleteJSX = isJSXFile && !content.trim().endsWith('}');
+
+                  return (openBraces - closeBraces > 1) ||
+                         (openParens - closeParens > 2) ||
+                         hasIncompleteEscape ||
+                         hasIncompleteJSX;
+                });
+              }
+
+              // If we have a plan and files look suspicious, trigger continuation
+              if (suspiciousTruncation && currentFilePlan && currentFilePlan.create.length > 0) {
+                console.log('[Truncation] Files look suspiciously truncated, triggering continuation');
+
+                // Find the specific truncated files by checking content integrity
+                const truncatedFiles = Object.entries(extraction.completeFiles)
+                  .filter(([path, content]) => {
+                    const openBraces = (content.match(/\{/g) || []).length;
+                    const closeBraces = (content.match(/\}/g) || []).length;
+                    const isJSXFile = path.endsWith('.tsx') || path.endsWith('.jsx');
+                    const hasIncompleteJSX = isJSXFile && !content.trim().endsWith('}');
+                    return (openBraces - closeBraces > 1) || hasIncompleteJSX || /\\$/.test(content.trim());
+                  })
+                  .map(([path]) => path);
+
+                // If no specific truncated files found, regenerate the last file in the plan
+                const filesToRegenerate = truncatedFiles.length > 0
+                  ? truncatedFiles
+                  : [currentFilePlan.create[currentFilePlan.create.length - 1]];
+
+                // Keep files that are NOT being regenerated
+                const goodFiles = Object.fromEntries(
+                  Object.entries(extraction.completeFiles).filter(([path]) => !filesToRegenerate.includes(path))
+                );
+
+                // Seamless progress - user sees smooth generation
+                const completedCount = Object.keys(goodFiles).length;
+                const totalCount = currentFilePlan.total;
+                setStreamingStatus(`✨ Generating... ${completedCount}/${totalCount} files`);
+
+                // Update file plan to show progress
+                setFilePlan({
+                  create: currentFilePlan.create,
+                  delete: currentFilePlan.delete || [],
+                  total: currentFilePlan.total,
+                  completed: Object.keys(goodFiles)
+                });
+
+                // No warning message in chat - just continue silently
+                continuationStarted = true; // Prevent finally block from clearing isGenerating
+
+                // Start continuation immediately (not via setTimeout to avoid state issues)
+                setIsGenerating(true);
+
+                const continueGeneration = async () => {
+                  try {
+                    // Get fresh manager reference (not available from try block in catch)
+                    const manager = getProviderManager();
+                    const activeConfig = manager.getActiveConfig();
+                    const currentModel = activeConfig?.defaultModel || selectedModel;
+
+                    // Create continuation-specific system instruction (original is out of scope in catch block)
+                    const contSystemInstruction = `You are an expert React Developer. Continue generating the remaining files for the project.
+
+**RESPONSE FORMAT**:
+Return JSON with explanation and files:
+{
+  "explanation": "Brief description of what was generated",
+  "files": {
+    "src/path/to/file.tsx": "// complete file content"
+  }
+}
+
+**CRITICAL RULES**:
+- Each file MUST be COMPLETE and FUNCTIONAL
+- Use Tailwind CSS for styling
+- Entry point is 'src/App.tsx'
+- Use relative imports (e.g., './components/Header')
+- Keep files under 300 lines
+- Use 'lucide-react' for icons`;
+
+                    const contPrompt = `Continue generating the remaining files.
+
+## FILES TO GENERATE:
+${filesToRegenerate.map(f => `- ${f}`).join('\n')}
+
+## ORIGINAL REQUEST:
+${prompt || 'Generate app'}
+
+Generate ONLY these files. Each file must be COMPLETE and FUNCTIONAL.`;
+
+                    let contFullText = '';
+                    await manager.generateStream(
+                      {
+                        prompt: contPrompt,
+                        systemInstruction: contSystemInstruction,
+                        maxTokens: 32768,
+                        temperature: 0.7,
+                        responseFormat: 'json'
+                      },
+                      (chunk) => {
+                        contFullText += chunk.text || '';
+                        setStreamingChars(contFullText.length);
+                        // Seamless progress - same format throughout
+                        if (contFullText.length % 2000 < 100) { // Update occasionally
+                          setStreamingStatus(`✨ Generating... ${completedCount}/${totalCount} files (${Math.round(contFullText.length / 1024)}KB)`);
+                        }
+                      },
+                      currentModel
+                    );
+
+                    const contResult = parseMultiFileResponse(contFullText);
+
+                    if (contResult && contResult.files) {
+                      // Merge good files with regenerated files
+                      const finalFiles = { ...goodFiles, ...contResult.files };
+                      const mergedWithExisting = existingApp ? { ...files, ...finalFiles } : finalFiles;
+
+                      setStreamingStatus(`✅ Generated ${Object.keys(finalFiles).length} files!`);
+
+                      // Show diff modal directly - feels like one request completed
+                      reviewChange('Generated App', mergedWithExisting);
+                    } else {
+                      throw new Error('Failed to parse continuation response');
+                    }
+                  } catch (contError) {
+                    console.error('[Continuation] Error:', contError);
+                    setStreamingStatus(`❌ Continuation failed: ${contError instanceof Error ? contError.message : 'Unknown error'}`);
+
+                    // Show what we have so far
+                    if (Object.keys(goodFiles).length > 0) {
+                      const partialMerged = existingApp ? { ...files, ...goodFiles } : goodFiles;
+                      reviewChange('Partial Recovery (some files missing)', partialMerged);
+                    }
+                  } finally {
+                    setIsGenerating(false);
+                    setContinuationState(null);
+                    setFilePlan(null);
+                  }
+                };
+
+                // Run continuation
+                continueGeneration();
+                return; // Don't show error, continuation will handle it
+              }
+
+              // All files look complete - show diff modal directly
+              console.log('[Truncation Recovery] Using recovered files (no plan or fallback).', {
+                completeFiles: completeCount,
+                files: recoveredFileNames
+              });
+
+              setStreamingStatus(`✅ Generated ${completeCount} files!`);
+
+              // Add chat message showing what was generated
+              const fileListMarkdown = `\n\n**Generated ${completeCount} files:**\n${recoveredFileNames.map(f => `- \`${f}\``).join('\n')}`;
+              const assistantMessage: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                timestamp: Date.now(),
+                explanation: 'Generation complete (recovered from truncated response).' + fileListMarkdown,
+                files: extraction.completeFiles,
+                snapshotFiles: { ...files }
+              };
+              setMessages(prev => [...prev, assistantMessage]);
+
+              // Small delay then show diff modal
+              setTimeout(() => {
+                setFilePlan(null);
+                reviewChange('Generated App', recoveredFiles);
+              }, 150);
+              return;
+            } else {
+              // No complete files could be recovered
+              console.log('[Truncation] No complete files recovered, checking for partial files...');
+              const partialCount = Object.keys(extraction.partialFiles).length;
+
+              if (partialCount > 0) {
+                // Try to use partial files - they might be good enough
+                console.log(`[Truncation] Attempting to use ${partialCount} partial files`);
+                setStreamingStatus(`⚠️ Using ${partialCount} partially generated files...`);
+
+                // Try to fix and use partial files
+                const fixedPartialFiles: Record<string, string> = {};
+                for (const [filePath, fileData] of Object.entries(extraction.partialFiles)) {
+                  const content = typeof fileData === 'string' ? fileData : fileData.content;
+                  if (content && content.length > 100) {
+                    // Basic cleanup of partial content
+                    let cleaned = content
+                      .replace(/\\n/g, '\n')
+                      .replace(/\\t/g, '\t')
+                      .replace(/\\"/g, '"')
+                      .replace(/\\'/g, "'")
+                      .trim();
+
+                    // Remove trailing incomplete patterns
+                    cleaned = cleaned
+                      .replace(/,\s*$/, '')  // Remove trailing comma
+                      .replace(/[^\\]"$/, '"')  // Close unclosed string
+                      .replace(/\{[^}]*$/, match => match + '\n}');  // Close unclosed object
+
+                    if (cleaned.length > 100) {
+                      fixedPartialFiles[filePath] = cleaned;
+                    }
+                  }
+                }
+
+                if (Object.keys(fixedPartialFiles).length > 0) {
+                  console.log(`[Truncation] Successfully fixed ${Object.keys(fixedPartialFiles).length} partial files`);
+                  const recoveredFiles = { ...files, ...fixedPartialFiles };
+
+                  const fileListMarkdown = `\n\n**Recovered ${Object.keys(fixedPartialFiles).length} partial files:**\n${Object.keys(fixedPartialFiles).map(f => `- \`${f}\``).join('\n')}`;
+                  const assistantMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    timestamp: Date.now(),
+                    explanation: 'Generation incomplete (recovered partial files from truncated response).' + fileListMarkdown,
+                    files: fixedPartialFiles,
+                    snapshotFiles: { ...files }
+                  };
+                  setMessages(prev => [...prev, assistantMessage]);
+
+                  setTimeout(() => {
+                    setFilePlan(null);
+                    reviewChange('Generated App (Partial)', recoveredFiles);
+                  }, 150);
+                  return;
+                }
+              }
+
+              // If we have a plan, try to continue with just what we can extract
+              if (currentFilePlan && fullText.length > 5000) {
+                console.log('[Truncation] Attempting aggressive extraction from long response...');
+                // Try to extract any code-like content even if malformed
+                const codeMatches = fullText.match(/```(?:tsx?|jsx?|typescript|javascript|js|ts)\s*\n([\s\S]*?)\n```/g);
+                if (codeMatches && codeMatches.length > 0) {
+                  const emergencyFiles: Record<string, string> = {};
+                  let fileIndex = 1;
+
+                  for (const match of codeMatches) {
+                    const codeContent = match.replace(/```(?:tsx?|jsx?|typescript|javascript|js|ts)\s*\n?/, '').replace(/```$/, '').trim();
+                    if (codeContent.length > 200) {
+                      const fileName = `recovered${fileIndex}.tsx`;
+                      emergencyFiles[fileName] = codeContent;
+                      fileIndex++;
+                    }
+                  }
+
+                  if (Object.keys(emergencyFiles).length > 0) {
+                    console.log(`[Truncation] Emergency recovery: ${Object.keys(emergencyFiles).length} code blocks`);
+                    const recoveredFiles = { ...files, ...emergencyFiles };
+
+                    const assistantMessage: ChatMessage = {
+                      id: crypto.randomUUID(),
+                      role: 'assistant',
+                      timestamp: Date.now(),
+                      explanation: `Generation was truncated but recovered ${Object.keys(emergencyFiles).length} code sections.`,
+                      files: emergencyFiles,
+                      snapshotFiles: { ...files }
+                    };
+                    setMessages(prev => [...prev, assistantMessage]);
+
+                    setTimeout(() => {
+                      setFilePlan(null);
+                      reviewChange('Generated App (Recovered)', recoveredFiles);
+                    }, 150);
+                    return;
+                  }
+                }
+              }
+
+              // Last resort: show error
+              setStreamingStatus('❌ Generation incomplete. Please try again.');
+            }
+          } else {
+            setStreamingStatus('❌ ' + errorMsg);
+          }
 
           debugLog.error('generation', errorMsg, {
             id: genRequestId,
@@ -541,7 +1851,9 @@ Write a clear markdown explanation including:
               totalChunks: chunkCount,
               totalChars: fullText.length,
               provider: providerName,
-              hint: 'Check window.__lastAIResponse in console for full response'
+              hint: 'Check window.__lastAIResponse in console for full response',
+              hasTruncationError: isTruncationError,
+              partialFilesFound: isTruncationError ? Object.keys(truncatedContent?.partialFiles || {}).length : 0
             }
           });
 
@@ -592,12 +1904,16 @@ Write a clear markdown explanation including:
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
-      setIsGenerating(false);
-      // Clear streaming status after a delay so user sees final status
-      setTimeout(() => {
-        setStreamingStatus('');
-        setStreamingChars(0);
-      }, 2000);
+      // Only clear generating state if continuation was NOT started
+      // (continuation handles its own state management)
+      if (!continuationStarted) {
+        setIsGenerating(false);
+        // Clear streaming status after a delay so user sees final status
+        setTimeout(() => {
+          setStreamingStatus('');
+          setStreamingChars(0);
+        }, 2000);
+      }
     }
   };
 
@@ -833,6 +2149,20 @@ Only return files that need changes. Maintain all existing functionality.`;
         streamingChars={streamingChars}
         streamingFiles={streamingFiles}
         aiHistoryCount={aiHistory.history.filter(h => h.success).length}
+        truncatedContent={truncatedContent}
+        onTruncationRetry={handleTruncationRetry}
+        onBatchGeneration={(incompleteFiles, prompt, systemInstruction) => {
+          setBatchGenModal({
+            isOpen: true,
+            prompt,
+            systemInstruction,
+            targetFiles: incompleteFiles
+          });
+        }}
+        onSetExternalPrompt={setExternalPrompt}
+        continuationState={continuationState}
+        onContinueGeneration={() => handleContinueGeneration()}
+        filePlan={filePlan}
         onRestoreFromHistory={() => {
           // Restore the most recent successful entry directly
           const lastEntry = aiHistory.history.find(h => h.success);
@@ -859,8 +2189,25 @@ Only return files that need changes. Maintain all existing functionality.`;
                 cleanedFiles[path] = cleanGeneratedCode(content);
               }
 
-              // Calculate file changes
-              const mergedFiles = { ...previousFiles, ...cleanedFiles };
+              // Calculate file changes with support for deleted files
+              let mergedFiles: Record<string, string>;
+              if (Object.keys(previousFiles).length > 0) {
+                // Start with previous files and apply updates
+                mergedFiles = { ...previousFiles };
+
+                // Apply new/modified files
+                Object.assign(mergedFiles, cleanedFiles);
+
+                // Remove deleted files (if any)
+                const deletedFiles = parsed.deletedFiles || [];
+                for (const deletedPath of deletedFiles) {
+                  delete mergedFiles[deletedPath];
+                }
+              } else {
+                // First entry - just use generated files
+                mergedFiles = cleanedFiles;
+              }
+
               const fileChanges = calculateFileChanges(previousFiles, mergedFiles);
 
               // User message
@@ -900,11 +2247,13 @@ Only return files that need changes. Maintain all existing functionality.`;
         }}
       />
 
-      {/* Mode Toggle */}
+      {/* Mode Toggle + Auto-Accept */}
       <div className="px-3 py-2 border-t border-white/5 flex-shrink-0">
         <ModeToggle
           isConsultantMode={isConsultantMode}
           onToggle={() => setIsConsultantMode(!isConsultantMode)}
+          autoAcceptChanges={autoAcceptChanges}
+          onAutoAcceptChange={onAutoAcceptChangesChange}
         />
       </div>
 
@@ -915,6 +2264,8 @@ Only return files that need changes. Maintain all existing functionality.`;
         hasExistingApp={!!existingApp}
         placeholder={isConsultantMode ? "Describe what to analyze..." : undefined}
         files={files}
+        onOpenPromptEngineer={() => setOpenModal('promptengineer')}
+        externalPrompt={externalPrompt}
       />
 
       {/* Settings Panel */}
@@ -930,9 +2281,13 @@ Only return files that need changes. Maintain all existing functionality.`;
         onModelChange={onModelChange}
         onProviderChange={handleProviderChange}
         onOpenAISettings={onOpenAISettings}
+        onOpenCodeMap={onOpenCodeMap}
+        onOpenTechStack={() => setOpenModal('techstack')}
         aiHistoryCount={aiHistory.history.length}
         onOpenAIHistory={() => setShowAIHistory(true)}
-        shouldClose={openModal === 'projects'}
+        autoAcceptChanges={autoAcceptChanges}
+        onAutoAcceptChangesChange={onAutoAcceptChangesChange}
+        shouldClose={openModal === 'projects' || openModal === 'techstack'}
         onClosed={() => handleModalClose('settings')}
         onOpened={() => handleModalOpen('settings')}
       />
@@ -1100,8 +2455,25 @@ Only return files that need changes. Maintain all existing functionality.`;
                 cleanedFiles[path] = cleanGeneratedCode(content);
               }
 
-              // Calculate file changes
-              const mergedFiles = { ...previousFiles, ...cleanedFiles };
+              // Calculate file changes with support for deleted files
+              let mergedFiles: Record<string, string>;
+              if (Object.keys(previousFiles).length > 0) {
+                // Start with previous files and apply updates
+                mergedFiles = { ...previousFiles };
+
+                // Apply new/modified files
+                Object.assign(mergedFiles, cleanedFiles);
+
+                // Remove deleted files (if any)
+                const deletedFiles = parsed.deletedFiles || [];
+                for (const deletedPath of deletedFiles) {
+                  delete mergedFiles[deletedPath];
+                }
+              } else {
+                // First entry - just use generated files
+                mergedFiles = cleanedFiles;
+              }
+
               const fileChanges = calculateFileChanges(previousFiles, mergedFiles);
 
               // User message
@@ -1147,6 +2519,61 @@ Only return files that need changes. Maintain all existing functionality.`;
           }
         }}
       />
+
+      {/* Tech Stack Modal */}
+      <TechStackModal
+        isOpen={openModal === 'techstack'}
+        onClose={() => handleModalClose('techstack')}
+      />
+
+      {/* Prompt Engineer Modal */}
+      <PromptEngineerModal
+        isOpen={openModal === 'promptengineer'}
+        onClose={() => handleModalClose('promptengineer')}
+        onPromptGenerated={handlePromptGenerated}
+      />
+
+      {/* Batch Generation Modal */}
+      {batchGenModal && (
+        <BatchGenerationModal
+          isOpen={batchGenModal.isOpen}
+          onClose={() => setBatchGenModal(null)}
+          prompt={batchGenModal.prompt}
+          systemInstruction={batchGenModal.systemInstruction}
+          targetFiles={batchGenModal.targetFiles}
+          existingFiles={files}
+          onComplete={(generatedFiles) => {
+            // Apply the generated files to the current project
+            const fileChanges: FileChange[] = Object.entries(generatedFiles).map(([path, content]) => ({
+              path,
+              type: files[path] ? 'modified' : 'added',
+              additions: content.split('\n').length,
+              deletions: files[path] ? files[path].split('\n').length : 0
+            }));
+
+            // Create file list for display
+            const generatedFileList = Object.keys(generatedFiles);
+            const fileListMarkdown = `\n\n**Generated ${generatedFileList.length} files:**\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`;
+
+            // Create a message for the batch generation completion
+            const batchMessage: ChatMessage = {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              timestamp: Date.now(),
+              explanation: `✅ Successfully generated ${Object.keys(generatedFiles).length} files in batches.${fileListMarkdown}`,
+              files: generatedFiles,
+              fileChanges,
+              snapshotFiles: { ...files }
+            };
+
+            setMessages(prev => [...prev, batchMessage]);
+
+            // Show in diff modal (or auto-apply if auto-accept is on)
+            reviewChange('Batch Generated Files', { ...files, ...generatedFiles });
+            setBatchGenModal(null);
+          }}
+        />
+      )}
     </aside>
   );
 });

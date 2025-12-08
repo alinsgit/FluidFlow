@@ -1,6 +1,6 @@
 // AI Service - Provider Management
 import { AIProvider, ProviderConfig, ProviderType, DEFAULT_PROVIDERS, GenerationRequest, GenerationResponse, StreamChunk } from './types';
-import { GeminiProvider, OpenAIProvider, AnthropicProvider, OllamaProvider, LMStudioProvider } from './providers';
+import { GeminiProvider, OpenAIProvider, AnthropicProvider, OllamaProvider, LMStudioProvider, ZAIProvider } from './providers';
 import { settingsApi } from '../projectApi';
 
 export * from './types';
@@ -13,10 +13,12 @@ export function createProvider(config: ProviderConfig): AIProvider {
       return new GeminiProvider(config);
     case 'openai':
     case 'openrouter':
-    case 'zai':
     case 'custom':
-      // OpenAI-compatible API (Z.AI GLM uses OpenAI-compatible endpoint)
+      // OpenAI-compatible API
       return new OpenAIProvider(config);
+    case 'zai':
+      // Z.AI GLM - special handling
+      return new ZAIProvider(config);
     case 'anthropic':
       return new AnthropicProvider(config);
     case 'ollama':

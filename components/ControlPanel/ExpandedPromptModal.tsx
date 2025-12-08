@@ -224,7 +224,11 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      handleAttach(attachTypeRef.current, file, reader.result as string);
+      const result = reader.result as string;
+      // Only attach if we got a valid result (not empty string)
+      if (result && result.trim().length > 0) {
+        handleAttach(attachTypeRef.current, file, result);
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -370,11 +374,17 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
               >
                 {sketchAttachment ? (
                   <div className="flex items-center gap-3">
-                    <img
-                      src={sketchAttachment.preview}
-                      alt="Sketch"
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
+                    {sketchAttachment.preview && sketchAttachment.preview.trim() ? (
+                      <img
+                        src={sketchAttachment.preview}
+                        alt="Sketch"
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-slate-800 rounded-lg flex items-center justify-center">
+                        <Image className="w-8 h-8 text-blue-400" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">
                         {sketchAttachment.file.name}
@@ -410,11 +420,17 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
               >
                 {brandAttachment ? (
                   <div className="flex items-center gap-3">
-                    <img
-                      src={brandAttachment.preview}
-                      alt="Brand"
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
+                    {brandAttachment.preview && brandAttachment.preview.trim() ? (
+                      <img
+                        src={brandAttachment.preview}
+                        alt="Brand"
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-slate-800 rounded-lg flex items-center justify-center">
+                        <Palette className="w-8 h-8 text-purple-400" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">
                         {brandAttachment.file.name}

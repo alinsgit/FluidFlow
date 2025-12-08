@@ -1,18 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  X,
-  Sparkles,
-  Loader2,
-  Check,
-  Send,
-  Wand2,
-  User,
-  Bot,
-  FileCode,
-  RefreshCw,
-  Copy,
-  MessageSquare
+  X, Send, Wand2, FileCode, Loader2, Check, Copy, Sparkles, MessageSquare, Zap
 } from 'lucide-react';
 import { FileSystem } from '../../types';
 import { getProviderManager } from '../../services/ai';
@@ -26,6 +15,34 @@ interface Message {
   content: string;
   timestamp: number;
   isFinalPrompt?: boolean;
+  // Token usage information
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  // Model and provider info
+  model?: string;
+  provider?: string;
+  generationTime?: number; // in ms
+  questionOptions?: QuestionOptions;
+  selectedOptions?: string[];
+  customAnswer?: string;
+}
+
+interface QuestionOptions {
+  question: string;
+  options: Option[];
+  customOption?: boolean;
+  customPlaceholder?: string;
+  required?: boolean;
+  allowMultiple?: boolean;
+}
+
+interface Option {
+  id: string;
+  text: string;
+  description?: string;
 }
 
 interface PromptImproverModalProps {
@@ -37,43 +54,120 @@ interface PromptImproverModalProps {
   onAccept: (improvedPrompt: string) => void;
 }
 
-// System instruction for the prompt engineering assistant
-const PROMPT_ENGINEER_SYSTEM = `You are an expert Prompt Engineering Assistant helping users craft better prompts for UI/UX code generation.
+// System instruction for the prompt engineering assistant - UPDATED for contextual conversation
+const PROMPT_ENGINEER_SYSTEM = `You are an expert Prompt Engineering Assistant helping users improve their prompts for UI/UX code generation.
 
 ## Your Role
-You help users improve their prompts through conversation. Ask clarifying questions to understand exactly what they want, then generate an optimized prompt.
+You help users improve their prompts through contextual conversation. Analyze their project structure and current prompt, then ask intelligent follow-up questions to understand their true intent.
+
+## Analysis Process
+1. **Analyze the existing prompt** - What are they trying to build?
+2. **Examine project files** - What components/features already exist?
+3. **Identify gaps** - What information is missing or unclear?
+4. **Ask targeted questions** - Maximum 3 questions to clarify intent
+
+## CRITICAL: Question Format Rules
+- ALWAYS provide questions in JSON format with clickable options
+- Include quick answer buttons for each option
+- Also provide an input field for custom responses
+- Maximum 3 questions total
+
+## JSON Response Format (REQUIRED):
+Always respond with this JSON structure:
+\`\`\`json
+{
+  "question": "Your question text here?",
+  "options": [
+    { "id": "a", "text": "First option" },
+    { "id": "b", "text": "Second option" },
+    { "id": "c", "text": "Third option" }
+  ],
+  "allowCustom": true
+}
+\`\`\`
+
+## Examples of GOOD questions:
+Question about styling:
+{
+  "question": "What specific styling library would you like to use?",
+  "options": [
+    { "id": "a", "text": "Tailwind CSS for utility-first styling" },
+    { "id": "b", "text": "CSS Modules for scoped styles" },
+    { "id": "c", "text": "Styled Components for CSS-in-JS" }
+  ],
+  "allowCustom": true
+}
+
+Question about features:
+{
+  "question": "What specific features should this component include?",
+  "options": [
+    { "id": "a", "text": "Data filtering and search functionality" },
+    { "id": "b", "text": "Pagination and sorting capabilities" },
+    { "id": "c", "text": "Real-time updates and notifications" }
+  ],
+  "allowCustom": true
+}
+
+## Question Strategy
+- **Question 1**: Clarify the main goal or missing requirements
+- **Question 2**: Understand specific features or user experience details
+- **Question 3**: Refine technical requirements or constraints
+
+## Project Context Analysis
+Look for:
+- Existing components and patterns
+- Styling approach (Tailwind, CSS modules, etc.)
+- State management choices
+- Feature gaps or inconsistencies
+- User interface patterns
+- Data flow and functionality
 
 ## Conversation Flow
-1. First, analyze their initial prompt and the project context
-2. Ask 2-3 focused, specific questions to clarify their needs (don't ask too many at once)
-3. Based on their answers, either ask follow-up questions OR generate the final prompt
-4. When you have enough information, generate the final improved prompt
+1. Analyze their initial prompt and existing project structure
+2. Ask 1-3 targeted questions to clarify their true intent
+3. Focus on what's missing or unclear in their current prompt
+4. Generate improved prompt based on their answers
 
-## Question Guidelines
-- Ask about specific UI elements they want (layout, colors, animations)
-- Ask about user interactions and states (hover, loading, error)
-- Ask about responsive behavior if relevant
-- Ask about data/content if the component handles dynamic data
-- Keep questions short and easy to answer
+## Final Prompt Generation
+- After maximum 3 questions, provide the final improved prompt
+- MUST provide the final prompt in JSON format as shown below
+- Do NOT provide the prompt in markdown format
+- Do NOT use markdown code blocks for the final prompt
+
+## Final Prompt JSON Format (REQUIRED):
+Must respond with this JSON structure: {"question": "", "isFinalPrompt": true, "finalPrompt": "Your complete improved prompt text here without markdown formatting"}
+
+CRITICAL: The finalPrompt value must NOT contain markdown code blocks or backticks!
 
 ## Final Prompt Guidelines
 When generating the final prompt, make it:
 - Specific and actionable
+- Include the user's original intent clearly
+- Add specific details gathered from conversation
 - Include technical details gathered from conversation
 - Mention accessibility if appropriate
 - Include responsive behavior if discussed
 - Keep it natural, not like a spec document
 
-## Response Format
-- For questions: Just ask naturally, one message at a time
-- For final prompt: Start with "Here's your improved prompt:" followed by the prompt in a code block
-
 ## Important
 - Be conversational and friendly
-- Don't overwhelm with too many questions
-- 2-4 exchanges is usually enough
-- When ready, generate the final prompt confidently
-- The final prompt should be usable as-is for code generation`;
+- ALWAYS use JSON format with options for quick responses
+- Maximum 3 questions total, no exceptions
+- When 3 questions are reached, automatically generate the final prompt
+- The final prompt MUST be in JSON format with isFinalPrompt: true
+- NEVER use markdown code blocks for the final prompt
+- ALWAYS return final prompt as plain text in the finalPrompt field of JSON
+
+## CRITICAL: Final Prompt Rule
+After 3 questions, you MUST respond with:
+{
+  "question": "",
+  "isFinalPrompt": true,
+  "finalPrompt": "The complete improved prompt here"
+}
+
+If you use markdown format, the user won't be able to use your prompt!`;
 
 export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
   isOpen,
@@ -88,28 +182,38 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [finalPrompt, setFinalPrompt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [customInput, setCustomInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const contextManager = getContextManager();
   const fluidflowConfig = getFluidFlowConfig();
   const sessionIdRef = useRef<string>(`${CONTEXT_IDS.PROMPT_IMPROVER}-${Date.now()}`);
 
-  // Generate project context summary
+  // Generate intelligent project context analysis
   const getProjectContext = () => {
     const fileList = Object.keys(files);
     if (fileList.length === 0) return 'New project (no existing files)';
 
-    const components = fileList.filter(f => f.includes('/components/') || f.endsWith('.tsx'));
-    const styles = fileList.filter(f => f.endsWith('.css'));
+    const components = fileList.filter(f => f.endsWith('.tsx') || f.endsWith('.jsx'));
+    const pages = fileList.filter(f => f.includes('/pages/') || f.includes('/routes/'));
+    const hooks = fileList.filter(f => f.includes('/hooks/') || f.includes('use'));
+    const services = fileList.filter(f => f.includes('/services/') || f.includes('/api/'));
     const hasTypeScript = fileList.some(f => f.endsWith('.ts') || f.endsWith('.tsx'));
 
-    // Get a sample of component names
-    const componentNames = components.slice(0, 8).map(c => {
+    // Analyze component patterns
+    const componentNames = components.map(c => {
       const parts = c.split('/');
       return parts[parts.length - 1].replace(/\.(tsx?|jsx?)$/, '');
     });
 
-    return `Project: ${fileList.length} files, ${components.length} components (${componentNames.join(', ')}${components.length > 8 ? '...' : ''}), ${hasTypeScript ? 'TypeScript' : 'JavaScript'}, React + Tailwind CSS`;
+    // Identify project type based on files
+    let projectType = 'React application';
+    if (pages.length > 0) projectType = 'Multi-page React app';
+    if (services.length > 0) projectType = 'Full-stack React application';
+    if (fileList.some(f => f.includes('store') || f.includes('redux'))) projectType = 'State-managed React app';
+
+    return `${projectType}: ${fileList.length} files, ${components.length} components (${componentNames.slice(0, 5).join(', ')}${components.length > 5 ? '...' : ''}), ${hasTypeScript ? 'TypeScript' : 'JavaScript'}, ${services.length > 0 ? 'with backend services' : 'frontend only'}, ${hooks.length > 0 ? 'custom hooks present' : 'no custom hooks'}`;
   };
 
   // Clean up old prompt improver contexts
@@ -119,16 +223,10 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
       ctx.id.startsWith(CONTEXT_IDS.PROMPT_IMPROVER) && ctx.id !== sessionIdRef.current
     );
 
-    // Delete old prompt improver contexts (keep only the current one)
+    // Delete old contexts to keep storage clean
     promptImproverContexts.forEach(ctx => {
-      console.log(`[PromptImprover] Cleaning up old context: ${ctx.id}`);
       contextManager.deleteContext(ctx.id);
     });
-
-    // Also log how many were cleaned up
-    if (promptImproverContexts.length > 0) {
-      console.log(`[PromptImprover] Cleaned up ${promptImproverContexts.length} old context(s)`);
-    }
   };
 
   // Handle context compaction
@@ -185,52 +283,20 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
         throw new Error('No AI provider configured');
       }
 
-      // Add user message to context if provided
+      // Add user message if provided
       if (userMessage) {
-        contextManager.addMessage(sessionId, 'user', userMessage);
-        const newUserMessage: Message = {
+        const userMsg: Message = {
           id: crypto.randomUUID(),
           role: 'user',
           content: userMessage,
           timestamp: Date.now()
         };
-        setMessages(prev => [...prev, newUserMessage]);
-      }
+        setMessages(prev => [...prev, userMsg]);
+        contextManager.addMessage(sessionId, 'user', userMessage);
 
-      // Build the full prompt with conversation history from context manager
-      const projectContext = getProjectContext();
-      const taskType = hasExistingApp ? 'modifying an existing app' : 'creating a new app';
-      const historyText = contextManager.getConversationAsText(sessionId);
-
-      // Build the prompt
-      let prompt = '';
-      if (!historyText || messages.length === 0) {
-        // First message - include original prompt and context
-        prompt = `## Project Context
-${projectContext}
-
-## Task Type
-User is ${taskType}
-
-## User's Initial Prompt
-"${originalPrompt}"
-
-Please analyze this prompt and ask clarifying questions to help improve it. Start by acknowledging what you understand, then ask 2-3 specific questions.`;
-      } else {
-        // Subsequent messages - use context from manager
-        prompt = `## Project Context
-${projectContext}
-
-## Task Type
-User is ${taskType}
-
-## Original Prompt
-"${originalPrompt}"
-
-## Conversation So Far
-${historyText}
-
-Continue the conversation naturally. Either ask follow-up questions or if you have enough information, generate the final improved prompt.`;
+        // Clear selections when user responds
+        setSelectedOptions([]);
+        setCustomInput('');
       }
 
       // Create assistant message placeholder
@@ -246,10 +312,51 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
       // Add placeholder to context
       contextManager.addMessage(sessionId, 'assistant', '');
 
+      // Build context for AI
+      const contextMessages = contextManager.getMessagesForAI(sessionId);
+      const historyText = contextMessages
+        .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+        .join('\n');
+
+      let prompt = '';
+      if (messages.length === 0) {
+        // Initial prompt with enhanced context analysis
+        prompt = `I need help improving this prompt for generating a React application:
+
+Original prompt: "${originalPrompt}"
+
+Project context: ${getProjectContext()}
+Existing app: ${hasExistingApp ? 'Yes - improving/modifying existing' : 'No - creating from scratch'}
+
+Please analyze this prompt and project structure, then ask questions in JSON format (maximum 3) to clarify their needs.
+
+After asking exactly 3 questions total, you MUST provide the final improved prompt. No more questions after 3.`;
+      } else {
+        // Count current questions asked (only questions with questionOptions)
+        const questionMessages = messages.filter((m: Message) => m.questionOptions);
+        const currentQuestionCount = questionMessages.length;
+
+        // Follow-up prompt with strict question limit
+        if (currentQuestionCount >= 2) {
+          prompt = `${userMessage || 'Please continue the conversation.'}
+
+CRITICAL: You have already asked ${currentQuestionCount} questions. This MUST be your last question. After this response, you MUST provide the final improved prompt. Maximum 3 questions total - no exceptions!
+
+Ask ONE final question if needed, then provide the improved prompt. Do NOT give multiple choice options.`;
+        } else {
+          prompt = `${userMessage || 'Please continue the conversation.'}
+
+Remember: Maximum 3 questions total. You have asked ${currentQuestionCount} question(s) so far. Ask only 1-${3 - currentQuestionCount} more questions.
+
+Ask direct questions without providing options or checkboxes. Let users respond naturally.`;
+        }
+      }
+
       let fullResponse = '';
+      const startTime = Date.now();
 
       // Use streaming for real-time response
-      await provider.generateStream(
+      const streamResponse = await provider.generateStream(
         {
           prompt,
           systemInstruction: PROMPT_ENGINEER_SYSTEM,
@@ -258,12 +365,42 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
         config.defaultModel,
         (chunk) => {
           fullResponse += chunk.text;
-          // Update context manager with streaming content
+
+          // Check for JSON content in streaming and clean it for display only
+          let displayContent = fullResponse;
+
+          // Try multiple JSON patterns to detect early, but only clean for display
+          const jsonPatterns = [
+            /```json\n?([\s\S]*?)\n?```/,
+            /\{[\s\S]*"question"[\s\S]*"options"[\s\S]*\}/,
+            /\{[^{]*"question"[^}]*\}/
+          ];
+
+          const hasJsonContent = jsonPatterns.some(pattern => pattern.test(displayContent));
+
+          if (hasJsonContent) {
+            // Clean content by removing any JSON-like structures for display only
+            displayContent = displayContent
+              .replace(/```json\n?[\s\S]*?\n?```/g, '')
+              .replace(/\{[\s\S]*"question"[\s\S]*"options"[\s\S]*\}/g, '')
+              .replace(/\{[^{]*"question"[^}]*\}/g, '')
+              .trim();
+          }
+
+          // Update context manager with full response (preserve JSON for parsing)
           contextManager.updateLastMessage(sessionId, fullResponse);
+
+          // But display only cleaned content
           setMessages(prev =>
             prev.map(m =>
               m.id === assistantMessageId
-                ? { ...m, content: fullResponse }
+                ? {
+                    ...m,
+                    content: displayContent,
+                    generationTime: Date.now() - startTime,
+                    model: config.defaultModel,
+                    provider: config.name
+                  }
                 : m
             )
           );
@@ -273,24 +410,202 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
       // Finalize the message in context
       contextManager.finalizeMessage(sessionId);
 
-      // Check if this response contains a final prompt
-      const finalPromptMatch = fullResponse.match(/```(?:text|prompt)?\n?([\s\S]*?)```/);
-      if (fullResponse.includes("Here's your improved prompt") && finalPromptMatch) {
-        const extractedPrompt = finalPromptMatch[1].trim();
-        setFinalPrompt(extractedPrompt);
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === assistantMessageId
-              ? { ...m, isFinalPrompt: true }
-              : m
-          )
-        );
+      // Check for JSON questions FIRST before checking for final prompts
+      let jsonMatch = fullResponse.match(/```json\n?([\s\S]*?)\n?```/);
+
+      // If no proper JSON block, try to find JSON-like structure
+      if (!jsonMatch) {
+        jsonMatch = fullResponse.match(/\{[\s\S]*"question"[\s\S]*"options"[\s\S]*\}/);
       }
 
-      // Check if context needs compaction
-      if (contextManager.needsCompaction(sessionId)) {
-        console.log('[PromptImprover] Context needs compaction');
-        // Could trigger auto-compaction here
+      // Also try to find JSON between quotes and braces
+      if (!jsonMatch) {
+        const braceMatch = fullResponse.match(/\{[^{]*"question"[^}]*\}/);
+        if (braceMatch) {
+          jsonMatch = [null, braceMatch[0]];
+        }
+      }
+
+      // If we found JSON questions, process them first
+      if (jsonMatch) {
+        console.log('[PromptImprover] Processing JSON questions first');
+        try {
+          let jsonString = jsonMatch[1] || jsonMatch[0];
+
+          // Clean up the JSON string - remove markdown formatting
+          jsonString = jsonString
+            .replace(/```json/g, '')
+            .replace(/```/g, '')
+            .trim();
+
+          console.log('[PromptImprover] Found JSON-like structure:', jsonString.substring(0, 200));
+
+          // Prevent recursion by limiting JSON size
+          if (jsonString.length > 10000) {
+            console.warn('JSON question too large, skipping');
+            throw new Error('JSON too large');
+          }
+
+          const questionData = JSON.parse(jsonString) as any;
+
+          // Check if this is a final prompt response
+          if (questionData.isFinalPrompt && questionData.finalPrompt) {
+            // This is the final prompt - display it
+            setFinalPrompt(questionData.finalPrompt);
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, isFinalPrompt: true, content: "Final prompt generated successfully!" }
+                  : m
+              )
+            );
+            return;
+          }
+
+          // Otherwise validate as question data structure
+          const questionOptions = questionData as QuestionOptions;
+          if (!questionOptions.question || !Array.isArray(questionOptions.options)) {
+            throw new Error('Invalid question structure');
+          }
+
+          // Limit options to prevent UI issues
+          if (questionOptions.options.length > 10) {
+            questionOptions.options = questionOptions.options.slice(0, 10);
+          }
+
+          setSelectedOptions([]);
+          setCustomInput('');
+
+          // Update message with question options, but hide the JSON from display
+          setMessages(prev =>
+            prev.map((m: Message) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    questionOptions: questionOptions,
+                    // Clean the content to remove JSON-like structures but keep question text
+                    content: fullResponse
+                      .replace(/```json\n?[\s\S]*?\n?```/g, '') // Remove proper JSON blocks
+                      .replace(/\{[\s\S]*"question"[\s\S]*"options"[\s\S]*\}/g, '') // Remove JSON-like structures
+                      .replace(/\{[^{]*"question"[^}]*\}/g, '') // Remove simple JSON objects
+                      .replace(/Here's your improved prompt:[\s\S]*$/g, '') // Remove final prompt part
+                      .trim()
+                  }
+                : m
+            )
+          );
+        } catch (e) {
+          console.error('Failed to parse JSON question:', e);
+          // Continue with final prompt checking
+        }
+      } else {
+        // No JSON found, check if this response contains a final prompt - use multiple patterns
+        console.log('[PromptImprover] No JSON found, checking for final prompt');
+        const finalPromptPatterns = [
+          /```(?:text|prompt|markdown)?\n?([\s\S]*?)\n?```/g, // Code blocks with various languages
+          /(?:improved|final|here is|here's)?\s*(?:your)?\s*prompt:?\s*([\s\S]*?)(?=\n\n|\n|$)/gi, // Text prompts with various prefixes
+          /(?:prompt\s*:|final\s*response:)\s*([\s\S]*?)(?=\n\n|\n|$)/gi, // Explicit prompt/response labels
+        ];
+
+        let finalPromptMatch = null;
+        for (const pattern of finalPromptPatterns) {
+          const matches = fullResponse.match(pattern);
+          if (matches && matches[1] && matches[1].trim().length > 50) {
+            finalPromptMatch = matches;
+            break;
+          }
+        }
+
+        // Also check for keywords that suggest final prompt
+        const finalPromptKeywords = [
+          "Here's your improved prompt",
+          "Here is your improved prompt",
+          "Here's your final prompt",
+          "Here is your final prompt",
+          "Your improved prompt:",
+          "Your final prompt:",
+          "Here's the improved prompt:",
+          "Here's the final prompt:",
+          "Final prompt:",
+          "Improved prompt:"
+        ];
+
+        const hasFinalKeyword = finalPromptKeywords.some(keyword =>
+          fullResponse.toLowerCase().includes(keyword.toLowerCase())
+        );
+
+        // Enforce 3 question maximum - force final prompt if limit reached
+        // Count only questions (messages with questionOptions)
+        const questionMsgs = messages.filter((m: Message) => m.questionOptions);
+        const hasReachedQuestionLimit = questionMsgs.length >= 3;
+
+        if (hasReachedQuestionLimit || (finalPromptMatch && finalPromptMatch[1].trim().length > 50) || hasFinalKeyword) {
+          let extractedPrompt = '';
+
+          // Force final prompt if question limit reached
+          if (hasReachedQuestionLimit && !hasFinalKeyword && (!finalPromptMatch || finalPromptMatch[1].trim().length <= 50)) {
+            // Generate final prompt from conversation context
+            const conversationContext = messages
+              .filter((m: Message) => m.role === 'user')
+              .map((m: Message) => m.content)
+              .join('\n');
+
+            extractedPrompt = `Based on our conversation about: "${originalPrompt}"
+
+${conversationContext ? `User responses: ${conversationContext}` : ''}
+
+Create an improved prompt that:
+- Addresses the user's specific needs revealed in our conversation
+- Incorporates their project context: ${getProjectContext()}
+- Includes specific details they mentioned
+- Follows their existing project patterns and technology choices
+- Is clear, specific, and actionable for React component generation`;
+
+            console.log('[PromptImprover] Forced final prompt generation due to 3-question limit');
+          } else {
+            if (finalPromptMatch && finalPromptMatch[1]) {
+              extractedPrompt = finalPromptMatch[1].trim();
+            } else {
+              // If no code block found but keyword found, extract text after keyword
+              for (const keyword of finalPromptKeywords) {
+                const regex = new RegExp(`(?:${keyword})[\\s:]*([\\s\\S]*?)(?=\\n\\n|\\n|$)`, 'gi');
+                const match = fullResponse.match(regex);
+                if (match && match[1] && match[1].trim().length > 50) {
+                  extractedPrompt = match[1].trim();
+                  break;
+                }
+              }
+            }
+          }
+
+          if (extractedPrompt && extractedPrompt.length > 50) {
+            console.log('[PromptImprover] Final prompt detected:', extractedPrompt.substring(0, 100));
+            setFinalPrompt(extractedPrompt);
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, isFinalPrompt: true }
+                  : m
+              )
+            );
+          }
+        } else {
+          // Create regular assistant message (question)
+          const assistantMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: fullResponse,
+            timestamp: Date.now()
+          };
+
+          setMessages(prev => [...prev, assistantMessage]);
+        }
+
+        // Check if context needs compaction
+        if (contextManager.needsCompaction(sessionId)) {
+          console.log('[PromptImprover] Context needs compaction');
+          // Could trigger auto-compaction here
+        }
       }
 
     } catch (err) {
@@ -304,6 +619,66 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
       setMessages(prev => [...prev.filter(m => m.content !== ''), errorMessage]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handle option selection
+  const handleOptionSelect = (optionId: string) => {
+    // Find the LAST message with question options (most recent question)
+    const questionMessage = [...messages].reverse().find(m => m.questionOptions);
+    if (!questionMessage || !questionMessage.questionOptions) return;
+
+    if (questionMessage.questionOptions.allowMultiple) {
+      setSelectedOptions(prev =>
+        prev.includes(optionId)
+          ? prev.filter(id => id !== optionId)
+          : [...prev, optionId]
+      );
+    } else {
+      setSelectedOptions([optionId]);
+    }
+  };
+
+  // Handle question submit
+  const handleQuestionSubmit = () => {
+    // Find the LAST message with question options (most recent question)
+    const questionMessage = [...messages].reverse().find(m => m.questionOptions);
+    if (!questionMessage || !questionMessage.questionOptions) return;
+
+    // Validate if question is required
+    if (questionMessage.questionOptions.required && selectedOptions.length === 0 && !customInput.trim()) {
+      return;
+    }
+
+    // Build response text
+    let responseText = '';
+
+    // Add selected options
+    if (selectedOptions.length > 0) {
+      const selectedTexts = selectedOptions.map(id => {
+        const option = questionMessage.questionOptions.options.find((opt: any) => opt.id === id);
+        return option ? option.text : '';
+      }).filter(Boolean);
+
+      responseText = selectedTexts.join(', ');
+    }
+
+    // Add custom input if provided
+    if (customInput.trim()) {
+      if (responseText) {
+        responseText += `. Custom: ${customInput.trim()}`;
+      } else {
+        responseText = customInput.trim();
+      }
+    }
+
+    if (responseText.trim()) {
+      // Clear selections before sending response
+      setSelectedOptions([]);
+      setCustomInput('');
+
+      // Send response to AI
+      sendToAI(responseText);
     }
   };
 
@@ -324,6 +699,8 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
       setMessages([]);
       setInputValue('');
       setFinalPrompt(null);
+      setSelectedOptions([]);
+      setCustomInput('');
     }
   }, [isOpen]);
 
@@ -334,10 +711,10 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
 
   // Focus input when not loading
   useEffect(() => {
-    if (!isLoading && inputRef.current) {
+    if (!isLoading && inputRef.current && !messages.some(m => m.questionOptions)) {
       inputRef.current.focus();
     }
-  }, [isLoading]);
+  }, [isLoading, messages]);
 
   const handleSend = () => {
     if (!inputValue.trim() || isLoading) return;
@@ -376,6 +753,8 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
     sessionIdRef.current = `${CONTEXT_IDS.PROMPT_IMPROVER}-${Date.now()}`;
     setMessages([]);
     setFinalPrompt(null);
+    setSelectedOptions([]);
+    setCustomInput('');
     setTimeout(() => sendToAI(), 100);
   };
 
@@ -401,92 +780,199 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
                 Prompt Engineer
                 <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">AI</span>
               </h2>
-              <p className="text-xs text-slate-500">Chat to craft the perfect prompt</p>
+              <p className="text-xs text-slate-500">Interactive prompt improvement</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleRestart}
-              className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
-              title="Start over"
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              title="Restart conversation"
             >
-              <RefreshCw className="w-4 h-4" />
+              <MessageSquare className="w-4 h-4 text-slate-400" />
             </button>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-slate-400" />
             </button>
-          </div>
-        </div>
-
-        {/* Original Prompt Banner */}
-        <div className="px-4 py-2 bg-slate-800/50 border-b border-white/5">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-xs text-slate-500">Original prompt:</span>
-            <span className="text-xs text-slate-400 truncate flex-1">{originalPrompt}</span>
           </div>
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
-            >
-              {/* Avatar */}
-              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                message.role === 'user'
-                  ? 'bg-blue-600/20 text-blue-400'
-                  : 'bg-purple-600/20 text-purple-400'
-              }`}>
-                {message.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-              </div>
+          {messages.map((message, index) => {
+            // Check if this is the latest UNANSWERED message with questionOptions
+            const isLatestQuestion = message.questionOptions &&
+              [...messages].reverse().findIndex(m => m.questionOptions) === messages.length - 1 - index &&
+              // Check if there's no user message after this question
+              !messages.slice(index + 1).some((m: Message) => m.role === 'user');
 
-              {/* Message Content */}
-              <div className={`flex-1 min-w-0 ${message.role === 'user' ? 'text-right' : ''}`}>
-                <div className={`inline-block max-w-[85%] text-left rounded-2xl px-4 py-3 ${
-                  message.role === 'user'
-                    ? 'bg-blue-600/20 border border-blue-500/20 rounded-tr-sm'
-                    : 'bg-slate-800/50 border border-white/5 rounded-tl-sm'
-                }`}>
-                  {message.content ? (
-                    <div className="text-sm text-slate-200 whitespace-pre-wrap">
-                      {message.content}
+            return (
+              <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] ${message.role === 'user' ? 'order-2' : 'order-1'}`}>
+                  <div
+                    className={`p-3 rounded-xl ${
+                      message.role === 'user'
+                        ? 'bg-blue-500/20 text-blue-100 border border-blue-500/30'
+                        : 'bg-slate-800 text-slate-100 border border-white/5'
+                    }`}
+                  >
+                    {message.questionOptions ? (
+                    <div>
+                      <p className="text-sm mb-3 whitespace-pre-wrap">{message.questionOptions.question}</p>
+
+                      {/* Question Progress Indicator */}
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex-1 flex gap-1">
+                          {[1, 2, 3].map((qNum) => (
+                            <div
+                              key={qNum}
+                              className={`h-1.5 rounded-full flex-1 ${
+                                qNum <= messages.filter(m => m.questionOptions).length
+                                  ? 'bg-purple-500'
+                                  : 'bg-slate-700'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs text-slate-500">
+                          {messages.filter(m => m.questionOptions).length}/3
+                        </span>
+                      </div>
+
+                      {/* Interactive Options */}
+                      <div className="space-y-2">
+                        {message.questionOptions.options.map((option) => (
+                          <div
+                            key={option.id}
+                            onClick={() => isLatestQuestion && handleOptionSelect(option.id)}
+                            className={`p-3 rounded-lg border transition-all ${
+                              (isLatestQuestion && selectedOptions.includes(option.id)) || (!isLatestQuestion && message.selectedOptions?.includes(option.id))
+                                ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                : isLatestQuestion
+                                  ? 'bg-slate-700/50 border-white/10 hover:bg-slate-700 hover:border-white/20 cursor-pointer'
+                                  : 'bg-slate-800/30 border-slate-700/50 cursor-not-allowed opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 ${
+                                selectedOptions.includes(option.id)
+                                  ? 'bg-purple-500 border-purple-500'
+                                  : isLatestQuestion
+                                    ? 'border-slate-400'
+                                    : 'border-slate-600'
+                              }`}>
+                                {((isLatestQuestion && selectedOptions.includes(option.id)) || (!isLatestQuestion && message.selectedOptions?.includes(option.id))) && (
+                                  <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className={`text-sm font-medium ${!isLatestQuestion ? 'text-slate-500' : ''}`}>{option.text}</p>
+                                {option.description && (
+                                  <p className="text-xs text-slate-400 mt-1">{option.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Custom Option */}
+                        {(message.questionOptions.allowCustom || message.questionOptions.customOption) && (
+                          <div className="mt-3">
+                            <textarea
+                              value={isLatestQuestion ? customInput : (message.customAnswer || '')}
+                              onChange={(e) => isLatestQuestion && setCustomInput(e.target.value)}
+                              placeholder={message.questionOptions.customPlaceholder || "Enter custom response..."}
+                              rows={2}
+                              disabled={!isLatestQuestion}
+                              className={`w-full p-3 border rounded-lg text-sm resize-none ${
+                                isLatestQuestion
+                                  ? 'bg-slate-700/50 border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50'
+                                  : 'bg-slate-800/30 border-slate-700/50 text-slate-500 cursor-not-allowed'
+                              }`}
+                            />
+                          </div>
+                        )}
+
+                        {/* Submit Button for Question */}
+                        {message.questionOptions && isLatestQuestion && (
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              onClick={handleQuestionSubmit}
+                              disabled={message.questionOptions.required && selectedOptions.length === 0 && !customInput.trim()}
+                              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-600 disabled:text-slate-400 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                              Submit Response
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-purple-400">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Thinking...</span>
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  )}
+
+                  {/* Token Usage */}
+                  {message.tokenUsage && message.role === 'assistant' && (
+                    <div className="mt-3 p-2 bg-slate-800/30 rounded-lg border border-slate-700">
+                      <div className="flex items-center justify-between mb-1">
+                        <h5 className="text-xs font-medium text-slate-400 flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-yellow-400" />
+                          Tokens: {message.tokenUsage.totalTokens.toLocaleString()}
+                        </h5>
+                        {message.generationTime && (
+                          <span className="text-xs text-slate-500">
+                            {(message.generationTime / 1000).toFixed(1)}s
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-blue-400">In: {message.tokenUsage.inputTokens.toLocaleString()}</span>
+                        <span className="text-green-400">Out: {message.tokenUsage.outputTokens.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Final Prompt Display */}
+                  {message.isFinalPrompt && finalPrompt && (
+                    <div className="mt-3">
+                      <div className="bg-slate-800/50 rounded-lg p-4 border border-green-500/30">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-green-400">Final Improved Prompt</h4>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={handleCopy}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs transition-colors"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              {copied ? 'Copied!' : 'Copy'}
+                            </button>
+                          </div>
+                        </div>
+                        <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 p-3 rounded border border-slate-700 overflow-x-auto">
+                          {finalPrompt}
+                        </pre>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={handleAccept}
+                          className="flex-1 items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                          <Check className="w-4 h-4" />
+                          Use This Prompt
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Final Prompt Actions */}
-                {message.isFinalPrompt && finalPrompt && (
-                  <div className="mt-3 flex items-center gap-2 justify-start">
-                    <button
-                      onClick={handleAccept}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      <Check className="w-4 h-4" />
-                      Use This Prompt
-                    </button>
-                    <button
-                      onClick={handleCopy}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg text-sm transition-colors"
-                    >
-                      <Copy className="w-4 h-4" />
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
-          ))}
+          );
+        })}
 
           {/* Loading indicator */}
           {isLoading && messages.length > 0 && messages[messages.length - 1].content === '' && (
@@ -523,14 +1009,14 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={finalPrompt ? "Ask for changes or accept the prompt..." : "Answer the questions..."}
-              disabled={isLoading}
+              disabled={isLoading || messages.some(m => m.questionOptions)}
               rows={1}
               className="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 resize-none disabled:opacity-50"
               style={{ minHeight: '48px', maxHeight: '120px' }}
             />
             <button
               onClick={handleSend}
-              disabled={isLoading || !inputValue.trim()}
+              disabled={isLoading || !inputValue.trim() || messages.some(m => m.questionOptions)}
               className="p-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors"
             >
               {isLoading ? (
@@ -543,7 +1029,9 @@ Continue the conversation naturally. Either ask follow-up questions or if you ha
 
           {/* Hint */}
           <p className="text-[10px] text-slate-600 mt-2 text-center">
-            {finalPrompt
+            {messages.some(m => m.questionOptions)
+              ? 'Select options above or type a custom response'
+              : finalPrompt
               ? 'Click "Use This Prompt" to apply, or continue chatting to refine'
               : 'Answer questions to help craft the perfect prompt'}
           </p>

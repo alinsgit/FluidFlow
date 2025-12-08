@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, ChevronUp, ChevronDown, CheckCircle, AlertCircle, GraduationCap, Bug, Settings2, ChevronRight, History, X } from 'lucide-react';
+import { Settings, ChevronUp, ChevronDown, CheckCircle, AlertCircle, GraduationCap, Bug, Settings2, ChevronRight, History, X, Map, Package, Zap } from 'lucide-react';
 import { useDebugStore } from '../../hooks/useDebugStore';
 import { getProviderManager } from '../../services/ai';
 
@@ -13,6 +13,10 @@ interface SettingsPanelProps {
   onOpenAISettings?: () => void;
   aiHistoryCount?: number;
   onOpenAIHistory?: () => void;
+  onOpenCodeMap?: () => void;
+  onOpenTechStack?: () => void;
+  autoAcceptChanges?: boolean;
+  onAutoAcceptChangesChange?: (value: boolean) => void;
   // Props for modal exclusivity
   shouldClose?: boolean;
   onClosed?: () => void;
@@ -29,6 +33,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onOpenAISettings,
   aiHistoryCount = 0,
   onOpenAIHistory,
+  onOpenCodeMap,
+  onOpenTechStack,
+  autoAcceptChanges = false,
+  onAutoAcceptChangesChange,
   shouldClose,
   onClosed,
   onOpened
@@ -197,6 +205,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
             </div>
 
+            {/* Technology Stack */}
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <button
+                onClick={onOpenTechStack}
+                className="flex items-center gap-2 w-full p-2 text-xs text-slate-300 font-medium hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <Package className="w-3.5 h-3.5 text-purple-400" />
+                <span>Technology Stack</span>
+                <ChevronRight className="w-3 h-3 ml-auto" />
+              </button>
+            </div>
+
             {/* Debug Mode */}
             <div className="space-y-2 pt-2 border-t border-white/5">
               <div className="flex items-center justify-between">
@@ -257,6 +277,33 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </button>
                 <p className="text-[10px] text-slate-500 pl-5 mt-1">
                   View raw responses, debug truncated outputs
+                </p>
+              </div>
+            )}
+
+            {/* CodeMap */}
+            {onOpenCodeMap && (
+              <div className="pt-2 border-t border-white/5">
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    onOpenCodeMap();
+                  }}
+                  className="w-full flex items-center justify-between p-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Map className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>CodeMap</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      AST
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                </button>
+                <p className="text-[10px] text-slate-500 pl-5 mt-1">
+                  Visualize code structure, dependencies, and metrics
                 </p>
               </div>
             )}

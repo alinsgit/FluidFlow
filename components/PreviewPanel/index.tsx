@@ -5,7 +5,6 @@ import {
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
   ChevronLeft, ChevronRight, Globe, GitBranch, Play
 } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { getProviderManager } from '../../services/ai';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -192,17 +191,28 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const startTime = Date.now();
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents: [{ parts: [{ text: `Fix this runtime error in the React component. Error: "${errorMessage}"\n\nCurrent Code:\n${appCode}\n\nIMPORTANT: Output ONLY the complete fixed code, no explanations.` }] }]
-      });
+      // Use ProviderManager instead of direct GoogleGenAI
+      const manager = getProviderManager();
+      const provider = manager.getProvider();
+      const activeConfig = manager.getActiveConfig();
+
+      if (!provider) {
+        throw new Error('No AI provider configured');
+      }
+
+      // Use the active provider's default model instead of selectedModel
+      const modelToUse = activeConfig?.defaultModel || selectedModel;
+
+      const response = await provider.generate({
+        prompt: `Fix this runtime error in the React component. Error: "${errorMessage}"\n\nCurrent Code:\n${appCode}\n\nIMPORTANT: Output ONLY the complete fixed code, no explanations.`,
+        responseFormat: 'text'
+      }, modelToUse);
 
       const fixedCode = cleanGeneratedCode(response.text || '');
 
       debugLog.response('auto-fix', {
         id: requestId,
-        model: selectedModel,
+        model: modelToUse,
         duration: Date.now() - startTime,
         response: fixedCode.slice(0, 500) + '...',
         metadata: { success: !!(fixedCode && isValidCode(fixedCode)) }

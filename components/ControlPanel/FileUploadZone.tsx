@@ -80,7 +80,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
 
           {file ? (
             <div className="relative w-full h-full p-4 flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
-              {preview ? (
+              {preview && preview.trim() ? (
                 <div className="relative w-full h-full rounded-lg overflow-hidden border border-white/10 bg-black/20 shadow-inner group-hover:scale-[1.02] transition-transform duration-300">
                   <img src={preview} alt="Sketch preview" className="w-full h-full object-contain" />
                 </div>
@@ -153,7 +153,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
         {file ? (
           <div className="w-full h-full flex items-center justify-between px-3 animate-in fade-in slide-in-from-right-4">
             <div className="flex items-center gap-3 overflow-hidden">
-              {preview ? (
+              {preview && preview.trim() ? (
                 <div className="w-8 h-8 rounded bg-white/5 border border-white/10 flex-none overflow-hidden">
                   <img src={preview} alt="Brand" className="w-full h-full object-cover" />
                 </div>

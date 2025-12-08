@@ -27,6 +27,32 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       }
+    },
+    optimizeDeps: {
+      exclude: [
+        '@typescript-eslint/typescript-estree',
+        '@typescript-eslint/parser',
+        'acorn',
+        'acorn-walk',
+        'glob',
+        'fs',
+        'path',
+        'os'
+      ]
+    },
+    build: {
+      rollupOptions: {
+        external: [
+          '@typescript-eslint/typescript-estree',
+          '@typescript-eslint/parser',
+          'acorn',
+          'acorn-walk',
+          'glob',
+          'fs',
+          'path',
+          'os'
+        ]
+      }
     }
   };
 });

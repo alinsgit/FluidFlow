@@ -93,6 +93,16 @@ export class GeminiProvider implements AIProvider {
 
     onChunk({ text: '', done: true });
 
-    return { text: fullText };
+    // Gemini doesn't provide usage in streaming, so we'll estimate
+    const estimatedInputTokens = Math.ceil(JSON.stringify(request).length / 4);
+    const estimatedOutputTokens = Math.ceil(fullText.length / 4);
+
+    return {
+      text: fullText,
+      usage: {
+        inputTokens: estimatedInputTokens,
+        outputTokens: estimatedOutputTokens
+      }
+    };
   }
 }
