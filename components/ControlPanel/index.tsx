@@ -614,7 +614,6 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
 
         // Build comprehensive explanation
         let explanationText = parseResult.explanation || 'Generation complete.';
-        explanationText += `\n\n**Generated ${generatedFileList.length} files:**\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`;
 
         if (invalidFiles.length > 0) {
           explanationText += `\n\n⚠️ **${invalidFiles.length} files were invalid and excluded.**`;
@@ -1376,13 +1375,12 @@ Write a clear markdown explanation including:
 
           // Add assistant message with token usage and clear file list
           const generatedFileList = Object.keys(newFiles);
-          const fileListMarkdown = `\n\n**Generated ${generatedFileList.length} files:**\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`;
 
           const assistantMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             timestamp: Date.now(),
-            explanation: (explanation || 'Generation complete.') + fileListMarkdown,
+            explanation: explanation || 'Generation complete.',
             files: newFiles,
             fileChanges,
             snapshotFiles: { ...files }, // Save state before this change for revert
@@ -1525,12 +1523,11 @@ Return JSON with explanation and files:
                   setStreamingStatus(`✅ Generated ${completeCount} files!`);
 
                   // Create completion message
-                  const fileListMarkdown = `\n\n**Generated ${completeCount} files:**\n${recoveredFileNames.map(f => `- \`${f}\``).join('\n')}`;
                   const assistantMessage: ChatMessage = {
                     id: crypto.randomUUID(),
                     role: 'assistant',
                     timestamp: Date.now(),
-                    explanation: 'Generation complete.' + fileListMarkdown,
+                    explanation: 'Generation complete.',
                     files: extraction.completeFiles,
                     snapshotFiles: { ...files }
                   };
@@ -1718,12 +1715,11 @@ Generate ONLY these files. Each file must be COMPLETE and FUNCTIONAL.`;
               setStreamingStatus(`✅ Generated ${completeCount} files!`);
 
               // Add chat message showing what was generated
-              const fileListMarkdown = `\n\n**Generated ${completeCount} files:**\n${recoveredFileNames.map(f => `- \`${f}\``).join('\n')}`;
               const assistantMessage: ChatMessage = {
                 id: crypto.randomUUID(),
                 role: 'assistant',
                 timestamp: Date.now(),
-                explanation: 'Generation complete (recovered from truncated response).' + fileListMarkdown,
+                explanation: 'Generation complete (recovered from truncated response).',
                 files: extraction.completeFiles,
                 snapshotFiles: { ...files }
               };
@@ -1774,12 +1770,11 @@ Generate ONLY these files. Each file must be COMPLETE and FUNCTIONAL.`;
                   console.log(`[Truncation] Successfully fixed ${Object.keys(fixedPartialFiles).length} partial files`);
                   const recoveredFiles = { ...files, ...fixedPartialFiles };
 
-                  const fileListMarkdown = `\n\n**Recovered ${Object.keys(fixedPartialFiles).length} partial files:**\n${Object.keys(fixedPartialFiles).map(f => `- \`${f}\``).join('\n')}`;
                   const assistantMessage: ChatMessage = {
                     id: crypto.randomUUID(),
                     role: 'assistant',
                     timestamp: Date.now(),
-                    explanation: 'Generation incomplete (recovered partial files from truncated response).' + fileListMarkdown,
+                    explanation: 'Generation incomplete (recovered partial files from truncated response).',
                     files: fixedPartialFiles,
                     snapshotFiles: { ...files }
                   };
@@ -1956,6 +1951,34 @@ Generate ONLY these files. Each file must be COMPLETE and FUNCTIONAL.`;
     };
     setMessages(prev => [...prev, userMessage]);
     setIsGenerating(true);
+
+    // Save to AI history as a template
+    const inspectEditPrompt = `🎯 **Inspect Edit**: ${element.componentName || element.tagName}
+
+Element Context:
+${elementContext}
+
+User Request: ${prompt}
+
+Current files:
+${JSON.stringify(files, null, 2)}`;
+    aiHistory.addEntry({
+      timestamp: Date.now(),
+      prompt: inspectEditPrompt,
+      model: currentModel,
+      provider: providerName,
+      hasSketch: false,
+      hasBrand: false,
+      isUpdate: true,
+      rawResponse: '',
+      responseChars: 0,
+      responseChunks: 0,
+      durationMs: 0,
+      success: true,
+      error: '',
+      truncated: false,
+      templateType: 'inspect-edit'
+    });
 
     // Setup streaming state
     const manager = getProviderManager();
@@ -2553,14 +2576,13 @@ Only return files that need changes. Maintain all existing functionality.`;
 
             // Create file list for display
             const generatedFileList = Object.keys(generatedFiles);
-            const fileListMarkdown = `\n\n**Generated ${generatedFileList.length} files:**\n${generatedFileList.map(f => `- \`${f}\``).join('\n')}`;
 
             // Create a message for the batch generation completion
             const batchMessage: ChatMessage = {
               id: crypto.randomUUID(),
               role: 'assistant',
               timestamp: Date.now(),
-              explanation: `✅ Successfully generated ${Object.keys(generatedFiles).length} files in batches.${fileListMarkdown}`,
+              explanation: `✅ Successfully generated ${Object.keys(generatedFiles).length} files in batches.`,
               files: generatedFiles,
               fileChanges,
               snapshotFiles: { ...files }

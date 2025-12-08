@@ -103,6 +103,8 @@ export interface AIHistoryEntry {
   truncated?: boolean;
   filesGenerated?: string[];
   explanation?: string;
+  // Template type for special prompt templates (auto-fix, inspect-edit, etc.)
+  templateType?: 'auto-fix' | 'inspect-edit' | 'prompt-template' | 'chat';
 }
 
 export interface ProjectContext {

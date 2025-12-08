@@ -14,7 +14,10 @@ import {
   AlertTriangle,
   Sparkles,
   RotateCcw,
-  Loader2
+  Loader2,
+  Zap,
+  Search,
+  Settings
 } from 'lucide-react';
 import { AIHistoryEntry } from '../services/projectApi';
 
@@ -43,6 +46,198 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  // Entry Card Component - defined once for reuse
+  const EntryCard = ({ entry, expandedId, setExpandedId, copiedId, setCopiedId, restoringId, setRestoringId, onRestore, onCopyRaw, formatDuration, formatSize, formatTime }: any) => (
+    <div
+      key={entry.id}
+      className={`border rounded-lg overflow-hidden transition-colors ${
+        entry.success
+          ? 'border-white/10 bg-slate-800/30'
+          : 'border-red-500/30 bg-red-500/5'
+      }`}
+    >
+      {/* Entry Header */}
+      <div
+        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 group"
+        onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+      >
+        {expandedId === entry.id ? (
+          <ChevronDown size={16} className="text-slate-500" />
+        ) : (
+          <ChevronRight size={16} className="text-slate-500" />
+        )}
+
+        {entry.success ? (
+          <CheckCircle2 size={16} className="text-green-400" />
+        ) : (
+          <XCircle size={16} className="text-red-400" />
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {/* Template Type Badge */}
+            {entry.templateType && (
+              <div className="flex items-center gap-1">
+                {entry.templateType === 'auto-fix' && <Zap size={12} className="text-orange-400" />}
+                {entry.templateType === 'inspect-edit' && <Search size={12} className="text-purple-400" />}
+                {entry.templateType === 'prompt-template' && <Settings size={12} className="text-blue-400" />}
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  entry.templateType === 'auto-fix'
+                    ? 'bg-orange-500/20 text-orange-400'
+                    : entry.templateType === 'inspect-edit'
+                    ? 'bg-purple-500/20 text-purple-400'
+                    : 'bg-blue-500/20 text-blue-400'
+                }`}>
+                  {entry.templateType.toUpperCase().replace('-', ' ')}
+                </span>
+              </div>
+            )}
+            <span className="text-sm font-medium truncate">
+              {entry.prompt.slice(0, 60)}{entry.prompt.length > 60 ? '...' : ''}
+            </span>
+            {entry.truncated && (
+              <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-[10px]">
+                TRUNCATED
+              </span>
+            )}
+            {entry.isUpdate && (
+              <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px]">
+                UPDATE
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+            <span>{formatTime(entry.timestamp)}</span>
+            <span>{entry.provider} / {entry.model}</span>
+            <span>{formatDuration(entry.durationMs)}</span>
+            <span>{formatSize(entry.responseChars)}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          {/* Restore button - only for successful entries */}
+          {entry.success && onRestoreEntry && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRestore(entry);
+              }}
+              disabled={restoringId !== null}
+              className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-green-500/20 text-slate-500 hover:text-green-400 rounded transition-all disabled:opacity-50"
+              title="Load this state"
+            >
+              {restoringId === entry.id ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RotateCcw size={14} />
+              )}
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteEntry(entry.id);
+            }}
+            className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded transition-all"
+            title="Delete entry"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded Content */}
+      {expandedId === entry.id && (
+        <div className="border-t border-white/10 p-4 space-y-4">
+          {/* Info Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div className="bg-slate-800/50 rounded-lg p-2">
+              <div className="text-slate-500">Provider</div>
+              <div className="font-medium">{entry.provider}</div>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-2">
+              <div className="text-slate-500">Model</div>
+              <div className="font-medium truncate">{entry.model}</div>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-2">
+              <div className="text-slate-500">Duration</div>
+              <div className="font-medium">{formatDuration(entry.durationMs)}</div>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-2">
+              <div className="text-slate-500">Size</div>
+              <div className="font-medium">{formatSize(entry.responseChars)}</div>
+            </div>
+          </div>
+
+          {/* Prompt */}
+          <div className="bg-slate-800/30 rounded-lg p-3">
+            <div className="text-xs text-slate-500 mb-1">Prompt</div>
+            <div className="text-sm text-slate-300 whitespace-pre-wrap">{entry.prompt}</div>
+          </div>
+
+          {/* Explanation */}
+          {entry.explanation && (
+            <div className="bg-slate-800/30 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-1">Explanation</div>
+              <div className="text-sm text-slate-300 whitespace-pre-wrap">{entry.explanation}</div>
+            </div>
+          )}
+
+          {/* Files Generated */}
+          {entry.filesGenerated && entry.filesGenerated.length > 0 && (
+            <div className="bg-slate-800/30 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-2">Files Generated ({entry.filesGenerated.length})</div>
+              <div className="flex flex-wrap gap-1">
+                {entry.filesGenerated.map((file: string) => (
+                  <span key={file} className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-300">
+                    {file}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {entry.error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+              <div className="text-xs text-red-400 mb-1">Error</div>
+              <div className="text-sm text-red-300 whitespace-pre-wrap">{entry.error}</div>
+            </div>
+          )}
+
+          {/* Raw Response */}
+          {entry.rawResponse && (
+            <div className="bg-slate-950 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-500">Raw Response</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCopyRaw(entry)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                  >
+                    <Copy size={12} />
+                    {copiedId === entry.id ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={() => setShowRawResponse(showRawResponse === entry.id ? null : entry.id)}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    {showRawResponse === entry.id ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+              {showRawResponse === entry.id && (
+                <pre className="p-3 bg-slate-950 rounded-lg text-xs text-slate-400 max-h-64 overflow-auto font-mono whitespace-pre-wrap break-all">
+                  {entry.rawResponse}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
@@ -153,234 +348,80 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {history.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={`border rounded-lg overflow-hidden transition-colors ${
-                    entry.success
-                      ? 'border-white/10 bg-slate-800/30'
-                      : 'border-red-500/30 bg-red-500/5'
-                  }`}
-                >
-                  {/* Entry Header */}
-                  <div
-                    className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 group"
-                    onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-                  >
-                    {expandedId === entry.id ? (
-                      <ChevronDown size={16} className="text-slate-500" />
-                    ) : (
-                      <ChevronRight size={16} className="text-slate-500" />
+            <div className="space-y-6">
+              {/* Categorize history by template type */}
+              {(() => {
+                const templates = history.filter(e => e.templateType);
+                const chats = history.filter(e => !e.templateType);
+
+                return (
+                  <>
+                    {/* Prompt Templates Section */}
+                    {templates.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 px-2">
+                          <Settings size={16} className="text-purple-400" />
+                          <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                            Prompt Templates
+                          </h3>
+                          <span className="px-2 py-0.5 bg-purple-500/20 rounded text-xs text-purple-400">
+                            {templates.length}
+                          </span>
+                        </div>
+                        {templates.map((entry) => (
+                          <EntryCard
+                            key={entry.id}
+                            entry={entry}
+                            expandedId={expandedId}
+                            setExpandedId={setExpandedId}
+                            copiedId={copiedId}
+                            setCopiedId={setCopiedId}
+                            restoringId={restoringId}
+                            setRestoringId={setRestoringId}
+                            onRestore={handleRestore}
+                            onCopyRaw={handleCopyRaw}
+                            formatDuration={formatDuration}
+                            formatSize={formatSize}
+                            formatTime={formatTime}
+                          />
+                        ))}
+                      </div>
                     )}
 
-                    {entry.success ? (
-                      <CheckCircle2 size={16} className="text-green-400" />
-                    ) : (
-                      <XCircle size={16} className="text-red-400" />
+                    {/* Chat History Section */}
+                    {chats.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 px-2">
+                          <FileCode size={16} className="text-blue-400" />
+                          <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                            Chat History
+                          </h3>
+                          <span className="px-2 py-0.5 bg-blue-500/20 rounded text-xs text-blue-400">
+                            {chats.length}
+                          </span>
+                        </div>
+                        {chats.map((entry) => (
+                          <EntryCard
+                            key={entry.id}
+                            entry={entry}
+                            expandedId={expandedId}
+                            setExpandedId={setExpandedId}
+                            copiedId={copiedId}
+                            setCopiedId={setCopiedId}
+                            restoringId={restoringId}
+                            setRestoringId={setRestoringId}
+                            onRestore={handleRestore}
+                            onCopyRaw={handleCopyRaw}
+                            formatDuration={formatDuration}
+                            formatSize={formatSize}
+                            formatTime={formatTime}
+                          />
+                        ))}
+                      </div>
                     )}
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">
-                          {entry.prompt.slice(0, 60)}{entry.prompt.length > 60 ? '...' : ''}
-                        </span>
-                        {entry.truncated && (
-                          <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-[10px]">
-                            TRUNCATED
-                          </span>
-                        )}
-                        {entry.isUpdate && (
-                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px]">
-                            UPDATE
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
-                        <span>{formatTime(entry.timestamp)}</span>
-                        <span>{entry.provider} / {entry.model}</span>
-                        <span>{formatDuration(entry.durationMs)}</span>
-                        <span>{formatSize(entry.responseChars)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {/* Restore button - only for successful entries */}
-                      {entry.success && onRestoreEntry && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRestore(entry);
-                          }}
-                          disabled={restoringId !== null}
-                          className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-green-500/20 text-slate-500 hover:text-green-400 rounded transition-all disabled:opacity-50"
-                          title="Load this state"
-                        >
-                          {restoringId === entry.id ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <RotateCcw size={14} />
-                          )}
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteEntry(entry.id);
-                        }}
-                        className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded transition-all"
-                        title="Delete entry"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded Content */}
-                  {expandedId === entry.id && (
-                    <div className="border-t border-white/10 p-4 space-y-4">
-                      {/* Info Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                        <div className="bg-slate-800/50 rounded-lg p-2">
-                          <div className="text-slate-500">Provider</div>
-                          <div className="font-medium">{entry.provider}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2">
-                          <div className="text-slate-500">Model</div>
-                          <div className="font-medium truncate">{entry.model}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2">
-                          <div className="text-slate-500">Duration</div>
-                          <div className="font-medium">{formatDuration(entry.durationMs)}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2">
-                          <div className="text-slate-500">Response Size</div>
-                          <div className="font-medium">{formatSize(entry.responseChars)}</div>
-                        </div>
-                      </div>
-
-                      {/* Attachments */}
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="text-slate-500">Attachments:</span>
-                        {entry.hasSketch && (
-                          <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded">
-                            Sketch
-                          </span>
-                        )}
-                        {entry.hasBrand && (
-                          <span className="px-2 py-1 bg-orange-500/20 text-orange-400 rounded">
-                            Brand
-                          </span>
-                        )}
-                        {!entry.hasSketch && !entry.hasBrand && (
-                          <span className="text-slate-600">None</span>
-                        )}
-                      </div>
-
-                      {/* Error Message */}
-                      {entry.error && (
-                        <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                          <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
-                          <div className="text-sm text-red-400">{entry.error}</div>
-                        </div>
-                      )}
-
-                      {/* Files Generated */}
-                      {entry.filesGenerated && entry.filesGenerated.length > 0 && (
-                        <div>
-                          <div className="text-xs text-slate-500 mb-2">
-                            Files Generated ({entry.filesGenerated.length})
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {entry.filesGenerated.map((file) => (
-                              <span
-                                key={file}
-                                className="flex items-center gap-1 px-2 py-1 bg-slate-800/50 rounded text-xs text-slate-400"
-                              >
-                                <FileCode size={12} />
-                                {file}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Restore Button - prominent in expanded view */}
-                      {entry.success && onRestoreEntry && (
-                        <div className="pt-2 border-t border-white/5">
-                          <button
-                            onClick={() => handleRestore(entry)}
-                            disabled={restoringId !== null}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 text-green-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                          >
-                            {restoringId === entry.id ? (
-                              <>
-                                <Loader2 size={16} className="animate-spin" />
-                                Restoring...
-                              </>
-                            ) : (
-                              <>
-                                <RotateCcw size={16} />
-                                Load This State
-                              </>
-                            )}
-                          </button>
-                          <p className="text-[11px] text-slate-500 mt-2">
-                            Restores files and chat from this generation point.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Explanation */}
-                      {entry.explanation && (
-                        <div>
-                          <div className="text-xs text-slate-500 mb-2">Explanation</div>
-                          <div className="p-3 bg-slate-800/50 rounded-lg text-sm text-slate-300 max-h-32 overflow-y-auto">
-                            {entry.explanation.slice(0, 500)}{entry.explanation.length > 500 ? '...' : ''}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Prompt */}
-                      <div>
-                        <div className="text-xs text-slate-500 mb-2">Full Prompt</div>
-                        <div className="p-3 bg-slate-800/50 rounded-lg text-sm text-slate-300 max-h-24 overflow-y-auto">
-                          {entry.prompt}
-                        </div>
-                      </div>
-
-                      {/* Raw Response Toggle */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-slate-500">
-                            Raw Response ({formatSize(entry.responseChars)})
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleCopyRaw(entry)}
-                              className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
-                            >
-                              <Copy size={12} />
-                              {copiedId === entry.id ? 'Copied!' : 'Copy'}
-                            </button>
-                            <button
-                              onClick={() => setShowRawResponse(showRawResponse === entry.id ? null : entry.id)}
-                              className="text-xs text-blue-400 hover:text-blue-300"
-                            >
-                              {showRawResponse === entry.id ? 'Hide' : 'Show'}
-                            </button>
-                          </div>
-                        </div>
-                        {showRawResponse === entry.id && (
-                          <pre className="p-3 bg-slate-950 rounded-lg text-xs text-slate-400 max-h-64 overflow-auto font-mono whitespace-pre-wrap break-all">
-                            {entry.rawResponse}
-                          </pre>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

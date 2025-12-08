@@ -209,7 +209,6 @@ const DiffModal: React.FC<DiffModalProps> = ({ originalFiles, newFiles, label, o
                            <FileCode className="w-4 h-4 opacity-70 flex-shrink-0" />
                            <span className="truncate flex-1">{file}</span>
                            <div className="flex items-center gap-1.5 text-[10px] font-mono flex-shrink-0">
-                              {added > 0 && <span className="text-green-400">+{added}</span>}
                               {removed > 0 && <span className="text-red-400">-{removed}</span>}
                            </div>
                         </button>
@@ -225,7 +224,6 @@ const DiffModal: React.FC<DiffModalProps> = ({ originalFiles, newFiles, label, o
                         <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-white/5">
                            <span className="text-xs font-mono text-slate-400">{selectedFile}</span>
                            <div className="flex items-center gap-3 text-xs font-mono">
-                              <span className="text-green-400">+{stats.added} additions</span>
                               <span className="text-red-400">-{stats.removed} deletions</span>
                            </div>
                         </div>
@@ -238,7 +236,6 @@ const DiffModal: React.FC<DiffModalProps> = ({ originalFiles, newFiles, label, o
                                     <tr
                                        key={index}
                                        className={`
-                                          ${line.type === 'added' ? 'bg-green-500/10' : ''}
                                           ${line.type === 'removed' ? 'bg-red-500/10' : ''}
                                           hover:bg-white/[0.02]
                                        `}
@@ -253,15 +250,13 @@ const DiffModal: React.FC<DiffModalProps> = ({ originalFiles, newFiles, label, o
                                        </td>
                                        {/* Change Indicator */}
                                        <td className={`w-6 px-1 py-0.5 text-center select-none font-bold
-                                          ${line.type === 'added' ? 'text-green-400 bg-green-500/20' : ''}
                                           ${line.type === 'removed' ? 'text-red-400 bg-red-500/20' : ''}
                                           ${line.type === 'unchanged' ? 'text-slate-600' : ''}
                                        `}>
-                                          {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ''}
+                                          {line.type === 'removed' ? '-' : ''}
                                        </td>
                                        {/* Code Content */}
                                        <td className={`px-3 py-0.5 whitespace-pre
-                                          ${line.type === 'added' ? 'text-green-300' : ''}
                                           ${line.type === 'removed' ? 'text-red-300 line-through opacity-70' : ''}
                                           ${line.type === 'unchanged' ? 'text-slate-400' : ''}
                                        `}>
