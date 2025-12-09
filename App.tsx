@@ -9,6 +9,7 @@ import { ComponentTree } from './components/ComponentTree';
 import { DeployModal } from './components/DeployModal';
 import { ShareModal, loadProjectFromUrl } from './components/ShareModal';
 import { AISettingsModal } from './components/AISettingsModal';
+import { MegaSettingsModal } from './components/MegaSettingsModal';
 import { HistoryPanel } from './components/HistoryPanel';
 import { ProjectManager } from './components/ProjectManager';
 import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
@@ -649,6 +650,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
+  const [isMegaSettingsOpen, setIsMegaSettingsOpen] = useState(false);
+  const [megaSettingsInitialCategory, setMegaSettingsInitialCategory] = useState<'ai-providers' | 'context-manager' | 'tech-stack' | 'projects' | 'editor' | 'appearance' | 'debug' | 'shortcuts' | 'advanced'>('ai-providers');
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
   const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
@@ -739,6 +742,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       case 'ai-settings':
         setIsAISettingsOpen(true);
         break;
+      case 'settings':
+        setIsMegaSettingsOpen(true);
+        break;
       case 'undo':
         if (canUndo) undo();
         break;
@@ -779,6 +785,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       key: 'Escape',
       action: () => {
         if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
+        else if (isMegaSettingsOpen) setIsMegaSettingsOpen(false);
         else if (isHistoryPanelOpen) setIsHistoryPanelOpen(false);
         else if (pendingReview) setPendingReview(null);
       },
@@ -846,6 +853,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       ctrl: true,
       action: () => setIsProjectManagerOpen(true),
       description: 'Open Project Manager'
+    },
+    {
+      key: ',',
+      ctrl: true,
+      action: () => setIsMegaSettingsOpen(true),
+      description: 'Open Settings'
     },
     {
       key: 'g',
@@ -956,6 +969,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
             onOpenAISettings={() => setIsAISettingsOpen(true)}
+            onOpenMegaSettings={() => setIsMegaSettingsOpen(true)}
             onOpenCodeMap={() => setIsCodeMapModalOpen(true)}
             autoAcceptChanges={autoAcceptChanges}
             onAutoAcceptChangesChange={setAutoAcceptChanges}
@@ -1195,6 +1209,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
        <AISettingsModal
          isOpen={isAISettingsOpen}
          onClose={() => setIsAISettingsOpen(false)}
+         onProviderChange={(providerId, modelId) => handleModelChange(modelId)}
+       />
+
+       {/* Mega Settings Modal */}
+       <MegaSettingsModal
+         isOpen={isMegaSettingsOpen}
+         onClose={() => setIsMegaSettingsOpen(false)}
+         initialCategory={megaSettingsInitialCategory}
          onProviderChange={(providerId, modelId) => handleModelChange(modelId)}
        />
 

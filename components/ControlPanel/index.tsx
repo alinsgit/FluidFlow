@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, AlertTriangle, X, MessageSquare, FileCode, History, Settings, ChevronDown } from 'lucide-react';
+import { Layers, RotateCcw, AlertTriangle, X, MessageSquare, FileCode, History, Settings, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
 import { cleanGeneratedCode, parseMultiFileResponse, GenerationMeta } from '../../utils/cleanCode';
 import { extractFilesFromTruncatedResponse } from '../../utils/extractPartialFiles';
@@ -87,6 +87,7 @@ interface ControlPanelProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   onOpenAISettings?: () => void;
+  onOpenMegaSettings?: () => void;
   onOpenCodeMap?: () => void;
   autoAcceptChanges?: boolean;
   onAutoAcceptChangesChange?: (value: boolean) => void;
@@ -149,6 +150,7 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   selectedModel,
   onModelChange,
   onOpenAISettings,
+  onOpenMegaSettings,
   onOpenCodeMap,
   autoAcceptChanges,
   onAutoAcceptChangesChange,
@@ -2056,13 +2058,22 @@ ${prompt}`;
           </div>
         </div>
 
-        <button
-          onClick={handleResetClick}
-          className="p-2 hover:bg-red-500/10 rounded-lg text-slate-500 hover:text-red-400 transition-colors"
-          title="Start Fresh"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onOpenMegaSettings}
+            className="p-2 hover:bg-blue-500/10 rounded-lg text-slate-500 hover:text-blue-400 transition-colors"
+            title="Settings (Ctrl+,)"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleResetClick}
+            className="p-2 hover:bg-red-500/10 rounded-lg text-slate-500 hover:text-red-400 transition-colors"
+            title="Start Fresh"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* AI Provider Quick Selector */}
@@ -2283,6 +2294,7 @@ ${prompt}`;
         onModelChange={onModelChange}
         onProviderChange={handleProviderChange}
         onOpenAISettings={onOpenAISettings}
+        onOpenMegaSettings={onOpenMegaSettings}
         onOpenCodeMap={onOpenCodeMap}
         onOpenTechStack={() => setOpenModal('techstack')}
         aiHistoryCount={aiHistory.history.length}

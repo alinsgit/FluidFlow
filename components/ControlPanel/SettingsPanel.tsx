@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, ChevronUp, ChevronDown, CheckCircle, AlertCircle, GraduationCap, Bug, Settings2, ChevronRight, History, X, Map, Package, Zap } from 'lucide-react';
+import { Settings, ChevronUp, ChevronDown, CheckCircle, AlertCircle, GraduationCap, Bug, Settings2, ChevronRight, History, X, Map, Package, Zap, SlidersHorizontal } from 'lucide-react';
 import { useDebugStore } from '../../hooks/useDebugStore';
 import { getProviderManager } from '../../services/ai';
 
@@ -11,6 +11,7 @@ interface SettingsPanelProps {
   onModelChange: (modelId: string) => void;
   onProviderChange?: (providerId: string, modelId: string) => void;
   onOpenAISettings?: () => void;
+  onOpenMegaSettings?: () => void;
   aiHistoryCount?: number;
   onOpenAIHistory?: () => void;
   onOpenCodeMap?: () => void;
@@ -28,6 +29,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onEducationModeChange,
   hasApiKey,
   onOpenAISettings,
+  onOpenMegaSettings,
   aiHistoryCount = 0,
   onOpenAIHistory,
   onOpenCodeMap,
@@ -97,6 +99,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
             <div className="p-3 space-y-1">
               {/* AI Provider Settings - Quick Link */}
+              {/* All Settings - Mega Settings Modal */}
+              {onOpenMegaSettings && (
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    onOpenMegaSettings();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 hover:bg-white/5 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-lg group-hover:from-blue-500/30 group-hover:to-purple-500/30 transition-colors">
+                      <SlidersHorizontal className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-sm text-slate-200 font-medium block">All Settings</span>
+                      <span className="text-[10px] text-slate-500">AI, Editor, Appearance & more</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">Ctrl+,</kbd>
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </div>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setIsOpen(false);
