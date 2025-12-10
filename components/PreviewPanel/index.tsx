@@ -361,7 +361,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
       }
 
       // Use the same model as main chat (selectedModel is passed from App.tsx)
-      const modelToUse = selectedModel || activeConfig?.defaultModel || 'models/gemini-2.5-flash';
+      const modelToUse = selectedModel || activeConfig?.defaultModel;
 
       console.log('[AutoFix] Using provider:', activeConfig?.type, 'model:', modelToUse);
 
@@ -1910,7 +1910,7 @@ const PreviewContent: React.FC<{
                   <AlertTriangle className="w-5 h-5 text-red-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-red-300 mb-1">Auto-fix Başarısız</h4>
+                  <h4 className="text-sm font-semibold text-red-300 mb-1">Auto-fix Failed</h4>
                   <p className="text-xs text-red-300/70 line-clamp-2 mb-3">
                     {failedAutoFixError.slice(0, 150)}{failedAutoFixError.length > 150 ? '...' : ''}
                   </p>
@@ -1921,7 +1921,7 @@ const PreviewContent: React.FC<{
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-xs font-medium text-blue-300 transition-colors"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
-                        Chat'e Gönder
+                        Send to Chat
                       </button>
                     )}
                     <button
@@ -1929,7 +1929,7 @@ const PreviewContent: React.FC<{
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-500/20 hover:bg-slate-500/30 border border-slate-500/30 rounded-lg text-xs font-medium text-slate-300 transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
-                      Kapat
+                      Dismiss
                     </button>
                   </div>
                 </div>
