@@ -23,7 +23,7 @@ import { useProject } from './hooks/useProject';
 import { diffLines } from 'diff';
 import { Check, Split, FileCode, AlertCircle, Undo2, Redo2, History, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { FileSystem, TabType } from './types';
-import { InspectedElement } from './components/PreviewPanel/ComponentInspector';
+import { InspectedElement, EditScope } from './components/PreviewPanel/ComponentInspector';
 import { gitApi, projectApi } from './services/projectApi';
 import { getContextManager } from './services/conversationContext';
 
@@ -678,9 +678,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   const controlPanelRef = useRef<ControlPanelRef>(null);
 
   // Handler for inspect edit from PreviewPanel
-  const handleInspectEdit = useCallback(async (prompt: string, element: InspectedElement) => {
+  const handleInspectEdit = useCallback(async (prompt: string, element: InspectedElement, scope: EditScope) => {
     if (controlPanelRef.current) {
-      await controlPanelRef.current.handleInspectEdit(prompt, element);
+      await controlPanelRef.current.handleInspectEdit(prompt, element, scope);
     }
   }, []);
 

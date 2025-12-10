@@ -174,6 +174,38 @@ export const useTechStack = () => {
       instruction += '\n- **Animations**: CSS transitions and keyframe animations';
     }
 
+    // Component Architecture Rules (CRITICAL for maintainability and inspection)
+    instruction += '\n\n**COMPONENT ARCHITECTURE RULES (MANDATORY)**:';
+    instruction += '\n- EVERY component MUST be in its own separate file - NEVER define multiple components in one file';
+    instruction += '\n- App.tsx should ONLY contain routing/layout logic and import child components';
+    instruction += '\n- Create a components/ directory with subdirectories for feature grouping';
+    instruction += '\n- File structure example:';
+    instruction += '\n  - src/components/Header/Header.tsx (or index.tsx)';
+    instruction += '\n  - src/components/Header/HeaderNav.tsx';
+    instruction += '\n  - src/components/Header/HeaderLogo.tsx';
+    instruction += '\n  - src/components/ProductCard/ProductCard.tsx';
+    instruction += '\n  - src/components/ProductCard/ProductImage.tsx';
+    instruction += '\n  - src/components/ProductCard/ProductPrice.tsx';
+    instruction += '\n- Each file exports ONE default component matching the filename';
+    instruction += '\n- Shared/reusable components go in src/components/shared/ or src/components/ui/';
+    instruction += '\n- Page-level components go in src/pages/ or src/views/';
+
+    // FluidFlow ID Attributes (CRITICAL for element inspection and targeting)
+    instruction += '\n\n**FLUIDFLOW ELEMENT IDENTIFICATION (MANDATORY for all interactive elements)**:';
+    instruction += '\n- Add `data-ff-group` attribute to identify component groups (e.g., "header", "product-card", "sidebar")';
+    instruction += '\n- Add `data-ff-id` attribute for unique element identification within a group';
+    instruction += '\n- Format: data-ff-group="group-name" data-ff-id="element-name"';
+    instruction += '\n- Examples:';
+    instruction += '\n  - <header data-ff-group="header" data-ff-id="main-header">';
+    instruction += '\n  - <nav data-ff-group="header" data-ff-id="navigation">';
+    instruction += '\n  - <button data-ff-group="header" data-ff-id="menu-toggle">';
+    instruction += '\n  - <div data-ff-group="product-card" data-ff-id="card-container">';
+    instruction += '\n  - <img data-ff-group="product-card" data-ff-id="product-image">';
+    instruction += '\n  - <span data-ff-group="product-card" data-ff-id="price-display">';
+    instruction += '\n- ALWAYS add these attributes to: buttons, links, inputs, images, cards, sections, headers, footers';
+    instruction += '\n- Use kebab-case for both group and id values';
+    instruction += '\n- IDs should be descriptive and unique within their group';
+
     // Import Path Guidelines (Critical for browser module resolution)
     instruction += '\n\n**IMPORT PATH RULES (CRITICAL - Browser module resolution)**:';
     instruction += '\n- ALWAYS use relative paths for local files: "./components/Hero" or "../utils/helpers"';

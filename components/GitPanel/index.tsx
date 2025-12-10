@@ -2,17 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   GitBranch, GitCommit, Check, X, Plus, RefreshCw, Loader2,
   FileText, FilePlus, FileX, ChevronDown, ChevronUp,
-  AlertCircle, Clock, ArrowLeft, Eye, Copy, CheckCheck,
-  GitMerge, AlertTriangle, Sparkles, RotateCcw
+  AlertCircle, Clock, AlertTriangle, Sparkles, RotateCcw
 } from 'lucide-react';
-import { GitStatus, GitCommit as GitCommitType, CommitDetails, CommitFileChange, gitApi } from '@/services/projectApi';
+import { GitStatus, GitCommit as GitCommitType, CommitDetails, gitApi } from '@/services/projectApi';
 import { FileSystem } from '@/types';
 import { getProviderManager } from '@/services/ai';
-
-interface LocalChange {
-  path: string;
-  status: 'added' | 'modified' | 'deleted';
-}
+import { LocalChange } from './types';
+import { formatCommitDate } from './utils';
+import { FileItem } from './FileItem';
+import { CommitDetailsView } from './CommitDetailsView';
+import { DiffModal } from './DiffModal';
 
 interface GitPanelProps {
   projectId: string | null;
@@ -743,267 +742,13 @@ ${changedFilesContext}`;
   );
 };
 
-// Commit Details View Component
-interface CommitDetailsViewProps {
-  commit: CommitDetails;
-  isLoading: boolean;
-  onBack: () => void;
-  onViewDiff: (file: string) => void;
-  onViewFullDiff: () => void;
-  onCopyHash: () => void;
-  copiedHash: string | null;
-  onRevert?: (commit: CommitDetails) => void;
-  isFirstCommit?: boolean;
-}
-
-const CommitDetailsView: React.FC<CommitDetailsViewProps> = ({
-  commit,
-  isLoading,
-  onBack,
-  onViewDiff,
-  onViewFullDiff,
-  onCopyHash,
-  copiedHash,
-  onRevert,
-  isFirstCommit = false
-}) => {
-  if (isLoading) {
-    return (
-      <div className="p-4 text-center">
-        <Loader2 className="w-5 h-5 mx-auto text-blue-400 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-3">
-      {/* Header with back button */}
-      <div className="flex items-center gap-2.5 mb-3">
-        <button
-          onClick={onBack}
-          className="p-1.5 hover:bg-white/10 rounded transition-colors text-slate-400 hover:text-white"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-white font-medium truncate">{commit.message}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <button
-              onClick={onCopyHash}
-              className="flex items-center gap-1.5 text-xs text-slate-500 font-mono hover:text-blue-400 transition-colors"
-            >
-              {copiedHash === commit.hash ? (
-                <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-              {commit.hashShort}
-            </button>
-            <span className="text-xs text-slate-600">·</span>
-            <span className="text-xs text-slate-500">{commit.author}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="flex items-center gap-2.5 mb-3 px-1">
-        <span className="text-xs text-slate-400">
-          {commit.stats.filesChanged} file{commit.stats.filesChanged !== 1 ? 's' : ''}
-        </span>
-        {commit.stats.insertions > 0 && (
-          <span className="text-xs text-emerald-400">+{commit.stats.insertions}</span>
-        )}
-        {commit.stats.deletions > 0 && (
-          <span className="text-xs text-red-400">-{commit.stats.deletions}</span>
-        )}
-        <button
-          onClick={onViewFullDiff}
-          className="ml-auto text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-        >
-          <Eye className="w-3.5 h-3.5" />
-          All
-        </button>
-      </div>
-
-      {/* Changed Files */}
-      <div className="space-y-1">
-        {commit.files.map((file) => (
-          <button
-            key={file.path}
-            onClick={() => onViewDiff(file.path)}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-slate-400 hover:bg-white/5 rounded group transition-colors"
-          >
-            <CommitFileIcon status={file.status} />
-            <span className="truncate flex-1 text-left group-hover:text-white transition-colors">
-              {file.newPath ? `${file.path} → ${file.newPath}` : file.path}
-            </span>
-            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-          </button>
-        ))}
-      </div>
-
-      {/* Revert Button */}
-      {onRevert && !isFirstCommit && (
-        <div className="mt-4 pt-3 border-t border-white/5">
-          <button
-            onClick={() => onRevert(commit)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded-lg text-sm font-medium transition-colors border border-amber-500/30"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Restore to this commit
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Commit File Icon
-const CommitFileIcon: React.FC<{ status: CommitFileChange['status'] }> = ({ status }) => {
-  const configs: Record<CommitFileChange['status'], { Icon: React.FC<any>; color: string }> = {
-    added: { Icon: FilePlus, color: 'text-emerald-400' },
-    modified: { Icon: FileText, color: 'text-amber-400' },
-    deleted: { Icon: FileX, color: 'text-red-400' },
-    renamed: { Icon: GitMerge, color: 'text-purple-400' },
-    copied: { Icon: Copy, color: 'text-blue-400' },
-    unknown: { Icon: FileText, color: 'text-slate-400' },
-  };
-
-  const { Icon, color } = configs[status] || configs.unknown;
-  return <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />;
-};
-
-// Diff Modal Component
-interface DiffModalProps {
-  diff: string;
-  isLoading: boolean;
-  fileName: string | null;
-  commitHash?: string;
-  onClose: () => void;
-}
-
-const DiffModal: React.FC<DiffModalProps> = ({ diff, isLoading, fileName, commitHash, onClose }) => {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-4xl max-h-[80vh] bg-slate-900 rounded-xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-medium text-white">
-              {fileName ? fileName : 'All Changes'}
-            </span>
-            {commitHash && (
-              <span className="text-xs text-slate-500 font-mono">@ {commitHash}</span>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          {isLoading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="w-6 h-6 mx-auto text-blue-400 animate-spin" />
-              <p className="text-sm text-slate-400 mt-2">Loading diff...</p>
-            </div>
-          ) : diff ? (
-            <DiffViewer diff={diff} />
-          ) : (
-            <div className="p-8 text-center text-slate-500">
-              <p>No changes to display</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Diff Viewer Component
-const DiffViewer: React.FC<{ diff: string }> = ({ diff }) => {
-  const lines = diff.split('\n');
-
-  return (
-    <pre className="text-sm font-mono p-4 overflow-x-auto">
-      {lines.map((line, index) => {
-        let className = 'text-slate-400';
-        let bgClass = '';
-
-        if (line.startsWith('+++') || line.startsWith('---')) {
-          className = 'text-slate-500 font-bold';
-        } else if (line.startsWith('@@')) {
-          className = 'text-purple-400';
-          bgClass = 'bg-purple-500/10';
-        } else if (line.startsWith('+')) {
-          className = 'text-emerald-400';
-          bgClass = 'bg-emerald-500/10';
-        } else if (line.startsWith('-')) {
-          className = 'text-red-400';
-          bgClass = 'bg-red-500/10';
-        } else if (line.startsWith('diff --git')) {
-          className = 'text-blue-400 font-bold';
-          bgClass = 'bg-blue-500/10 border-t border-white/5 mt-2 pt-2';
-        } else if (line.startsWith('index ') || line.startsWith('new file') || line.startsWith('deleted file')) {
-          className = 'text-slate-600';
-        }
-
-        return (
-          <div key={index} className={`${bgClass} -mx-4 px-4`}>
-            <span className={className}>{line || ' '}</span>
-          </div>
-        );
-      })}
-    </pre>
-  );
-};
-
-// File item component
-interface FileItemProps {
-  file: string;
-  status: 'staged' | 'modified' | 'untracked' | 'deleted';
-}
-
-const FileItem: React.FC<FileItemProps> = ({ file, status }) => {
-  const statusColors = {
-    staged: 'text-emerald-400',
-    modified: 'text-amber-400',
-    untracked: 'text-blue-400',
-    deleted: 'text-red-400',
-  };
-
-  const StatusIcon = {
-    staged: Check,
-    modified: FileText,
-    untracked: FilePlus,
-    deleted: FileX,
-  }[status];
-
-  return (
-    <div className="flex items-center gap-2.5 px-2.5 py-1.5 ml-4 text-sm text-slate-400 hover:bg-white/5 rounded">
-      <StatusIcon className={`w-4 h-4 ${statusColors[status]}`} />
-      <span className="truncate">{file}</span>
-    </div>
-  );
-};
-
-// Format commit date
-function formatCommitDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
-
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 export default GitPanel;
+
+// Re-export all components for external use
+export { FileItem } from './FileItem';
+export { CommitFileIcon } from './CommitFileIcon';
+export { DiffViewer } from './DiffViewer';
+export { DiffModal } from './DiffModal';
+export { CommitDetailsView } from './CommitDetailsView';
+export { formatCommitDate } from './utils';
+export type { LocalChange, FileItemProps, CommitFileIconProps, DiffModalProps, DiffViewerProps, CommitDetailsViewProps } from './types';

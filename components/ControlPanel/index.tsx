@@ -44,7 +44,7 @@ import { generateContextForPrompt } from '../../utils/codemap';
 import { debugLog } from '../../hooks/useDebugStore';
 import { useTechStack } from '../../hooks/useTechStack';
 import { getProviderManager, GenerationRequest, GenerationResponse } from '../../services/ai';
-import { InspectedElement } from '../PreviewPanel/ComponentInspector';
+import { InspectedElement, EditScope } from '../PreviewPanel/ComponentInspector';
 import { useAIHistory } from '../../hooks/useAIHistory';
 import { AIHistoryModal } from '../AIHistoryModal';
 import { TechStackModal } from './TechStackModal';
@@ -65,7 +65,7 @@ import type { ProjectMeta } from '@/services/projectApi';
 
 // Ref interface for external access
 export interface ControlPanelRef {
-  handleInspectEdit: (prompt: string, element: InspectedElement) => Promise<void>;
+  handleInspectEdit: (prompt: string, element: InspectedElement, scope: EditScope) => Promise<void>;
   sendErrorToChat: (errorMessage: string) => void;
 }
 
@@ -917,14 +917,18 @@ When ALL files are complete:
 - isComplete: true only when remainingFiles is empty
 
 **CODE REQUIREMENTS**:
-- Entry point MUST be 'src/App.tsx'
-- Break UI into logical sub-components in 'src/components/'
-- Use RELATIVE import paths (e.g., './components/Header' from App.tsx, '../Header' from nested components)
+- Entry point MUST be 'src/App.tsx' - ONLY for routing/layout, import components
+- EVERY UI component MUST be in its OWN SEPARATE FILE - NO multiple components per file
+- Break UI into logical sub-components in 'src/components/{feature}/' folders
+- File structure: src/components/Header/Header.tsx, src/components/Header/HeaderNav.tsx, etc.
+- Use RELATIVE import paths (e.g., './components/Header' from App.tsx)
 - Use Tailwind CSS for styling (NO inline styles or CSS-in-JS)
 - Use 'lucide-react' for icons
 - Create realistic mock data (5-8 entries), NO "Lorem Ipsum"
 - Modern, clean aesthetic with generous padding
 - CRITICAL: Keep files SMALL - under 300 lines AND under 4000 characters each
+- Add data-ff-group="group-name" and data-ff-id="element-id" to ALL interactive elements (buttons, inputs, links, cards, sections)
+- Example: <button data-ff-group="header" data-ff-id="menu-btn">Menu</button>
 
 **EXPLANATION REQUIREMENTS**:
 Write a clear markdown explanation including:
@@ -2005,19 +2009,23 @@ Generate ONLY these files. Each file must be COMPLETE and FUNCTIONAL.`;
 
   // Handle inspect edit from PreviewPanel - with chat history and streaming
   // Handle inspect edit from PreviewPanel - using normal chat flow
-  const handleInspectEdit = useCallback(async (prompt: string, element: InspectedElement) => {
+  const handleInspectEdit = useCallback(async (prompt: string, element: InspectedElement, scope: EditScope) => {
     const appCode = files['src/App.tsx'];
     if (!appCode) return;
 
-    // Build element context
+    // Build element context with FluidFlow identification
     const elementContext = `
 🎯 **Selected Element:**
 - Tag: <${element.tagName.toLowerCase()}>
 - Component: ${element.componentName || 'Unknown'}
 - Classes: ${element.className || 'none'}
 - ID: ${element.id || 'none'}
+${element.ffGroup ? `- FluidFlow Group: data-ff-group="${element.ffGroup}"` : ''}
+${element.ffId ? `- FluidFlow ID: data-ff-id="${element.ffId}"` : ''}
 - Text content: "${element.textContent?.slice(0, 100) || ''}"
 ${element.parentComponents ? `- Parent components: ${element.parentComponents.join(' > ')}` : ''}
+
+📋 **Edit Scope:** ${scope === 'group' ? `ALL elements with data-ff-group="${element.ffGroup}"` : element.ffId ? `ONLY this element (data-ff-id="${element.ffId}")` : 'This specific element'}
 `;
 
     // Combine element context with user prompt

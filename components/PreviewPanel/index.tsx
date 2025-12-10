@@ -24,7 +24,7 @@ import { ExportModal } from './ExportModal';
 import { GithubModal } from './GithubModal';
 import { AccessibilityModal } from './AccessibilityModal';
 import { ConsultantReport } from './ConsultantReport';
-import { ComponentInspector, InspectionOverlay, InspectedElement } from './ComponentInspector';
+import { ComponentInspector, InspectionOverlay, InspectedElement, EditScope } from './ComponentInspector';
 import DebugPanel from './DebugPanel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { DBStudio } from './DBStudio';
@@ -47,7 +47,7 @@ interface PreviewPanelProps {
   selectedModel: string;
   activeTab?: TabType;
   setActiveTab?: (tab: TabType) => void;
-  onInspectEdit?: (prompt: string, element: InspectedElement) => Promise<void>;
+  onInspectEdit?: (prompt: string, element: InspectedElement, scope: EditScope) => Promise<void>;
   onSendErrorToChat?: (errorMessage: string) => void;
   // Git props
   projectId?: string | null;
@@ -741,14 +741,14 @@ Return ONLY the complete fixed ${targetFile} code.
   };
 
   // Handle targeted component edit
-  const handleInspectEdit = async (prompt: string, element: InspectedElement) => {
+  const handleInspectEdit = async (prompt: string, element: InspectedElement, scope: EditScope) => {
     if (!appCode) return;
     setIsInspectEditing(true);
 
     // If external handler provided (with chat history support), use it
     if (onInspectEdit) {
       try {
-        await onInspectEdit(prompt, element);
+        await onInspectEdit(prompt, element, scope);
         setInspectedElement(null);
         setIsInspectMode(false);
       } catch (error) {
@@ -1810,7 +1810,7 @@ const PreviewContent: React.FC<{
   inspectedElement: InspectedElement | null;
   isInspectEditing: boolean;
   onCloseInspector: () => void;
-  onInspectEdit: (prompt: string, element: InspectedElement) => void;
+  onInspectEdit: (prompt: string, element: InspectedElement, scope: EditScope) => void;
   // URL Bar props
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   currentUrl: string;
@@ -2305,7 +2305,9 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
             textContent: target.textContent?.slice(0, 200) || null,
             rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
             componentName: componentName,
-            parentComponents: parentComponents.length > 0 ? parentComponents : null
+            parentComponents: parentComponents.length > 0 ? parentComponents : null,
+            ffGroup: target.getAttribute('data-ff-group') || null,
+            ffId: target.getAttribute('data-ff-id') || null
           }
         }, '*');
       }, true);

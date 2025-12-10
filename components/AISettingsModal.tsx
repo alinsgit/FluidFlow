@@ -1,42 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import {
-  X, Cpu, Cloud, Server, Plus, Trash2, Check, Loader2,
-  ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw, Sparkles,
-  ExternalLink, AlertCircle, CheckCircle2, Pencil, Monitor, Download,
+  X, Plus, Trash2, Check, Loader2, Server,
+  ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw,
+  ExternalLink, AlertCircle, CheckCircle2, Pencil, Download,
   Settings2, Zap, Globe, Key, Link2
 } from 'lucide-react';
 import {
   ProviderConfig, ProviderType, DEFAULT_PROVIDERS, ModelOption,
   getProviderManager
 } from '../services/ai';
+import { ProviderIcon } from './shared/ProviderIcon';
 
 interface AISettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onProviderChange?: (providerId: string, modelId: string) => void;
 }
-
-// Provider icons
-const ProviderIcon: React.FC<{ type: ProviderType; className?: string }> = ({ type, className = "w-5 h-5" }) => {
-  switch (type) {
-    case 'gemini':
-      return <Sparkles className={`${className} text-blue-400`} />;
-    case 'openai':
-      return <div className={`${className} rounded-sm bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-white`}>AI</div>;
-    case 'anthropic':
-      return <div className={`${className} rounded-sm bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white`}>A</div>;
-    case 'zai':
-      return <div className={`${className} rounded-sm bg-indigo-500 flex items-center justify-center text-[10px] font-bold text-white`}>Z</div>;
-    case 'ollama':
-      return <Server className={`${className} text-purple-400`} />;
-    case 'lmstudio':
-      return <Monitor className={`${className} text-pink-400`} />;
-    case 'openrouter':
-      return <Cloud className={`${className} text-cyan-400`} />;
-    default:
-      return <Cpu className={`${className} text-slate-400`} />;
-  }
-};
 
 export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClose, onProviderChange }) => {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);

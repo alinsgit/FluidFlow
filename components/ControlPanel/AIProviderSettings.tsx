@@ -1,38 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Cpu, Cloud, Server, Plus, Trash2, Check, X, Loader2,
-  ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw, Sparkles,
+  Plus, Trash2, Check, X, Loader2,
+  ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw,
   ExternalLink, AlertCircle, CheckCircle2, Settings2, Pencil, Save,
-  Monitor, Download
+  Download
 } from 'lucide-react';
 import {
   ProviderConfig, ProviderType, DEFAULT_PROVIDERS, ModelOption,
   getProviderManager
 } from '../../services/ai';
+import { ProviderIcon } from '../shared/ProviderIcon';
 
 interface AIProviderSettingsProps {
   onProviderChange?: (providerId: string, modelId: string) => void;
 }
-
-// Provider icons
-const ProviderIcon: React.FC<{ type: ProviderType; className?: string }> = ({ type, className = "w-4 h-4" }) => {
-  switch (type) {
-    case 'gemini':
-      return <Sparkles className={`${className} text-blue-400`} />;
-    case 'openai':
-      return <div className={`${className} rounded-sm bg-emerald-500 flex items-center justify-center text-[8px] font-bold text-white`}>AI</div>;
-    case 'anthropic':
-      return <div className={`${className} rounded-sm bg-orange-500 flex items-center justify-center text-[8px] font-bold text-white`}>A</div>;
-    case 'ollama':
-      return <Server className={`${className} text-purple-400`} />;
-    case 'lmstudio':
-      return <Monitor className={`${className} text-pink-400`} />;
-    case 'openrouter':
-      return <Cloud className={`${className} text-cyan-400`} />;
-    default:
-      return <Cpu className={`${className} text-slate-400`} />;
-  }
-};
 
 export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ onProviderChange }) => {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);

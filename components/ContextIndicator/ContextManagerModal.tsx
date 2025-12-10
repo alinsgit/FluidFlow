@@ -6,11 +6,8 @@ import {
   MessageSquare,
   Trash2,
   RefreshCw,
-  ChevronDown,
-  ChevronRight,
   AlertTriangle,
   CheckCircle,
-  Clock,
   FileText,
   X,
   Loader2,
@@ -18,257 +15,19 @@ import {
   Layers,
   Scissors
 } from 'lucide-react';
-import { getContextManager, ConversationContext, CONTEXT_IDS } from '../services/conversationContext';
-import { getFluidFlowConfig, CompactionLog } from '../services/fluidflowConfig';
-import { getProviderManager } from '../services/ai';
+import { getContextManager, ConversationContext } from '@/services/conversationContext';
+import { getFluidFlowConfig, CompactionLog } from '@/services/fluidflowConfig';
+import { getProviderManager } from '@/services/ai';
+import { ContextManagerModalProps } from './types';
+import { ConfirmModal } from './ConfirmModal';
+import { getModelContextSize } from './utils';
 
-interface ContextIndicatorProps {
-  contextId: string;
-  showLabel?: boolean;
-  onCompact?: () => Promise<void>;
-  className?: string;
-}
-
-// Get context window size for current model
-function getModelContextSize(): number {
-  const manager = getProviderManager();
-  const config = manager.getActiveConfig();
-  if (!config) return 128000; // Default
-
-  const model = config.models.find(m => m.id === config.defaultModel);
-  return model?.contextWindow || 128000;
-}
-
-export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
-  contextId,
-  showLabel = true,
-  onCompact,
-  className = ''
-}) => {
-  const [showModal, setShowModal] = useState(false);
-  const [stats, setStats] = useState<{ messages: number; tokens: number } | null>(null);
-
-  const contextManager = getContextManager();
-  const maxTokens = getModelContextSize();
-
-  useEffect(() => {
-    const updateStats = () => {
-      // Ensure context exists before getting stats
-      contextManager.getContext(contextId);
-      const s = contextManager.getStats(contextId);
-      if (s) {
-        setStats({ messages: s.messages, tokens: s.tokens });
-      }
-    };
-
-    updateStats();
-    // Update every 2 seconds
-    const interval = setInterval(updateStats, 2000);
-    return () => clearInterval(interval);
-  }, [contextId]);
-
-  if (!stats) {
-    // Initialize with default stats while loading
-    return (
-      <div className={`flex items-center gap-3 px-3 py-2 rounded-lg ${className}`}>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-slate-600 rounded-full w-0" />
-          </div>
-          <span className="text-xs font-mono text-slate-500 whitespace-nowrap">0%</span>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-slate-500 font-mono whitespace-nowrap">
-          <span className="flex items-center gap-1.5">
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-slate-400">Msg:</span>
-            0
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Zap className="w-4 h-4" />
-            <span className="text-slate-400">Tok:</span>
-            0k
-          </span>
-        </div>
-        <div className="w-4 h-4" /> {/* Spacer for clear button */}
-      </div>
-    );
-  }
-
-  const usagePercent = Math.min(100, (stats.tokens / maxTokens) * 100);
-  const isWarning = usagePercent > 60;
-  const isCritical = usagePercent > 80;
-
-  const getColor = () => {
-    if (isCritical) return 'text-red-400';
-    if (isWarning) return 'text-amber-400';
-    return 'text-emerald-400';
-  };
-
-  const getBgColor = () => {
-    if (isCritical) return 'bg-red-500';
-    if (isWarning) return 'bg-amber-500';
-    return 'bg-emerald-500';
-  };
-
-  return (
-    <>
-      {/* Compact Indicator */}
-      <div
-        className={`flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors ${className}`}
-        title="Context usage - Click for details"
-      >
-        {/* Mini progress bar */}
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 flex-1 min-w-0"
-        >
-          <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${getBgColor()} rounded-full transition-all duration-300`}
-              style={{ width: `${usagePercent}%` }}
-            />
-          </div>
-
-          <span className={`text-xs font-mono ${getColor()} whitespace-nowrap`}>
-            {Math.round(usagePercent)}%
-          </span>
-
-          {isCritical && (
-            <AlertTriangle className="w-4 h-4 text-red-400 animate-pulse flex-shrink-0" />
-          )}
-        </button>
-
-        {/* Stats */}
-        <div className="flex items-center gap-3 text-xs text-slate-500 font-mono whitespace-nowrap">
-          <span className="flex items-center gap-1.5">
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-slate-400">Msg:</span>
-            {stats.messages}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Zap className="w-4 h-4" />
-            <span className="text-slate-400">Tok:</span>
-            {Math.round(stats.tokens / 1000)}k
-          </span>
-        </div>
-
-        {/* Clear Messages Button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            contextManager.clearContext(contextId);
-          }}
-          className="p-1.5 hover:bg-slate-700/50 rounded text-slate-500 hover:text-red-400 transition-colors"
-          title="Clear messages"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Detail Modal */}
-      {showModal && (
-        <ContextManagerModal
-          contextId={contextId}
-          onClose={() => setShowModal(false)}
-          onCompact={onCompact}
-        />
-      )}
-    </>
-  );
-};
-
-// Full Context Manager Modal
-interface ContextManagerModalProps {
-  contextId: string;
-  onClose: () => void;
-  onCompact?: () => Promise<void>;
-}
-
-// Confirmation Modal Component
-interface ConfirmModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title: string;
-  message: string;
-  confirmText?: string;
-  confirmVariant?: 'danger' | 'warning' | 'default';
-}
-
-const ConfirmModal: React.FC<ConfirmModalProps> = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText = 'Confirm',
-  confirmVariant = 'danger'
-}) => {
-  if (!isOpen) return null;
-
-  const variantStyles = {
-    danger: 'bg-red-600 hover:bg-red-500 text-white',
-    warning: 'bg-amber-600 hover:bg-amber-500 text-white',
-    default: 'bg-blue-600 hover:bg-blue-500 text-white'
-  };
-
-  const modalContent = (
-    <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden mx-4 animate-in zoom-in-95 duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${
-              confirmVariant === 'danger' ? 'bg-red-500/20' :
-              confirmVariant === 'warning' ? 'bg-amber-500/20' : 'bg-blue-500/20'
-            }`}>
-              <AlertTriangle className={`w-5 h-5 ${
-                confirmVariant === 'danger' ? 'text-red-400' :
-                confirmVariant === 'warning' ? 'text-amber-400' : 'text-blue-400'
-              }`} />
-            </div>
-            <h3 className="font-medium text-lg">{title}</h3>
-          </div>
-        </div>
-        <div className="p-4">
-          <p className="text-sm text-slate-300">{message}</p>
-        </div>
-        <div className="flex gap-3 p-4 border-t border-white/10 bg-slate-950/50">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${variantStyles[confirmVariant]}`}
-          >
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  return createPortal(modalContent, document.body);
-};
-
-const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
+export const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
   contextId,
   onClose,
   onCompact
 }) => {
   const [isCompacting, setIsCompacting] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
   const [allContexts, setAllContexts] = useState<ConversationContext[]>([]);
   const [compactionLogs, setCompactionLogs] = useState<CompactionLog[]>([]);
   const [activeTab, setActiveTab] = useState<'current' | 'all' | 'logs'>('current');
@@ -289,7 +48,6 @@ const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
 
   // Get current context stats
   const stats = contextManager.getStats(contextId);
-  const context = contextManager.getContext(contextId);
 
   useEffect(() => {
     setAllContexts(contextManager.listContexts());
@@ -389,7 +147,7 @@ const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as 'current' | 'all' | 'logs')}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5'
@@ -695,4 +453,4 @@ const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
   );
 };
 
-export default ContextIndicator;
+export default ContextManagerModal;

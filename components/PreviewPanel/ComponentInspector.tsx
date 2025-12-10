@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, Loader2, MousePointer2, Sparkles } from 'lucide-react';
+import { X, Send, Loader2, MousePointer2, Sparkles, Layers, Target } from 'lucide-react';
 
 export interface InspectedElement {
   tagName: string;
@@ -10,12 +10,17 @@ export interface InspectedElement {
   componentName?: string;
   parentComponents?: string[];
   styles?: Record<string, string>;
+  // FluidFlow identification attributes
+  ffGroup?: string;  // data-ff-group value
+  ffId?: string;     // data-ff-id value
 }
+
+export type EditScope = 'element' | 'group';
 
 interface ComponentInspectorProps {
   element: InspectedElement | null;
   onClose: () => void;
-  onSubmit: (prompt: string, element: InspectedElement) => void;
+  onSubmit: (prompt: string, element: InspectedElement, scope: EditScope) => void;
   isProcessing: boolean;
 }
 
@@ -26,12 +31,26 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
   isProcessing
 }) => {
   const [prompt, setPrompt] = useState('');
+  const [scope, setScope] = useState<EditScope>('element');
 
   if (!element) return null;
 
+  const hasGroup = !!element.ffGroup;
+  const hasId = !!element.ffId;
+
   const handleSubmit = () => {
     if (!prompt.trim()) return;
-    onSubmit(prompt, element);
+
+    // Build enhanced prompt with scope context
+    let enhancedPrompt = prompt;
+
+    if (scope === 'group' && hasGroup) {
+      enhancedPrompt = `[SCOPE: Apply to ALL elements with data-ff-group="${element.ffGroup}"]\n${prompt}`;
+    } else if (hasId) {
+      enhancedPrompt = `[SCOPE: Apply ONLY to element with data-ff-id="${element.ffId}"${hasGroup ? ` in group "${element.ffGroup}"` : ''}]\n${prompt}`;
+    }
+
+    onSubmit(enhancedPrompt, element, scope);
   };
 
   const quickActions = [
@@ -44,13 +63,13 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
   ];
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-[500px] animate-in slide-in-from-bottom-4 duration-300">
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-[520px] animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-slate-900/95 backdrop-blur-xl border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-purple-500/10">
           <div className="flex items-center gap-2">
             <MousePointer2 className="w-4 h-4 text-purple-400" />
-            <span className="text-sm font-medium text-white">Component Selected</span>
+            <span className="text-sm font-medium text-white">Element Selected</span>
           </div>
           <button
             onClick={onClose}
@@ -71,6 +90,16 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
             <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs font-mono">
               &lt;{element.tagName.toLowerCase()}&gt;
             </span>
+            {element.ffGroup && (
+              <span className="px-2 py-1 bg-emerald-500/20 text-emerald-300 rounded text-xs font-mono">
+                group:{element.ffGroup}
+              </span>
+            )}
+            {element.ffId && (
+              <span className="px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded text-xs font-mono">
+                id:{element.ffId}
+              </span>
+            )}
             {element.id && (
               <span className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded text-xs font-mono">
                 #{element.id}
@@ -88,6 +117,45 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
             </p>
           )}
         </div>
+
+        {/* Scope Selector - Only show if we have ff-group */}
+        {hasGroup && (
+          <div className="px-4 py-3 border-b border-white/5 bg-slate-900/50">
+            <p className="text-[10px] text-slate-500 mb-2 uppercase tracking-wide">Apply Changes To</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setScope('element')}
+                disabled={isProcessing}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  scope === 'element'
+                    ? 'bg-cyan-500/20 border-2 border-cyan-500/50 text-cyan-300'
+                    : 'bg-slate-800/50 border-2 border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Target className="w-4 h-4" />
+                <div className="text-left">
+                  <div>Only This Element</div>
+                  {hasId && <div className="text-[10px] opacity-70">id: {element.ffId}</div>}
+                </div>
+              </button>
+              <button
+                onClick={() => setScope('group')}
+                disabled={isProcessing}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  scope === 'group'
+                    ? 'bg-emerald-500/20 border-2 border-emerald-500/50 text-emerald-300'
+                    : 'bg-slate-800/50 border-2 border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <div className="text-left">
+                  <div>All in Group</div>
+                  <div className="text-[10px] opacity-70">group: {element.ffGroup}</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="px-4 py-3 border-b border-white/5">
@@ -135,7 +203,12 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
             </button>
           </div>
           <p className="text-[10px] text-slate-600 mt-2 text-center">
-            Press Enter to apply changes to this component
+            {scope === 'group' && hasGroup
+              ? `Changes will apply to all "${element.ffGroup}" elements`
+              : hasId
+                ? `Changes will apply only to "${element.ffId}"`
+                : 'Press Enter to apply changes'
+            }
           </p>
         </div>
       </div>
