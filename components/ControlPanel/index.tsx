@@ -66,6 +66,7 @@ import type { ProjectMeta } from '@/services/projectApi';
 // Ref interface for external access
 export interface ControlPanelRef {
   handleInspectEdit: (prompt: string, element: InspectedElement) => Promise<void>;
+  sendErrorToChat: (errorMessage: string) => void;
 }
 
 interface GitStatus {
@@ -2029,11 +2030,33 @@ ${prompt}`;
     await handleSend(combinedPrompt, []);
   }, [files, handleSend]);
 
+  // Send error to chat - called from PreviewPanel when auto-fix fails
+  const sendErrorToChat = useCallback((errorMessage: string) => {
+    const errorPrompt = `🚨 **Runtime Error - Auto-fix Failed**
+
+The following error occurred and auto-fix could not resolve it:
+
+\`\`\`
+${errorMessage}
+\`\`\`
+
+Please analyze this error and fix the code. Focus on:
+1. Understanding what caused the error
+2. Identifying the exact location in the code
+3. Providing a working fix
+
+Fix the error in src/App.tsx.`;
+
+    // Send to chat using normal flow
+    handleSend(errorPrompt, []);
+  }, [handleSend]);
+
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
-    handleInspectEdit
-  }), [handleInspectEdit]);
+    handleInspectEdit,
+    sendErrorToChat
+  }), [handleInspectEdit, sendErrorToChat]);
 
   const handleResetClick = () => {
     setShowResetConfirm(true);
@@ -2047,7 +2070,7 @@ ${prompt}`;
   };
 
   return (
-    <aside className="w-full md:w-[30%] md:min-w-[360px] md:max-w-[440px] h-full min-h-0 flex flex-col bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl overflow-hidden relative z-20 transition-all">
+    <aside className="w-full md:w-[30%] md:min-w-[360px] md:max-w-[440px] h-full self-stretch min-h-0 flex flex-col bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl overflow-hidden relative z-20 transition-all">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/5 flex-shrink-0">
         <div className="flex items-center gap-3">

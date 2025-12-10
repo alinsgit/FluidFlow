@@ -3,7 +3,7 @@ import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, Pencil, Send, FileText, Wrench, FlaskConical, Package, Loader2,
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
-  ChevronLeft, ChevronRight, Globe, GitBranch, Play, AlertTriangle, Box
+  ChevronLeft, ChevronRight, Globe, GitBranch, Play, AlertTriangle, Box, MessageSquare, Bot
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getProviderManager } from '../../services/ai';
@@ -14,6 +14,7 @@ import { FileSystem, LogEntry, NetworkRequest, AccessibilityReport, TabType, Ter
 import { cleanGeneratedCode, isValidCode } from '../../utils/cleanCode';
 import { debugLog } from '../../hooks/useDebugStore';
 import { attemptAutoFix, classifyError, canAutoFix, wasRecentlyFixed } from '../../services/autoFixService';
+import { useTechStack } from '../../hooks/useTechStack';
 
 // Sub-components
 import { CodeEditor } from './CodeEditor';
@@ -31,6 +32,7 @@ import { EnvironmentPanel } from './EnvironmentPanel';
 import { GitPanel } from '../GitPanel';
 import { RunnerPanel } from './RunnerPanel';
 import { WebContainerPanel } from './WebContainerPanel';
+import { ErrorFixPanel } from './ErrorFixPanel';
 import { GitStatus } from '../../services/projectApi';
 
 interface PreviewPanelProps {
@@ -46,6 +48,7 @@ interface PreviewPanelProps {
   activeTab?: TabType;
   setActiveTab?: (tab: TabType) => void;
   onInspectEdit?: (prompt: string, element: InspectedElement) => Promise<void>;
+  onSendErrorToChat?: (errorMessage: string) => void;
   // Git props
   projectId?: string | null;
   gitStatus?: GitStatus | null;
@@ -61,7 +64,7 @@ interface PreviewPanelProps {
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   files, setFiles, activeFile, setActiveFile, suggestions, setSuggestions, isGenerating, reviewChange, selectedModel,
-  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit,
+  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit, onSendErrorToChat,
   projectId, gitStatus, onInitGit, onCommit, onRefreshGitStatus,
   hasUncommittedChanges, localChanges, onDiscardChanges, onRevertToCommit
 }) => {
@@ -134,9 +137,18 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [isAutoFixing, setIsAutoFixing] = useState(false);
   const [autoFixToast, setAutoFixToast] = useState<string | null>(null);
   const [pendingAutoFix, setPendingAutoFix] = useState<string | null>(null); // Error awaiting confirmation
+  const [failedAutoFixError, setFailedAutoFixError] = useState<string | null>(null); // Error that failed auto-fix
   const autoFixTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFixedErrorRef = useRef<string | null>(null);
+
+  // Error Fix Agent state
+  const [currentError, setCurrentError] = useState<string | null>(null);
+  const [currentErrorStack, setCurrentErrorStack] = useState<string | undefined>(undefined);
+  const [errorTargetFile, setErrorTargetFile] = useState<string>('src/App.tsx');
+
+  // Tech Stack for AI context
+  const { generateSystemInstruction } = useTechStack();
 
   // Cleanup timeouts on unmount to prevent memory leaks
   useEffect(() => {
@@ -164,16 +176,165 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   const appCode = files['src/App.tsx'];
 
+  // Helper: Extract local imports from code (components, utils, hooks, etc.)
+  const extractLocalImports = useCallback((code: string): string[] => {
+    const imports: string[] = [];
+    const importRegex = /import\s+(?:(?:\{[^}]*\}|[^{}\s,]+|\*\s+as\s+\w+)(?:\s*,\s*)?)+\s+from\s+['"]\.\.?\/([^'"]+)['"]/g;
+    let match;
+    while ((match = importRegex.exec(code)) !== null) {
+      const importPath = match[1];
+      // Try to resolve the file
+      const possiblePaths = [
+        `src/${importPath}.tsx`,
+        `src/${importPath}.ts`,
+        `src/${importPath}/index.tsx`,
+        `src/${importPath}/index.ts`,
+        `${importPath}.tsx`,
+        `${importPath}.ts`,
+      ];
+      for (const p of possiblePaths) {
+        if (files[p]) {
+          imports.push(p);
+          break;
+        }
+      }
+    }
+    return [...new Set(imports)]; // Remove duplicates
+  }, [files]);
+
+  // Helper: Parse stack trace to identify error location
+  const parseStackTrace = useCallback((errorMessage: string): { file?: string; line?: number; column?: number } => {
+    console.log('[AutoFix] Parsing error message:', errorMessage.slice(0, 200));
+
+    // Pattern: Transpilation failed for src/components/Features.tsx: /src/components/Features.tsx: Unexpected token (39:49)
+    const transpileMatch = errorMessage.match(/(?:Transpilation failed for|failed for)\s+(src\/[\w./]+\.tsx?)[\s:]/i);
+    if (transpileMatch) {
+      // Also try to extract line/column from error like (39:49)
+      const lineMatch = errorMessage.match(/\((\d+):(\d+)\)/);
+      const result = {
+        file: transpileMatch[1],
+        line: lineMatch ? parseInt(lineMatch[1], 10) : undefined,
+        column: lineMatch ? parseInt(lineMatch[2], 10) : undefined
+      };
+      console.log('[AutoFix] Found transpile error, target file:', result);
+      return result;
+    }
+
+    // Pattern: at Component (filename.tsx:123:45) or at filename.tsx:123:45
+    const stackMatch = errorMessage.match(/at\s+(?:\w+\s+\()?([\w./]+\.tsx?):(\d+):(\d+)/);
+    if (stackMatch) {
+      const result = {
+        file: stackMatch[1],
+        line: parseInt(stackMatch[2], 10),
+        column: parseInt(stackMatch[3], 10)
+      };
+      console.log('[AutoFix] Found stack trace, target file:', result);
+      return result;
+    }
+
+    // Pattern: Error in src/App.tsx:123
+    const simpleMatch = errorMessage.match(/(?:Error in|at)\s+(src\/[\w./]+\.tsx?):?(\d+)?/i);
+    if (simpleMatch) {
+      const result = {
+        file: simpleMatch[1],
+        line: simpleMatch[2] ? parseInt(simpleMatch[2], 10) : undefined
+      };
+      console.log('[AutoFix] Found simple error pattern, target file:', result);
+      return result;
+    }
+
+    // Pattern: /src/components/File.tsx: Unexpected token
+    const pathMatch = errorMessage.match(/\/(src\/[\w./]+\.tsx?):/);
+    if (pathMatch) {
+      const lineMatch = errorMessage.match(/\((\d+):(\d+)\)/);
+      const result = {
+        file: pathMatch[1],
+        line: lineMatch ? parseInt(lineMatch[1], 10) : undefined,
+        column: lineMatch ? parseInt(lineMatch[2], 10) : undefined
+      };
+      console.log('[AutoFix] Found path match, target file:', result);
+      return result;
+    }
+
+    console.log('[AutoFix] No file pattern matched, will use default src/App.tsx');
+    return {};
+  }, []);
+
+  // Helper: Get relevant files based on error context
+  const getRelatedFiles = useCallback((errorMessage: string, mainCode: string): Record<string, string> => {
+    const related: Record<string, string> = {};
+
+    // 1. Get local imports from App.tsx
+    const localImports = extractLocalImports(mainCode);
+    for (const importPath of localImports.slice(0, 5)) { // Limit to 5 files
+      if (files[importPath]) {
+        related[importPath] = files[importPath];
+      }
+    }
+
+    // 2. Check for component name in error
+    const componentMatch = errorMessage.match(/(?:Element type|'|")(\w+)(?:'|")|(?:cannot read|undefined)\s+(?:property\s+)?['"]?(\w+)['"]?/i);
+    if (componentMatch) {
+      const componentName = componentMatch[1] || componentMatch[2];
+      // Search for matching file
+      for (const [path, content] of Object.entries(files)) {
+        if (path.toLowerCase().includes(componentName.toLowerCase()) ||
+            content.includes(`export const ${componentName}`) ||
+            content.includes(`export function ${componentName}`) ||
+            content.includes(`export default ${componentName}`)) {
+          if (!related[path] && Object.keys(related).length < 6) {
+            related[path] = content;
+          }
+        }
+      }
+    }
+
+    // 3. Include types file if exists
+    if (files['src/types.ts'] && !related['src/types.ts']) {
+      related['src/types.ts'] = files['src/types.ts'];
+    }
+
+    // 4. Parse stack trace for specific file
+    const stackInfo = parseStackTrace(errorMessage);
+    if (stackInfo.file && files[stackInfo.file] && !related[stackInfo.file]) {
+      related[stackInfo.file] = files[stackInfo.file];
+    }
+
+    return related;
+  }, [files, extractLocalImports, parseStackTrace]);
+
+  // Helper: Get recent console logs for context
+  const getRecentLogsContext = useCallback((): string => {
+    const recentLogs = logs.slice(-10); // Last 10 logs
+    if (recentLogs.length === 0) return '';
+
+    const logContext = recentLogs
+      .filter(l => l.type === 'error' || l.type === 'warn')
+      .map(l => `[${l.type.toUpperCase()}] ${l.message}`)
+      .join('\n');
+
+    return logContext ? `## Recent Console Logs\n\`\`\`\n${logContext}\n\`\`\`\n` : '';
+  }, [logs]);
+
   // Auto-fix error function
   const autoFixError = useCallback(async (errorMessage: string) => {
-    if (!appCode || isAutoFixing || isGenerating) return;
+    console.log('[AutoFix] autoFixError called:', errorMessage.slice(0, 100));
+    console.log('[AutoFix] State:', { hasAppCode: !!appCode, isAutoFixing, isGenerating, lastFixedError: lastFixedErrorRef.current?.slice(0, 50) });
+
+    if (!appCode || isAutoFixing || isGenerating) {
+      console.log('[AutoFix] Early return - appCode:', !!appCode, 'isAutoFixing:', isAutoFixing, 'isGenerating:', isGenerating);
+      return;
+    }
 
     // Skip if we just fixed this error
-    if (lastFixedErrorRef.current === errorMessage) return;
+    if (lastFixedErrorRef.current === errorMessage) {
+      console.log('[AutoFix] Early return - already fixed this error');
+      return;
+    }
 
     setPendingAutoFix(null); // Clear confirmation UI
     setIsAutoFixing(true);
-    setAutoFixToast('🔧 Fixing error...');
+    setAutoFixToast('🔍 Analyzing error...');
     lastFixedErrorRef.current = errorMessage;
 
     const requestId = debugLog.request('auto-fix', {
@@ -184,7 +345,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const startTime = Date.now();
 
     try {
-      // Use ProviderManager instead of direct GoogleGenAI
+      // Use ProviderManager - same provider and model as main chat
       const manager = getProviderManager();
       const provider = manager.getProvider();
       const activeConfig = manager.getActiveConfig();
@@ -193,38 +354,168 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         throw new Error('No AI provider configured');
       }
 
-      // Use the active provider's default model instead of selectedModel
-      const modelToUse = activeConfig?.defaultModel || selectedModel;
+      // Use the same model as main chat (selectedModel is passed from App.tsx)
+      const modelToUse = selectedModel || activeConfig?.defaultModel || 'models/gemini-2.5-flash';
+
+      console.log('[AutoFix] Using provider:', activeConfig?.type, 'model:', modelToUse);
+
+      // Build comprehensive context for AI
+      setAutoFixToast('📦 Building context...');
+      const techStackContext = generateSystemInstruction();
+      const errorClassification = classifyError(errorMessage);
+      const relatedFiles = getRelatedFiles(errorMessage, appCode);
+      const recentLogsContext = getRecentLogsContext();
+      const stackInfo = parseStackTrace(errorMessage);
+
+      // Determine target file (the file that needs fixing)
+      const targetFile = stackInfo.file || 'src/App.tsx';
+      const targetFileContent = files[targetFile] || appCode || '';
+
+      console.log('[AutoFix] Error classification:', errorClassification);
+      console.log('[AutoFix] Target file:', targetFile);
+      console.log('[AutoFix] Related files:', Object.keys(relatedFiles));
+
+      if (!targetFileContent) {
+        throw new Error(`Target file not found: ${targetFile}`);
+      }
+
+      // Build related files section (exclude target file)
+      let relatedFilesSection = '';
+      const relatedEntries = Object.entries(relatedFiles).filter(([path]) => path !== targetFile);
+      if (relatedEntries.length > 0) {
+        relatedFilesSection = '\n## Related Files (may contain relevant code)\n';
+        for (const [path, content] of relatedEntries) {
+          // Truncate large files
+          const truncated = content.length > 2000 ? content.slice(0, 2000) + '\n// ... truncated' : content;
+          relatedFilesSection += `### ${path}\n\`\`\`tsx\n${truncated}\n\`\`\`\n`;
+        }
+      }
+
+      // Error-specific hints based on category
+      const categoryHints: Record<string, string> = {
+        'import': `- Check if the import source exists and is correct
+- For motion animations, use 'motion/react' (not 'framer-motion')
+- For React Router v7, imports are from 'react-router' (not 'react-router-dom')
+- Verify named vs default exports match`,
+        'syntax': `- Check for missing brackets, parentheses, or semicolons
+- Verify JSX syntax is valid
+- Ensure template literals are properly closed`,
+        'type': `- Check type definitions in types.ts if available
+- Ensure props match expected types
+- Verify generic type parameters`,
+        'runtime': `- Check for null/undefined access
+- Verify async operations are properly awaited
+- Ensure state is initialized before use`,
+        'react': `- Verify hook rules (only call in component body)
+- Check key props for list items
+- Ensure proper event handler binding`
+      };
+
+      const categoryHint = categoryHints[errorClassification.category] || '';
+
+      // Build a detailed prompt for error fixing
+      const systemPrompt = `You are an expert React/TypeScript developer. Fix the following runtime error.
+
+${techStackContext}
+
+## Error Information
+- **Error Message**: ${errorMessage}
+- **Error Category**: ${errorClassification.category}
+- **Priority**: ${errorClassification.priority}/5
+- **Target File**: ${targetFile}${stackInfo.line ? ` (line ${stackInfo.line})` : ''}
+
+${recentLogsContext}
+
+## Available Files in Project
+${Object.keys(files).join(', ')}
+
+${relatedFilesSection}
+
+## File to Fix (${targetFile})
+\`\`\`tsx
+${targetFileContent}
+\`\`\`
+
+## Fix Guidelines
+1. ONLY fix the specific error - do not refactor unrelated code
+2. Maintain the existing code style and patterns
+3. Ensure all imports are correct (check the tech stack above for correct package names)
+4. If a component is undefined, check if it should be imported or defined
+5. For missing exports, check related files above for correct export names
+6. Pay attention to special characters in strings (like apostrophes)
+
+${categoryHint ? `## Category-Specific Hints\n${categoryHint}` : ''}
+
+## Required Output Format
+Return ONLY the complete fixed ${targetFile} code.
+- No explanations or comments about the fix
+- No markdown code blocks or backticks
+- Just valid TypeScript/TSX code that can directly replace the file`;
+
+      // Log the prompt being sent (for debug panel)
+      console.log('[AutoFix] Sending prompt to AI:', {
+        model: modelToUse,
+        targetFile,
+        errorCategory: errorClassification.category,
+        relatedFilesCount: relatedEntries.length,
+        promptLength: systemPrompt.length
+      });
+
+      // Extract short model name for display
+      const shortModelName = modelToUse.split('/').pop()?.replace('models-', '') || modelToUse;
+      setAutoFixToast(`🤖 Fixing ${targetFile.split('/').pop()} (${shortModelName})...`);
 
       const response = await provider.generate({
-        prompt: `Fix this runtime error in the React component. Error: "${errorMessage}"\n\nCurrent Code:\n${appCode}\n\nIMPORTANT: Output ONLY the complete fixed code, no explanations.`,
+        prompt: systemPrompt,
         responseFormat: 'text'
       }, modelToUse);
 
+      setAutoFixToast('⚙️ Processing fix...');
+
       const fixedCode = cleanGeneratedCode(response.text || '');
+
+      console.log('[AutoFix] Response received:', {
+        responseLength: response.text?.length || 0,
+        fixedCodeLength: fixedCode.length,
+        isValid: !!(fixedCode && isValidCode(fixedCode))
+      });
 
       debugLog.response('auto-fix', {
         id: requestId,
         model: modelToUse,
         duration: Date.now() - startTime,
         response: fixedCode.slice(0, 500) + '...',
-        metadata: { success: !!(fixedCode && isValidCode(fixedCode)) }
+        metadata: {
+          success: !!(fixedCode && isValidCode(fixedCode)),
+          category: errorClassification.category,
+          relatedFilesCount: Object.keys(relatedFiles).length
+        }
       });
 
       if (fixedCode && isValidCode(fixedCode)) {
-        setFiles({ ...files, 'src/App.tsx': fixedCode });
-        setAutoFixToast('✅ Error fixed automatically!');
+        setFiles({ ...files, [targetFile]: fixedCode });
+        setAutoFixToast(`✅ Fixed ${targetFile.split('/').pop()}!`);
+        setFailedAutoFixError(null); // Clear any previous failed error
 
         // Clear the error from logs
         setLogs(prev => prev.map(l =>
           l.message === errorMessage ? { ...l, isFixed: true } : l
         ));
+
+        // Auto-clear success toast
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
       } else {
-        setAutoFixToast('⚠️ Could not auto-fix this error');
+        console.warn('[AutoFix] Fix failed - invalid code generated');
+        // Store failed error for "Send to Chat" option
+        setFailedAutoFixError(errorMessage);
+        setAutoFixToast(null); // Clear toast, we'll show the persistent notification instead
       }
     } catch (e) {
-      console.error('Auto-fix failed:', e);
-      setAutoFixToast('❌ Auto-fix failed');
+      console.error('[AutoFix] Exception:', e);
+      // Store failed error for "Send to Chat" option
+      setFailedAutoFixError(errorMessage);
+      setAutoFixToast(null); // Clear toast, we'll show the persistent notification instead
       debugLog.error('auto-fix', e instanceof Error ? e.message : 'Auto-fix failed', {
         id: requestId,
         model: selectedModel,
@@ -232,14 +523,12 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
       });
     } finally {
       setIsAutoFixing(false);
-      // Clear toast after delay (use separate ref to avoid conflicts with debounce timer)
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
     }
-  }, [appCode, files, setFiles, isAutoFixing, isGenerating, selectedModel]);
+  }, [appCode, files, setFiles, isAutoFixing, isGenerating, selectedModel, generateSystemInstruction, getRelatedFiles, getRecentLogsContext, parseStackTrace, logs]);
 
   // Auto-fix confirmation handlers
   const handleConfirmAutoFix = useCallback(() => {
+    console.log('[AutoFix] Fix with AI button clicked, pendingAutoFix:', pendingAutoFix?.slice(0, 100));
     if (pendingAutoFix) {
       autoFixError(pendingAutoFix);
     }
@@ -247,6 +536,18 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   const handleDeclineAutoFix = useCallback(() => {
     setPendingAutoFix(null);
+  }, []);
+
+  // Failed auto-fix handlers
+  const handleSendErrorToChat = useCallback(() => {
+    if (failedAutoFixError && onSendErrorToChat) {
+      onSendErrorToChat(failedAutoFixError);
+      setFailedAutoFixError(null);
+    }
+  }, [failedAutoFixError, onSendErrorToChat]);
+
+  const handleDismissFailedError = useCallback(() => {
+    setFailedAutoFixError(null);
   }, []);
 
   // Console Message Listener
@@ -269,12 +570,26 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
           setIsConsoleOpen(true);
           setActiveTerminalTab('console');
 
+          // Update Error Fix Panel state
+          const errorMsg = event.data.message;
+          setCurrentError(errorMsg);
+          setCurrentErrorStack(event.data.stack);
+
+          // Parse stack trace to determine target file for error fix panel
+          const stackInfo = parseStackTrace(errorMsg);
+          if (stackInfo.file) {
+            setErrorTargetFile(stackInfo.file);
+          }
+
+          console.log('[AutoFix] Error detected:', event.data.message.slice(0, 150));
+          console.log('[AutoFix] State check - autoFixEnabled:', autoFixEnabled, 'isAutoFixing:', isAutoFixing, 'pendingAutoFix:', !!pendingAutoFix);
+
           // Show auto-fix confirmation if enabled (don't auto-run)
           if (autoFixEnabled && !isAutoFixing && !pendingAutoFix) {
-            const errorMsg = event.data.message;
 
             // Use robust error classification
             const errorInfo = classifyError(errorMsg);
+            console.log('[AutoFix] Error classification:', errorInfo);
 
             // Skip ignorable/transient errors
             if (errorInfo.isIgnorable) {
@@ -290,16 +605,53 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             // Try auto-fix with robust service (handles rate limiting, loops, validation)
             if (appCode && canAutoFix(errorMsg)) {
               try {
-                const fixResult = attemptAutoFix(errorMsg, appCode);
+                // For bare specifier errors, find which file contains the import
+                const errorLower = errorMsg.toLowerCase();
+                const isBareSpecifierError = errorLower.includes('bare specifier') || errorLower.includes('was not remapped');
+
+                let targetFile = 'src/App.tsx';
+                let targetFileContent = appCode;
+
+                if (isBareSpecifierError) {
+                  // Extract the bare specifier from error (e.g., "src/components/Hero.tsx")
+                  const specifierMatch = errorMsg.match(/["']?(src\/[\w./-]+)["']?\s*was a bare specifier/i);
+                  if (specifierMatch) {
+                    const bareSpecifier = specifierMatch[1];
+                    const bareWithoutExt = bareSpecifier.replace(/\.(tsx?|jsx?)$/, '');
+
+                    console.log('[AutoFix] Bare specifier error, searching for import of:', bareSpecifier);
+
+                    // Search all files for the import
+                    for (const [filePath, content] of Object.entries(files)) {
+                      if (content.includes(bareSpecifier) || content.includes(bareWithoutExt)) {
+                        console.log('[AutoFix] Found import in:', filePath);
+                        targetFile = filePath;
+                        targetFileContent = content;
+                        break;
+                      }
+                    }
+                  }
+                } else {
+                  // Parse stack trace to get target file for other errors
+                  const stackInfo = parseStackTrace(errorMsg);
+                  targetFile = stackInfo.file || 'src/App.tsx';
+                  targetFileContent = files[targetFile] || appCode;
+                }
+
+                console.log('[AutoFix] Simple fix attempt for:', targetFile);
+                console.log('[AutoFix] Target file exists:', !!files[targetFile], 'Content length:', targetFileContent?.length);
+
+                const fixResult = attemptAutoFix(errorMsg, targetFileContent);
+                console.log('[AutoFix] Fix result:', { success: fixResult.success, wasAINeeded: fixResult.wasAINeeded, error: fixResult.error, fixType: fixResult.fixType });
 
                 if (fixResult.success && !fixResult.wasAINeeded) {
-                  // Simple fix worked! Apply it directly
+                  // Simple fix worked! Apply it to the correct target file
                   lastFixedErrorRef.current = errorMsg;
-                  setFiles({ ...files, 'src/App.tsx': fixResult.newCode });
+                  setFiles({ ...files, [targetFile]: fixResult.newCode });
                   setAutoFixToast(`⚡ ${fixResult.description}`);
                   if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
                   toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
-                  console.log('[AutoFix] Applied:', fixResult.description, `(${fixResult.fixType})`);
+                  console.log('[AutoFix] Applied:', fixResult.description, `(${fixResult.fixType})`, 'to:', targetFile);
                   return; // Don't show AI fix dialog
                 }
 
@@ -314,11 +666,15 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             }
 
             // Simple fix didn't work - show AI fix confirmation after delay (only for fixable errors)
+            console.log('[AutoFix] Checking if AI dialog should show:', { isFixable: errorInfo.isFixable, priority: errorInfo.priority });
             if (errorInfo.isFixable || errorInfo.priority >= 3) {
               if (autoFixTimeoutRef.current) clearTimeout(autoFixTimeoutRef.current);
               autoFixTimeoutRef.current = setTimeout(() => {
+                console.log('[AutoFix] Showing AI fix dialog for:', errorMsg.slice(0, 100));
                 setPendingAutoFix(errorMsg);
               }, 500);
+            } else {
+              console.log('[AutoFix] Not showing AI dialog - error not fixable or low priority');
             }
           }
         }
@@ -356,7 +712,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [autoFixEnabled, isAutoFixing, isInspectEditing, pendingAutoFix, appCode, files, setFiles]);
+  }, [autoFixEnabled, isAutoFixing, isInspectEditing, pendingAutoFix, appCode, files, setFiles, parseStackTrace]);
 
   // Build iframe content
   useEffect(() => {
@@ -878,7 +1234,7 @@ Thumbs.db
   };
 
   return (
-    <section className="flex-1 min-w-0 min-h-0 flex flex-col bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300">
+    <section className="flex-1 min-w-0 min-h-0 h-full self-stretch flex flex-col bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300">
       {/* Toolbar */}
       <div className="h-14 flex-none border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-white/[0.02]">
         <div className="flex items-center gap-6">
@@ -899,7 +1255,8 @@ Thumbs.db
               { id: 'tests', icon: FlaskConical, label: 'Tests' },
               { id: 'docs', icon: FileText, label: 'Docs' },
               { id: 'env', icon: Shield, label: 'Env' },
-              { id: 'debug', icon: Bug, label: 'Debug' }
+              { id: 'debug', icon: Bug, label: 'Debug' },
+              { id: 'errorfix', icon: Bot, label: 'Error Fix' }
             ].map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
@@ -1069,7 +1426,7 @@ Thumbs.db
         ) : activeTab === 'env' ? (
           <EnvironmentPanel files={files} setFiles={setFiles} />
         ) : activeTab === 'git' ? (
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 min-h-0 overflow-auto">
             <GitPanel
               projectId={projectId || null}
               gitStatus={gitStatus || null}
@@ -1084,7 +1441,7 @@ Thumbs.db
             />
           </div>
         ) : activeTab === 'run' ? (
-          <div className="flex-1 overflow-auto flex flex-col">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <RunnerPanel
               projectId={projectId || null}
               projectName={files['package.json'] ? (() => { try { return JSON.parse(files['package.json']).name; } catch { return undefined; }})() : undefined}
@@ -1092,10 +1449,28 @@ Thumbs.db
             />
           </div>
         ) : activeTab === 'webcontainer' ? (
-          <div className="flex-1 overflow-auto flex flex-col">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <WebContainerPanel
               files={files}
               projectId={projectId}
+            />
+          </div>
+        ) : activeTab === 'errorfix' ? (
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <ErrorFixPanel
+              files={files}
+              currentError={currentError}
+              currentErrorStack={currentErrorStack}
+              targetFile={errorTargetFile}
+              onFileUpdate={(path, content) => {
+                setFiles({ ...files, [path]: content });
+              }}
+              onFixComplete={(success) => {
+                if (success) {
+                  setCurrentError(null);
+                  setCurrentErrorStack(undefined);
+                }
+              }}
             />
           </div>
         ) : activeTab === 'preview' ? (
@@ -1126,6 +1501,10 @@ Thumbs.db
             pendingAutoFix={pendingAutoFix}
             handleConfirmAutoFix={handleConfirmAutoFix}
             handleDeclineAutoFix={handleDeclineAutoFix}
+            failedAutoFixError={failedAutoFixError}
+            onSendErrorToChat={onSendErrorToChat}
+            handleSendErrorToChat={handleSendErrorToChat}
+            handleDismissFailedError={handleDismissFailedError}
             isInspectMode={isInspectMode}
             hoveredElement={hoveredElement}
             inspectedElement={inspectedElement}
@@ -1416,6 +1795,10 @@ const PreviewContent: React.FC<{
   pendingAutoFix: string | null;
   handleConfirmAutoFix: () => void;
   handleDeclineAutoFix: () => void;
+  failedAutoFixError: string | null;
+  onSendErrorToChat?: (errorMessage: string) => void;
+  handleSendErrorToChat: () => void;
+  handleDismissFailedError: () => void;
   isInspectMode: boolean;
   hoveredElement: { top: number; left: number; width: number; height: number } | null;
   inspectedElement: InspectedElement | null;
@@ -1432,7 +1815,7 @@ const PreviewContent: React.FC<{
   onGoForward: () => void;
   onReload: () => void;
 }> = (props) => {
-  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, pendingAutoFix, handleConfirmAutoFix, handleDeclineAutoFix, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit, iframeRef, currentUrl, canGoBack, canGoForward, onNavigate, onGoBack, onGoForward, onReload } = props;
+  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, pendingAutoFix, handleConfirmAutoFix, handleDeclineAutoFix, failedAutoFixError, onSendErrorToChat, handleSendErrorToChat, handleDismissFailedError, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit, iframeRef, currentUrl, canGoBack, canGoForward, onNavigate, onGoBack, onGoForward, onReload } = props;
 
   // Local state for URL input
   const [urlInput, setUrlInput] = useState(currentUrl);
@@ -1507,6 +1890,45 @@ const PreviewContent: React.FC<{
           <div className="flex items-center gap-2 text-sm font-medium">
             {isAutoFixing && <Loader2 className="w-4 h-4 animate-spin" />}
             {autoFixToast}
+          </div>
+        </div>
+      )}
+
+      {/* Failed Auto-fix Notification - Persistent with Send to Chat option */}
+      {failedAutoFixError && !autoFixToast && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-2 duration-300">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl shadow-2xl backdrop-blur-xl overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-red-500/20 rounded-lg flex-shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-semibold text-red-300 mb-1">Auto-fix Başarısız</h4>
+                  <p className="text-xs text-red-300/70 line-clamp-2 mb-3">
+                    {failedAutoFixError.slice(0, 150)}{failedAutoFixError.length > 150 ? '...' : ''}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {onSendErrorToChat && (
+                      <button
+                        onClick={handleSendErrorToChat}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-xs font-medium text-blue-300 transition-colors"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        Chat'e Gönder
+                      </button>
+                    )}
+                    <button
+                      onClick={handleDismissFailedError}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-500/20 hover:bg-slate-500/30 border border-slate-500/30 rounded-lg text-xs font-medium text-slate-300 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Kapat
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1699,9 +2121,12 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
     const notify = (type, msg) => window.parent.postMessage({ type: 'CONSOLE_LOG', logType: type, message: typeof msg === 'object' ? JSON.stringify(msg) : String(msg), timestamp: Date.now() }, '*');
 
     // Filter transient/harmless errors that shouldn't trigger auto-fix
+    // IMPORTANT: Do NOT ignore fixable errors like "is not defined", "is not a function"
     const isIgnorableError = (msg) => {
       if (!msg) return true;
       const str = String(msg).toLowerCase();
+
+      // These are truly transient/unfixable errors
       const ignorePatterns = [
         'resizeobserver',
         'script error',
@@ -1710,8 +2135,6 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
         'failed to fetch',
         'network error',
         'hydrat',
-        'cannot read properties of null',
-        'cannot read properties of undefined',
         'unmounted component',
         'memory leak',
         'perform a react state update',
@@ -1725,12 +2148,16 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
         'failed prop type',
         'minified react error',
         'suspended while rendering',
-        'nothing was returned from render',
         '__esmodule',
-        'cannot redefine property',
-        'is not a function',
-        'is not defined'
+        'cannot redefine property'
       ];
+
+      // These errors ARE fixable - do NOT ignore them
+      // - "X is not defined" → missing import/declaration
+      // - "X is not a function" → wrong import or missing export
+      // - "cannot read properties of null/undefined" → null check needed
+      // - "nothing was returned from render" → missing return statement
+
       return ignorePatterns.some(p => str.includes(p));
     };
 

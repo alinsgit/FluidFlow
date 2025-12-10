@@ -43,8 +43,245 @@ const REACT_IMPORTS: Record<string, string> = {
   'Children': 'react',
 };
 
+// Animation libraries
+const MOTION_IMPORTS: Record<string, string> = {
+  'motion': 'motion/react',
+  'AnimatePresence': 'motion/react',
+  'useAnimation': 'motion/react',
+  'useMotionValue': 'motion/react',
+  'useTransform': 'motion/react',
+  'useSpring': 'motion/react',
+  'useScroll': 'motion/react',
+  'useInView': 'motion/react',
+  'useReducedMotion': 'motion/react',
+  'MotionConfig': 'motion/react',
+  'LazyMotion': 'motion/react',
+  'domAnimation': 'motion/react',
+  'domMax': 'motion/react',
+  'Reorder': 'motion/react',
+  'LayoutGroup': 'motion/react',
+};
+
+// State management libraries
+const STATE_MANAGEMENT_IMPORTS: Record<string, string> = {
+  // Zustand
+  'create': 'zustand',
+  'createStore': 'zustand',
+  'useStore': 'zustand',
+  // TanStack Query
+  'useQuery': '@tanstack/react-query',
+  'useMutation': '@tanstack/react-query',
+  'useQueryClient': '@tanstack/react-query',
+  'QueryClient': '@tanstack/react-query',
+  'QueryClientProvider': '@tanstack/react-query',
+  'useInfiniteQuery': '@tanstack/react-query',
+  'useSuspenseQuery': '@tanstack/react-query',
+  // SWR
+  'useSWR': 'swr',
+  'useSWRConfig': 'swr',
+  'SWRConfig': 'swr',
+  // Jotai
+  'atom': 'jotai',
+  'useAtom': 'jotai',
+  'useAtomValue': 'jotai',
+  'useSetAtom': 'jotai',
+  'Provider': 'jotai',
+};
+
+// Form libraries
+const FORM_IMPORTS: Record<string, string> = {
+  // React Hook Form
+  'useForm': 'react-hook-form',
+  'useFieldArray': 'react-hook-form',
+  'useWatch': 'react-hook-form',
+  'useFormContext': 'react-hook-form',
+  'FormProvider': 'react-hook-form',
+  'Controller': 'react-hook-form',
+  // Formik
+  'Formik': 'formik',
+  'Form': 'formik',
+  'Field': 'formik',
+  'ErrorMessage': 'formik',
+  'useFormik': 'formik',
+  // Zod
+  'z': 'zod',
+  'ZodError': 'zod',
+};
+
+// Routing libraries
+const ROUTING_IMPORTS: Record<string, string> = {
+  // React Router v7
+  'BrowserRouter': 'react-router',
+  'Routes': 'react-router',
+  'Route': 'react-router',
+  'Link': 'react-router',
+  'NavLink': 'react-router',
+  'useNavigate': 'react-router',
+  'useParams': 'react-router',
+  'useSearchParams': 'react-router',
+  'useLocation': 'react-router',
+  'Outlet': 'react-router',
+  'Navigate': 'react-router',
+  'useRoutes': 'react-router',
+  'useMatch': 'react-router',
+};
+
+// UI Component Libraries
+const UI_LIBRARY_IMPORTS: Record<string, string> = {
+  // Radix UI primitives (commonly used with shadcn)
+  'Dialog': '@radix-ui/react-dialog',
+  'DialogTrigger': '@radix-ui/react-dialog',
+  'DialogContent': '@radix-ui/react-dialog',
+  'Popover': '@radix-ui/react-popover',
+  'PopoverTrigger': '@radix-ui/react-popover',
+  'PopoverContent': '@radix-ui/react-popover',
+  'Tooltip': '@radix-ui/react-tooltip',
+  'TooltipTrigger': '@radix-ui/react-tooltip',
+  'TooltipContent': '@radix-ui/react-tooltip',
+  'DropdownMenu': '@radix-ui/react-dropdown-menu',
+  'Select': '@radix-ui/react-select',
+  'Tabs': '@radix-ui/react-tabs',
+  'Accordion': '@radix-ui/react-accordion',
+  'Switch': '@radix-ui/react-switch',
+  'Checkbox': '@radix-ui/react-checkbox',
+  'RadioGroup': '@radix-ui/react-radio-group',
+  'Slider': '@radix-ui/react-slider',
+  'ScrollArea': '@radix-ui/react-scroll-area',
+  // Headless UI
+  'Menu': '@headlessui/react',
+  'Listbox': '@headlessui/react',
+  'Combobox': '@headlessui/react',
+  'Transition': '@headlessui/react',
+  'Disclosure': '@headlessui/react',
+};
+
+// Toast/Notification libraries
+const TOAST_IMPORTS: Record<string, string> = {
+  // React Hot Toast
+  'toast': 'react-hot-toast',
+  'Toaster': 'react-hot-toast',
+  // Sonner
+  'Sonner': 'sonner',
+  // React Toastify
+  'ToastContainer': 'react-toastify',
+  'cssTransition': 'react-toastify',
+};
+
+// Chart libraries
+const CHART_IMPORTS: Record<string, string> = {
+  // Recharts
+  'LineChart': 'recharts',
+  'BarChart': 'recharts',
+  'PieChart': 'recharts',
+  'AreaChart': 'recharts',
+  'XAxis': 'recharts',
+  'YAxis': 'recharts',
+  'CartesianGrid': 'recharts',
+  'Legend': 'recharts',
+  'ResponsiveContainer': 'recharts',
+  'Line': 'recharts',
+  'Bar': 'recharts',
+  'Area': 'recharts',
+  'Pie': 'recharts',
+  'Cell': 'recharts',
+  // Chart.js React wrapper
+  'Chart': 'react-chartjs-2',
+  'Doughnut': 'react-chartjs-2',
+  'Radar': 'react-chartjs-2',
+};
+
+// Table libraries
+const TABLE_IMPORTS: Record<string, string> = {
+  // TanStack Table
+  'useReactTable': '@tanstack/react-table',
+  'getCoreRowModel': '@tanstack/react-table',
+  'getSortedRowModel': '@tanstack/react-table',
+  'getFilteredRowModel': '@tanstack/react-table',
+  'getPaginationRowModel': '@tanstack/react-table',
+  'flexRender': '@tanstack/react-table',
+  'createColumnHelper': '@tanstack/react-table',
+};
+
+// DnD (Drag and Drop) libraries
+const DND_IMPORTS: Record<string, string> = {
+  // DnD Kit
+  'DndContext': '@dnd-kit/core',
+  'useDraggable': '@dnd-kit/core',
+  'useDroppable': '@dnd-kit/core',
+  'DragOverlay': '@dnd-kit/core',
+  'closestCenter': '@dnd-kit/core',
+  'SortableContext': '@dnd-kit/sortable',
+  'useSortable': '@dnd-kit/sortable',
+  'arrayMove': '@dnd-kit/sortable',
+  // React DnD
+  'useDrag': 'react-dnd',
+  'useDrop': 'react-dnd',
+  'DndProvider': 'react-dnd',
+};
+
+// Utility libraries
+const UTILITY_IMPORTS: Record<string, string> = {
+  // clsx/classnames
+  'clsx': 'clsx',
+  'cx': 'clsx',
+  'classNames': 'classnames',
+  'cn': 'clsx', // commonly used alias - also check @/lib/utils
+  // date-fns
+  'format': 'date-fns',
+  'parseISO': 'date-fns',
+  'formatDistance': 'date-fns',
+  'formatRelative': 'date-fns',
+  'addDays': 'date-fns',
+  'subDays': 'date-fns',
+  'isValid': 'date-fns',
+  'differenceInDays': 'date-fns',
+  'startOfWeek': 'date-fns',
+  'endOfWeek': 'date-fns',
+  'isBefore': 'date-fns',
+  'isAfter': 'date-fns',
+  // lodash
+  'debounce': 'lodash',
+  'throttle': 'lodash',
+  'cloneDeep': 'lodash',
+  'isEmpty': 'lodash',
+  'groupBy': 'lodash',
+  'sortBy': 'lodash',
+  'uniqBy': 'lodash',
+  // axios
+  'axios': 'axios',
+  // uuid
+  'v4': 'uuid',
+  'uuidv4': 'uuid',
+  // nanoid
+  'nanoid': 'nanoid',
+  // immer
+  'produce': 'immer',
+  'Draft': 'immer',
+  // react-use hooks
+  'useDebounce': 'react-use',
+  'useThrottle': 'react-use',
+  'useLocalStorage': 'react-use',
+  'useWindowSize': 'react-use',
+  'useMedia': 'react-use',
+  'usePrevious': 'react-use',
+  'useAsync': 'react-use',
+  'useToggle': 'react-use',
+  'useCopyToClipboard': 'react-use',
+};
+
 // Common third-party imports
 const COMMON_IMPORTS: Record<string, string> = {
+  // Merge all specialized imports
+  ...MOTION_IMPORTS,
+  ...STATE_MANAGEMENT_IMPORTS,
+  ...FORM_IMPORTS,
+  ...ROUTING_IMPORTS,
+  ...UI_LIBRARY_IMPORTS,
+  ...TOAST_IMPORTS,
+  ...CHART_IMPORTS,
+  ...TABLE_IMPORTS,
+  ...DND_IMPORTS,
+  ...UTILITY_IMPORTS,
   // Lucide React icons
   'Search': 'lucide-react',
   'X': 'lucide-react',
@@ -454,10 +691,84 @@ const SELF_CLOSING_TAGS = new Set([
 ]);
 
 /**
+ * Fix bare specifier errors (e.g., "src/components/Hero" -> "./components/Hero")
+ * Error: The specifier "src/components/Hero.tsx" was a bare specifier
+ */
+function tryFixBareSpecifier(errorMessage: string, code: string): SimpleFixResult {
+  console.log('[SimpleFix] tryFixBareSpecifier called with error:', errorMessage.slice(0, 100));
+
+  // Match error pattern: "src/..." was a bare specifier
+  const match = errorMessage.match(/["']?(src\/[\w./-]+)["']?\s*was a bare specifier/i);
+  if (!match) {
+    console.log('[SimpleFix] No bare specifier pattern match');
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  const bareSpecifier = match[1];
+  console.log('[SimpleFix] Found bare specifier:', bareSpecifier);
+
+  // Convert src/components/Hero.tsx -> ./components/Hero
+  let relativePath = bareSpecifier.replace(/^src\//, './');
+  // Remove file extension (optional in imports)
+  relativePath = relativePath.replace(/\.(tsx?|jsx?)$/, '');
+  console.log('[SimpleFix] Relative path:', relativePath);
+
+  // Try multiple patterns to find and replace the import
+  const patterns = [
+    // With extension
+    bareSpecifier,
+    // Without extension
+    bareSpecifier.replace(/\.(tsx?|jsx?)$/, ''),
+  ];
+
+  let newCode = code;
+  let foundMatch = false;
+
+  for (const pattern of patterns) {
+    // Escape special regex chars
+    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match: import X from 'pattern' or import { X } from "pattern"
+    const regex = new RegExp(
+      `(import\\s+(?:[\\w,{}\\s*]+)\\s+from\\s*)(['"])${escaped}\\2`,
+      'g'
+    );
+
+    // Check if pattern exists in code
+    if (regex.test(code)) {
+      console.log('[SimpleFix] Found import with pattern:', pattern);
+      // Reset lastIndex (important for global regex!)
+      regex.lastIndex = 0;
+      newCode = code.replace(regex, `$1$2${relativePath}$2`);
+      foundMatch = true;
+      break;
+    }
+  }
+
+  if (foundMatch && newCode !== code) {
+    console.log('[SimpleFix] Successfully fixed import');
+    return {
+      fixed: true,
+      newCode,
+      description: `Fixed import path: "${bareSpecifier}" → "${relativePath}"`,
+      fixType: 'import'
+    };
+  }
+
+  console.log('[SimpleFix] Import not found in code, searching for:', patterns);
+  return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+/**
  * Main entry point: Try to fix common errors without AI
  */
 export function trySimpleFix(errorMessage: string, code: string): SimpleFixResult {
   const errorLower = errorMessage.toLowerCase();
+
+  // 0. Try to fix bare specifier errors (most common import path issue)
+  if (errorLower.includes('bare specifier') || errorLower.includes('was not remapped')) {
+    const bareSpecifierFix = tryFixBareSpecifier(errorMessage, code);
+    if (bareSpecifierFix.fixed) return bareSpecifierFix;
+  }
 
   // 1. Try to fix missing imports (React hooks, common components)
   const importFix = tryFixMissingImport(errorMessage, code);
@@ -501,38 +812,195 @@ export function trySimpleFix(errorMessage: string, code: string): SimpleFixResul
   const arrowFix = tryFixArrowFunction(errorMessage, code);
   if (arrowFix.fixed) return arrowFix;
 
+  // 11. Try to fix TypeScript type errors
+  const tsFix = tryFixTypeScriptErrors(errorMessage, code);
+  if (tsFix.fixed) return tsFix;
+
+  // 12. Try to fix async/await errors
+  const asyncFix = tryFixAsyncErrors(errorMessage, code);
+  if (asyncFix.fixed) return asyncFix;
+
+  // 13. Try to fix Promise-related errors
+  const promiseFix = tryFixPromiseErrors(errorMessage, code);
+  if (promiseFix.fixed) return promiseFix;
+
   return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+// Default imports (not named imports) - these use `import X from 'source'` syntax
+const DEFAULT_IMPORTS: Set<string> = new Set([
+  'axios',
+  'clsx',
+  'React',
+  'ReactDOM',
+]);
+
+// Imports that need * as syntax
+const NAMESPACE_IMPORTS: Record<string, string> = {
+  'motion': 'motion/react', // Actually motion uses named export, but leaving for reference
+};
+
+/**
+ * Detect missing imports from code usage
+ * This is a proactive check that finds used but not imported identifiers
+ */
+function detectMissingImports(code: string): { identifier: string; source: string }[] {
+  const missing: { identifier: string; source: string }[] = [];
+  const allKnownImports = { ...REACT_IMPORTS, ...COMMON_IMPORTS };
+
+  for (const [identifier, source] of Object.entries(allKnownImports)) {
+    // Check if identifier is used in code (as JSX tag, function call, or variable)
+    const usagePatterns = [
+      new RegExp(`<${identifier}[\\s/>]`),           // JSX tag: <Component or <Component>
+      new RegExp(`\\b${identifier}\\s*\\(`),          // Function call: func(
+      new RegExp(`\\b${identifier}\\s*\\.`),          // Property access: obj.prop
+      new RegExp(`\\{\\s*${identifier}\\s*[,}]`),     // Destructuring: { identifier }
+    ];
+
+    const isUsed = usagePatterns.some(pattern => pattern.test(code));
+    if (!isUsed) continue;
+
+    // Check if already imported
+    const importedPatterns = [
+      new RegExp(`import\\s*{[^}]*\\b${identifier}\\b[^}]*}\\s*from`),  // Named import
+      new RegExp(`import\\s+${identifier}\\s+from`),                     // Default import
+      new RegExp(`import\\s*\\*\\s*as\\s+${identifier}\\s+from`),       // Namespace import
+    ];
+
+    const isImported = importedPatterns.some(pattern => pattern.test(code));
+    if (isImported) continue;
+
+    missing.push({ identifier, source });
+  }
+
+  return missing;
 }
 
 /**
  * Fix missing imports (React hooks and common third-party)
  */
 function tryFixMissingImport(errorMessage: string, code: string): SimpleFixResult {
-  // Pattern: "X is not defined" where X might be importable
-  const notDefinedMatch = errorMessage.match(/['"]?(\w+)['"]?\s+is not defined/i);
-  if (!notDefinedMatch) {
+  // Multiple patterns for "not defined" errors
+  const patterns = [
+    /['"]?(\w+)['"]?\s+is not defined/i,
+    /cannot find name\s+['"]?(\w+)['"]?/i,
+    /ReferenceError:\s*['"]?(\w+)['"]?\s+is not defined/i,
+    /'(\w+)'\s+is undefined/i,
+    /(\w+)\s+is not a constructor/i,
+    /Cannot read propert(?:y|ies) of undefined \(reading ['"](\w+)['"]\)/i,
+  ];
+
+  let identifier: string | null = null;
+
+  for (const pattern of patterns) {
+    const match = errorMessage.match(pattern);
+    if (match) {
+      identifier = match[1];
+      break;
+    }
+  }
+
+  if (!identifier) {
+    // No explicit error match, try proactive detection
+    const missingImports = detectMissingImports(code);
+    if (missingImports.length > 0) {
+      // Fix the first missing import
+      const { identifier: id, source } = missingImports[0];
+      return addImport(code, id, source);
+    }
     return { fixed: false, newCode: code, description: '', fixType: 'none' };
   }
 
-  const identifier = notDefinedMatch[1];
-
   // Check if already imported
-  const importedRegex = new RegExp(`import\\s*{[^}]*\\b${identifier}\\b[^}]*}|import\\s+${identifier}\\s+from`, 'i');
-  if (importedRegex.test(code)) {
+  const importedPatterns = [
+    new RegExp(`import\\s*{[^}]*\\b${identifier}\\b[^}]*}\\s*from`),
+    new RegExp(`import\\s+${identifier}\\s+from`),
+    new RegExp(`import\\s*\\*\\s*as\\s+${identifier}\\s+from`),
+  ];
+
+  if (importedPatterns.some(pattern => pattern.test(code))) {
     return { fixed: false, newCode: code, description: '', fixType: 'none' };
   }
 
   // Check React imports
   if (REACT_IMPORTS[identifier]) {
-    return addNamedImport(code, identifier, 'react');
+    return addImport(code, identifier, 'react');
   }
 
   // Check common third-party imports
   if (COMMON_IMPORTS[identifier]) {
-    return addNamedImport(code, identifier, COMMON_IMPORTS[identifier]);
+    return addImport(code, identifier, COMMON_IMPORTS[identifier]);
   }
 
   return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+/**
+ * Smart import adder - handles named, default, and namespace imports
+ */
+function addImport(code: string, identifier: string, source: string): SimpleFixResult {
+  // Determine import type
+  const isDefaultImport = DEFAULT_IMPORTS.has(identifier);
+  const isNamespaceImport = !!NAMESPACE_IMPORTS[identifier];
+
+  if (isDefaultImport) {
+    return addDefaultImport(code, identifier, source);
+  } else if (isNamespaceImport) {
+    return addNamespaceImport(code, identifier, source);
+  } else {
+    return addNamedImport(code, identifier, source);
+  }
+}
+
+/**
+ * Add a default import: import X from 'source'
+ */
+function addDefaultImport(code: string, identifier: string, source: string): SimpleFixResult {
+  // Check if already has default import from this source
+  const existingDefaultRegex = new RegExp(`import\\s+\\w+\\s+from\\s*['"]${source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
+  if (existingDefaultRegex.test(code)) {
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  const importStatement = `import ${identifier} from '${source}';\n`;
+  const newCode = insertImport(code, importStatement);
+
+  return {
+    fixed: true,
+    newCode,
+    description: `Added default import: ${identifier} from '${source}'`,
+    fixType: 'import'
+  };
+}
+
+/**
+ * Add a namespace import: import * as X from 'source'
+ */
+function addNamespaceImport(code: string, identifier: string, source: string): SimpleFixResult {
+  const importStatement = `import * as ${identifier} from '${source}';\n`;
+  const newCode = insertImport(code, importStatement);
+
+  return {
+    fixed: true,
+    newCode,
+    description: `Added namespace import: * as ${identifier} from '${source}'`,
+    fixType: 'import'
+  };
+}
+
+/**
+ * Insert import statement at appropriate position
+ */
+function insertImport(code: string, importStatement: string): string {
+  // Find the last import statement
+  const lastImportMatch = code.match(/^(import\s+.+from\s+['"][^'"]+['"];?\s*\n?)+/m);
+
+  if (lastImportMatch) {
+    const lastImportEnd = lastImportMatch.index! + lastImportMatch[0].length;
+    return code.slice(0, lastImportEnd) + importStatement + code.slice(lastImportEnd);
+  } else {
+    return importStatement + code;
+  }
 }
 
 /**
@@ -720,6 +1188,34 @@ function tryFixJSXIssues(errorMessage: string, code: string): SimpleFixResult {
         description: `Fixed self-closing <${tag} /> tag`,
         fixType: 'jsx'
       };
+    }
+  }
+
+  // Fix adjacent JSX elements (multiple root elements without wrapper)
+  if (errorLower.includes('adjacent jsx elements') ||
+      errorLower.includes('must be wrapped') ||
+      errorLower.includes('only one element')) {
+    // Find the return statement and wrap JSX in Fragment
+    const returnMatch = code.match(/return\s*\(\s*\n?([\s\S]*?)\s*\);?\s*$/m);
+    if (returnMatch) {
+      const jsxContent = returnMatch[1].trim();
+      // Check if already wrapped
+      if (!jsxContent.startsWith('<>') && !jsxContent.startsWith('<Fragment') && !jsxContent.startsWith('<React.Fragment')) {
+        // Count top-level JSX elements
+        const topLevelTags = jsxContent.match(/^(\s*<[A-Za-z][^>]*>)/gm);
+        if (topLevelTags && topLevelTags.length > 1) {
+          const wrappedJsx = `<>\n      ${jsxContent}\n    </>`;
+          const newCode = code.replace(returnMatch[0], `return (\n    ${wrappedJsx}\n  );`);
+          if (newCode !== code) {
+            return {
+              fixed: true,
+              newCode,
+              description: 'Wrapped adjacent JSX elements in React Fragment',
+              fixType: 'jsx'
+            };
+          }
+        }
+      }
     }
   }
 
@@ -1214,29 +1710,330 @@ function tryFixArrowFunction(errorMessage: string, code: string): SimpleFixResul
 }
 
 /**
+ * Try to fix TypeScript type errors
+ */
+function tryFixTypeScriptErrors(errorMessage: string, code: string): SimpleFixResult {
+  const errorLower = errorMessage.toLowerCase();
+
+  // TS2345: Argument type mismatch - often needs type assertion
+  // "Argument of type 'X' is not assignable to parameter of type 'Y'"
+  const argTypeMismatch = errorMessage.match(/argument of type ['"]([^'"]+)['"] is not assignable to parameter of type ['"]([^'"]+)['"]/i);
+  if (argTypeMismatch) {
+    // Can't easily fix without more context, but we can detect it
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // TS2322: Type assignment error - property missing or wrong
+  // "Type 'X' is not assignable to type 'Y'"
+  if (errorLower.includes('is not assignable to type')) {
+    // Check for common patterns
+
+    // null/undefined assignment
+    if (errorLower.includes("'null'") || errorLower.includes("'undefined'")) {
+      // Often needs a default value or optional chaining
+      return { fixed: false, newCode: code, description: '', fixType: 'none' };
+    }
+  }
+
+  // TS7006: Parameter implicitly has 'any' type
+  if (errorMessage.includes("implicitly has an 'any' type") ||
+      errorMessage.includes("Parameter '") && errorMessage.includes("any")) {
+    const paramMatch = errorMessage.match(/Parameter ['"](\w+)['"]/);
+    if (paramMatch) {
+      const paramName = paramMatch[1];
+
+      // Try to add type annotation based on common patterns
+      // Event handlers
+      if (paramName === 'e' || paramName === 'event') {
+        const eventPatterns = [
+          { pattern: /onClick.*=.*\((\s*)e\s*\)/g, type: 'React.MouseEvent' },
+          { pattern: /onChange.*=.*\((\s*)e\s*\)/g, type: 'React.ChangeEvent<HTMLInputElement>' },
+          { pattern: /onSubmit.*=.*\((\s*)e\s*\)/g, type: 'React.FormEvent<HTMLFormElement>' },
+          { pattern: /onKeyDown.*=.*\((\s*)e\s*\)/g, type: 'React.KeyboardEvent' },
+          { pattern: /onKeyUp.*=.*\((\s*)e\s*\)/g, type: 'React.KeyboardEvent' },
+          { pattern: /onFocus.*=.*\((\s*)e\s*\)/g, type: 'React.FocusEvent' },
+          { pattern: /onBlur.*=.*\((\s*)e\s*\)/g, type: 'React.FocusEvent' },
+          { pattern: /onDrag.*=.*\((\s*)e\s*\)/g, type: 'React.DragEvent' },
+        ];
+
+        for (const { pattern, type } of eventPatterns) {
+          if (pattern.test(code)) {
+            const newCode = code.replace(
+              /(\w+(?:Handler)?)\s*=\s*\((\s*)e\s*\)\s*=>/g,
+              `$1 = ($2e: ${type}) =>`
+            );
+            if (newCode !== code) {
+              return {
+                fixed: true,
+                newCode,
+                description: `Added type annotation: ${type} for event parameter`,
+                fixType: 'syntax'
+              };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // TS2339: Property does not exist on type
+  // "Property 'X' does not exist on type 'Y'"
+  const propNotExistMatch = errorMessage.match(/property ['"](\w+)['"] does not exist on type ['"]([^'"]+)['"]/i);
+  if (propNotExistMatch) {
+    const propName = propNotExistMatch[1];
+    const typeName = propNotExistMatch[2];
+
+    // For 'Object' or 'unknown' types, suggest type assertion
+    if (typeName === 'Object' || typeName === 'unknown' || typeName === '{}') {
+      // Look for the property access and add type assertion
+      const accessPattern = new RegExp(`(\\w+)\\.${propName}\\b`, 'g');
+      const newCode = code.replace(accessPattern, `($1 as any).${propName}`);
+      if (newCode !== code) {
+        return {
+          fixed: true,
+          newCode,
+          description: `Added type assertion for '${propName}' property access`,
+          fixType: 'syntax'
+        };
+      }
+    }
+  }
+
+  // TS2532: Object is possibly undefined
+  if (errorMessage.includes('Object is possibly') &&
+      (errorMessage.includes('undefined') || errorMessage.includes('null'))) {
+    // This typically needs optional chaining - handled in runtime fixes
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // TS18046: 'X' is of type 'unknown'
+  if (errorMessage.includes("is of type 'unknown'")) {
+    const varMatch = errorMessage.match(/['"](\w+)['"] is of type 'unknown'/);
+    if (varMatch) {
+      const varName = varMatch[1];
+      // Add type assertion
+      const pattern = new RegExp(`\\b${varName}\\b(?!\s*as\\s)`, 'g');
+      let firstReplace = true;
+      const newCode = code.replace(pattern, (match) => {
+        if (firstReplace) {
+          firstReplace = false;
+          return `(${match} as any)`;
+        }
+        return match;
+      });
+      if (newCode !== code) {
+        return {
+          fixed: true,
+          newCode,
+          description: `Added type assertion for unknown type '${varName}'`,
+          fixType: 'syntax'
+        };
+      }
+    }
+  }
+
+  return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+/**
+ * Try to fix async/await errors
+ */
+function tryFixAsyncErrors(errorMessage: string, code: string): SimpleFixResult {
+  const errorLower = errorMessage.toLowerCase();
+
+  // "'await' is only valid in async function"
+  if (errorLower.includes("'await' is only valid in async") ||
+      errorLower.includes("await is only allowed in async") ||
+      errorLower.includes("unexpected reserved word 'await'")) {
+
+    // Find the function containing the await
+    // Look for function expressions without async
+    const patterns = [
+      // Arrow function: const fn = () => { await... } → const fn = async () => { await... }
+      {
+        pattern: /(const|let|var)\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>\s*\{([^}]*await[^}]*)\}/g,
+        replacement: '$1 $2 = async ($3) => {$4}'
+      },
+      // Arrow function single line: const fn = () => await... → const fn = async () => await...
+      {
+        pattern: /(const|let|var)\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>\s*(await\s)/g,
+        replacement: '$1 $2 = async ($3) => $4'
+      },
+      // Event handler: onClick={() => { await... }} → onClick={async () => { await... }}
+      {
+        pattern: /(\w+)=\{\s*\(([^)]*)\)\s*=>\s*\{([^}]*await[^}]*)\}\s*\}/g,
+        replacement: '$1={async ($2) => {$3}}'
+      },
+      // Function expression: function fn() { await... } → async function fn() { await... }
+      {
+        pattern: /function\s+(\w+)\s*\(([^)]*)\)\s*\{([^}]*await[^}]*)\}/g,
+        replacement: 'async function $1($2) {$3}'
+      },
+    ];
+
+    for (const { pattern, replacement } of patterns) {
+      if (pattern.test(code)) {
+        const newCode = code.replace(pattern, replacement);
+        if (newCode !== code) {
+          return {
+            fixed: true,
+            newCode,
+            description: 'Added async keyword to function containing await',
+            fixType: 'syntax'
+          };
+        }
+      }
+    }
+  }
+
+  // "Cannot use 'await' outside of an async function or at the top level"
+  // Similar to above but different message format
+  if (errorLower.includes("cannot use await outside")) {
+    // Same fix as above
+    const arrowPattern = /(\w+)=\{\s*\(([^)]*)\)\s*=>\s*\{([^}]*await[^}]*)\}\s*\}/g;
+    const newCode = code.replace(arrowPattern, '$1={async ($2) => {$3}}');
+    if (newCode !== code) {
+      return {
+        fixed: true,
+        newCode,
+        description: 'Added async keyword to arrow function containing await',
+        fixType: 'syntax'
+      };
+    }
+  }
+
+  // "Promise returned but not awaited" or similar
+  if (errorLower.includes('promise') &&
+      (errorLower.includes('not awaited') || errorLower.includes('floating promise'))) {
+    // Find function calls that return promises but aren't awaited
+    // This is complex to fix automatically without knowing which functions return promises
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // "Property 'then' does not exist on type 'void'"
+  // This usually means a function was called without await that should have been
+  if (errorMessage.includes("'then' does not exist")) {
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // ".then is not a function" - trying to call .then on non-promise
+  if (errorLower.includes('.then is not a function')) {
+    // Find .then() calls and remove them if the function isn't async
+    const thenPattern = /(\w+\([^)]*\))\.then\(/g;
+    const match = thenPattern.exec(code);
+    if (match) {
+      // This is tricky - the function might need to be async, or .then needs to be removed
+      return { fixed: false, newCode: code, description: '', fixType: 'none' };
+    }
+  }
+
+  return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+/**
+ * Try to fix Promise-related errors
+ */
+function tryFixPromiseErrors(errorMessage: string, code: string): SimpleFixResult {
+  const errorLower = errorMessage.toLowerCase();
+
+  // "Unhandled promise rejection" - needs try/catch or .catch()
+  if (errorLower.includes('unhandled promise rejection') ||
+      errorLower.includes('uncaught (in promise)')) {
+    // Find async function calls without error handling
+    // This is complex to fix automatically
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // "Cannot read property 'X' of Promise" - forgot to await
+  const promisePropMatch = errorMessage.match(/cannot read propert(?:y|ies).*of promise/i);
+  if (promisePropMatch) {
+    // Find the likely culprit - a function call that should be awaited
+    // Look for patterns like: const result = fetchData(); result.data
+    // This is tricky without knowing which functions return promises
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // "[object Promise]" in output - usually means Promise wasn't awaited
+  if (errorMessage.includes('[object Promise]')) {
+    // Find JSX that might be rendering a promise directly
+    // Example: <div>{fetchData()}</div> should be handled with state
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+/**
  * Check if an error can potentially be fixed without AI
  */
 export function canTrySimpleFix(errorMessage: string): boolean {
   const patterns = [
+    // Import/Reference errors
     /is not defined/i,
+    /cannot find name/i,
+    /is undefined/i,
+    /ReferenceError/i,
+    /is not a constructor/i,
+
+    // Prop/attribute errors
     /invalid.*prop/i,
     /unknown prop/i,
     /react does not recognize/i,
+    /Invalid DOM property/i,
+
+    // Syntax errors
     /expected ['"`][});\]]['"`]/i,
     /missing.*[});\]]/i,
     /missing semicolon/i,
-    /react is not defined/i,
     /unexpected token/i,
-    /unterminated jsx/i,
-    /expected corresponding jsx closing tag/i,
-    /cannot read propert/i,
-    /is not a function/i,
-    /cannot destructure/i,
+    /unexpected end of input/i,
+    /expected expression/i,
+    /expected identifier/i,
+
+    // React errors
+    /react is not defined/i,
     /unique "key" prop/i,
     /each child in a list/i,
+    /invalid hook call/i,
+
+    // JSX errors
+    /unterminated jsx/i,
+    /expected corresponding jsx closing tag/i,
     /void element/i,
     /self-closing/i,
     /unclosed.*element/i,
+    /adjacent jsx elements/i,
+
+    // Runtime errors
+    /cannot read propert/i,
+    /is not a function/i,
+    /cannot destructure/i,
+    /null is not/i,
+    /undefined is not/i,
+    /cannot access/i,
+    /is not iterable/i,
+
+    // TypeScript errors
+    /TS\d{4}/i, // TypeScript error codes (TS2345, TS2322, etc.)
+    /is not assignable to/i,
+    /implicitly has.*'any' type/i,
+    /property.*does not exist on type/i,
+    /object is possibly.*undefined/i,
+    /object is possibly.*null/i,
+    /is of type 'unknown'/i,
+    /type.*has no.*signature/i,
+    /cannot invoke.*type/i,
+
+    // Async/await errors
+    /await.*only.*async/i,
+    /await.*outside.*async/i,
+    /unexpected reserved word.*await/i,
+    /floating promise/i,
+    /unhandled promise/i,
+    /uncaught.*in promise/i,
+    /'then'.*does not exist/i,
+    /\.then is not a function/i,
+    /\[object Promise\]/i,
   ];
 
   return patterns.some(pattern => pattern.test(errorMessage));
@@ -1256,4 +2053,399 @@ export function getFixTypeLabel(fixType: SimpleFixResult['fixType']): string {
     'none': 'No Fix'
   };
   return labels[fixType] || 'Fix';
+}
+
+// ============================================================================
+// PROACTIVE CODE ANALYSIS
+// ============================================================================
+
+export interface CodeIssue {
+  type: 'error' | 'warning' | 'suggestion';
+  category: 'import' | 'syntax' | 'react' | 'typescript' | 'accessibility' | 'performance' | 'security';
+  message: string;
+  line?: number;
+  fix?: () => string; // Returns fixed code
+  autoFixable: boolean;
+}
+
+/**
+ * Proactively analyze code for potential issues BEFORE runtime errors occur
+ * This is useful for catching common mistakes early
+ */
+export function analyzeCode(code: string): CodeIssue[] {
+  const issues: CodeIssue[] = [];
+
+  // 1. Check for missing imports (proactive)
+  const missingImports = detectMissingImports(code);
+  for (const { identifier, source } of missingImports) {
+    issues.push({
+      type: 'error',
+      category: 'import',
+      message: `'${identifier}' is used but not imported. Expected import from '${source}'`,
+      autoFixable: true
+    });
+  }
+
+  // 2. Check for common React mistakes
+  issues.push(...checkReactPatterns(code));
+
+  // 3. Check for potential runtime errors
+  issues.push(...checkRuntimePatterns(code));
+
+  // 4. Check for accessibility issues
+  issues.push(...checkAccessibilityPatterns(code));
+
+  // 5. Check for performance anti-patterns
+  issues.push(...checkPerformancePatterns(code));
+
+  // 6. Check for security issues
+  issues.push(...checkSecurityPatterns(code));
+
+  return issues;
+}
+
+/**
+ * Check for common React mistakes
+ */
+function checkReactPatterns(code: string): CodeIssue[] {
+  const issues: CodeIssue[] = [];
+
+  // Check for .map() without key prop
+  const mapWithoutKey = /\.map\s*\(\s*(?:\([^)]*\)|[^,)]+)\s*=>\s*(?:\(?\s*)?<\w+(?![^>]*\bkey\s*=)[^>]*>/g;
+  const mapMatches = code.match(mapWithoutKey);
+  if (mapMatches) {
+    issues.push({
+      type: 'warning',
+      category: 'react',
+      message: 'List items in .map() should have unique "key" prop for optimal re-rendering',
+      autoFixable: true
+    });
+  }
+
+  // Check for setState in render/return
+  const setStateInRender = /return\s*\([^)]*set\w+\s*\(/;
+  if (setStateInRender.test(code)) {
+    issues.push({
+      type: 'error',
+      category: 'react',
+      message: 'Avoid calling setState directly in render. Use useEffect for side effects.',
+      autoFixable: false
+    });
+  }
+
+  // Check for hooks in conditionals
+  const hooksInConditional = /if\s*\([^)]*\)\s*\{[^}]*(use\w+)\s*\(/;
+  const hookMatch = code.match(hooksInConditional);
+  if (hookMatch) {
+    issues.push({
+      type: 'error',
+      category: 'react',
+      message: `Hook '${hookMatch[1]}' is called conditionally. Hooks must be called in the same order every render.`,
+      autoFixable: false
+    });
+  }
+
+  // Check for hooks in loops
+  const hooksInLoop = /(for|while)\s*\([^)]*\)\s*\{[^}]*(use\w+)\s*\(/;
+  const loopHookMatch = code.match(hooksInLoop);
+  if (loopHookMatch) {
+    issues.push({
+      type: 'error',
+      category: 'react',
+      message: `Hook '${loopHookMatch[2]}' is called inside a loop. Hooks must be called at the top level.`,
+      autoFixable: false
+    });
+  }
+
+  // Check for missing dependency array in useEffect
+  const useEffectNoDeps = /useEffect\s*\(\s*(?:async\s*)?\(\s*\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;/g;
+  if (useEffectNoDeps.test(code)) {
+    // Check if it's actually missing (no second argument)
+    const effectCalls = code.match(/useEffect\s*\([^;]+\)/g) || [];
+    for (const call of effectCalls) {
+      // Count commas to see if dependency array is provided
+      const arrowIndex = call.indexOf('=>');
+      if (arrowIndex === -1) continue;
+      const afterArrow = call.slice(arrowIndex);
+      // Look for closing brace followed by comma and array
+      if (!afterArrow.match(/}\s*,\s*\[/)) {
+        issues.push({
+          type: 'warning',
+          category: 'react',
+          message: 'useEffect is missing dependency array. Add [] for mount-only or [deps] for updates.',
+          autoFixable: false
+        });
+        break;
+      }
+    }
+  }
+
+  // Check for inline object/array in JSX props (causes re-renders)
+  const inlineObjectProp = /\w+=\{\s*\{[^}]+\}\s*\}/g;
+  const inlineArrayProp = /\w+=\{\s*\[[^\]]+\]\s*\}/g;
+  if (inlineObjectProp.test(code) || inlineArrayProp.test(code)) {
+    // Filter out style prop which is commonly inline
+    if (!/style=\{/.test(code.match(inlineObjectProp)?.[0] || '')) {
+      issues.push({
+        type: 'suggestion',
+        category: 'performance',
+        message: 'Inline objects/arrays in JSX props create new references on every render. Consider using useMemo.',
+        autoFixable: false
+      });
+    }
+  }
+
+  // Check for event handler recreated on every render
+  const inlineHandler = /on\w+=\{\s*\([^)]*\)\s*=>/g;
+  const handlerMatches = code.match(inlineHandler);
+  if (handlerMatches && handlerMatches.length > 3) {
+    issues.push({
+      type: 'suggestion',
+      category: 'performance',
+      message: 'Multiple inline event handlers may cause unnecessary re-renders. Consider useCallback.',
+      autoFixable: false
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Check for potential runtime errors
+ */
+function checkRuntimePatterns(code: string): CodeIssue[] {
+  const issues: CodeIssue[] = [];
+
+  // Check for potential null/undefined access without guard
+  const dangerousAccess = /(\w+)\.(\w+)\.\w+(?![\s\S]*\?\.)(?![\s\S]*&&)/g;
+  const accessMatch = code.match(dangerousAccess);
+  if (accessMatch && accessMatch.length > 5) {
+    issues.push({
+      type: 'suggestion',
+      category: 'typescript',
+      message: 'Deep property access without optional chaining (?.) could cause runtime errors if properties are undefined.',
+      autoFixable: false
+    });
+  }
+
+  // Check for array access without bounds check
+  const arrayAccess = /\w+\[\d+\]/g;
+  if (arrayAccess.test(code)) {
+    // Check if it's accessing a potentially undefined index
+    const matches = code.match(/\w+\[(\d+)\]/g) || [];
+    for (const match of matches) {
+      const index = parseInt(match.match(/\[(\d+)\]/)?.[1] || '0');
+      if (index > 10) {
+        issues.push({
+          type: 'warning',
+          category: 'typescript',
+          message: `Array access at index ${index} might be out of bounds. Consider adding bounds check.`,
+          autoFixable: false
+        });
+        break;
+      }
+    }
+  }
+
+  // Check for async function without error handling
+  const asyncNoTryCatch = /async\s+(?:\w+\s*)?\([^)]*\)\s*(?::\s*\w+(?:<[^>]+>)?\s*)?\{(?![\s\S]*try\s*\{)[^}]*await/g;
+  if (asyncNoTryCatch.test(code)) {
+    issues.push({
+      type: 'suggestion',
+      category: 'typescript',
+      message: 'Async function with await but no try/catch. Consider adding error handling.',
+      autoFixable: false
+    });
+  }
+
+  // Check for JSON.parse without try/catch
+  const jsonParseNoTry = /JSON\.parse\s*\([^)]+\)(?![\s\S]{0,50}catch)/;
+  if (jsonParseNoTry.test(code)) {
+    issues.push({
+      type: 'warning',
+      category: 'typescript',
+      message: 'JSON.parse can throw on invalid input. Consider wrapping in try/catch.',
+      autoFixable: false
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Check for accessibility issues
+ */
+function checkAccessibilityPatterns(code: string): CodeIssue[] {
+  const issues: CodeIssue[] = [];
+
+  // Check for img without alt
+  const imgNoAlt = /<img(?![^>]*\balt\s*=)[^>]*>/gi;
+  if (imgNoAlt.test(code)) {
+    issues.push({
+      type: 'warning',
+      category: 'accessibility',
+      message: '<img> elements should have alt attribute for screen readers.',
+      autoFixable: true
+    });
+  }
+
+  // Check for button without type
+  const buttonNoType = /<button(?![^>]*\btype\s*=)[^>]*>/gi;
+  if (buttonNoType.test(code)) {
+    issues.push({
+      type: 'suggestion',
+      category: 'accessibility',
+      message: '<button> elements should have explicit type="button" or type="submit".',
+      autoFixable: true
+    });
+  }
+
+  // Check for onClick on non-interactive elements
+  const onClickNonInteractive = /<(div|span|p)\s[^>]*onClick/gi;
+  if (onClickNonInteractive.test(code)) {
+    issues.push({
+      type: 'warning',
+      category: 'accessibility',
+      message: 'onClick on <div>/<span> is not keyboard accessible. Use <button> or add role and keyboard handlers.',
+      autoFixable: false
+    });
+  }
+
+  // Check for missing form labels
+  const inputNoLabel = /<input(?![^>]*\baria-label)[^>]*>(?![\s\S]{0,50}<label)/gi;
+  if (inputNoLabel.test(code)) {
+    issues.push({
+      type: 'suggestion',
+      category: 'accessibility',
+      message: 'Input elements should have associated <label> or aria-label for accessibility.',
+      autoFixable: false
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Check for performance anti-patterns
+ */
+function checkPerformancePatterns(code: string): CodeIssue[] {
+  const issues: CodeIssue[] = [];
+
+  // Check for large inline styles
+  const largeInlineStyle = /style=\{\{[^}]{100,}\}\}/;
+  if (largeInlineStyle.test(code)) {
+    issues.push({
+      type: 'suggestion',
+      category: 'performance',
+      message: 'Large inline style objects create new references on each render. Consider extracting to a constant or useMemo.',
+      autoFixable: false
+    });
+  }
+
+  // Check for console.log in production code
+  const consoleLog = /console\.(log|debug|info)\s*\(/g;
+  const consoleLogs = code.match(consoleLog);
+  if (consoleLogs && consoleLogs.length > 3) {
+    issues.push({
+      type: 'suggestion',
+      category: 'performance',
+      message: 'Multiple console.log statements found. Consider removing for production.',
+      autoFixable: false
+    });
+  }
+
+  // Check for spread operator in loop
+  const spreadInLoop = /(for|while|\.map|\.forEach|\.reduce)[^}]*\.\.\./;
+  if (spreadInLoop.test(code)) {
+    issues.push({
+      type: 'suggestion',
+      category: 'performance',
+      message: 'Spread operator in loops can be slow for large arrays. Consider push() or concat().',
+      autoFixable: false
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Check for potential security issues
+ */
+function checkSecurityPatterns(code: string): CodeIssue[] {
+  const issues: CodeIssue[] = [];
+
+  // Check for dangerouslySetInnerHTML
+  if (/dangerouslySetInnerHTML/i.test(code)) {
+    issues.push({
+      type: 'warning',
+      category: 'security',
+      message: 'dangerouslySetInnerHTML can expose XSS vulnerabilities. Sanitize input with DOMPurify.',
+      autoFixable: false
+    });
+  }
+
+  // Check for eval()
+  if (/\beval\s*\(/.test(code)) {
+    issues.push({
+      type: 'error',
+      category: 'security',
+      message: 'eval() is dangerous and should not be used. Consider safer alternatives.',
+      autoFixable: false
+    });
+  }
+
+  // Check for innerHTML assignment
+  if (/\.innerHTML\s*=/.test(code)) {
+    issues.push({
+      type: 'warning',
+      category: 'security',
+      message: 'Direct innerHTML assignment can cause XSS. Use React state and JSX instead.',
+      autoFixable: false
+    });
+  }
+
+  // Check for hardcoded credentials
+  const credentials = /(password|secret|api[_-]?key|token)\s*[:=]\s*['"][^'"]{5,}['"]/i;
+  if (credentials.test(code)) {
+    issues.push({
+      type: 'error',
+      category: 'security',
+      message: 'Possible hardcoded credentials detected. Use environment variables instead.',
+      autoFixable: false
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Get all issues and optionally apply auto-fixes
+ */
+export function analyzeAndFix(code: string, autoFix: boolean = false): {
+  issues: CodeIssue[];
+  fixedCode: string;
+  appliedFixes: string[];
+} {
+  const issues = analyzeCode(code);
+  let fixedCode = code;
+  const appliedFixes: string[] = [];
+
+  if (autoFix) {
+    // Apply auto-fixable issues
+    for (const issue of issues) {
+      if (issue.autoFixable && issue.category === 'import') {
+        // Handle import fixes using existing function
+        const match = issue.message.match(/'(\w+)' is used but not imported.*from '([^']+)'/);
+        if (match) {
+          const result = addImport(fixedCode, match[1], match[2]);
+          if (result.fixed) {
+            fixedCode = result.newCode;
+            appliedFixes.push(result.description);
+          }
+        }
+      }
+    }
+  }
+
+  return { issues, fixedCode, appliedFixes };
 }

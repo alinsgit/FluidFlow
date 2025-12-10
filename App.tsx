@@ -948,7 +948,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   }, [project.currentProject, activeFile, resetFiles, project.refreshGitStatus]);
 
   return (
-    <div className="flex flex-col min-h-screen h-screen max-h-screen w-full bg-[#020617] text-white overflow-hidden relative selection:bg-blue-500/30 selection:text-blue-50">
+    <div className="fixed inset-0 flex flex-col bg-[#020617] text-white overflow-hidden selection:bg-blue-500/30 selection:text-blue-50">
        {/* Background Ambient Effects */}
        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
@@ -1123,6 +1123,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             localChanges={localChanges}
             onDiscardChanges={handleDiscardChanges}
             onRevertToCommit={handleRevertToCommit}
+            onSendErrorToChat={(error) => controlPanelRef.current?.sendErrorToChat(error)}
           />
        </main>
 

@@ -643,8 +643,19 @@ export function classifyError(errorMessage: string): {
     };
   }
 
-  // Import errors
-  if (/is not defined/i.test(msg) || /cannot find module/i.test(msg)) {
+  // Import errors - expanded patterns
+  if (/is not defined/i.test(msg) ||
+      /cannot find module/i.test(msg) ||
+      /bare specifier/i.test(msg) ||
+      /module specifier/i.test(msg) ||
+      /was not remapped/i.test(msg) ||
+      /failed to resolve/i.test(msg) ||
+      /failed to load/i.test(msg) ||
+      /could not resolve/i.test(msg) ||
+      /unable to resolve/i.test(msg) ||
+      /module not found/i.test(msg) ||
+      /export.*not found/i.test(msg) ||
+      /does not provide an export/i.test(msg)) {
     return {
       category: 'import',
       isFixable: true,

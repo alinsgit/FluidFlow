@@ -174,6 +174,26 @@ export const useTechStack = () => {
       instruction += '\n- **Animations**: CSS transitions and keyframe animations';
     }
 
+    // Import Path Guidelines (Critical for browser module resolution)
+    instruction += '\n\n**IMPORT PATH RULES (CRITICAL - Browser module resolution)**:';
+    instruction += '\n- ALWAYS use relative paths for local files: "./components/Hero" or "../utils/helpers"';
+    instruction += '\n- NEVER use bare specifiers like "src/components/Hero" - browsers cannot resolve these';
+    instruction += '\n- For files in the same directory: "./FileName"';
+    instruction += '\n- For files in subdirectories: "./subdir/FileName"';
+    instruction += '\n- For files in parent directories: "../FileName" or "../../FileName"';
+    instruction += '\n- NPM packages use bare specifiers: "react", "lucide-react", "@tanstack/react-query"';
+    instruction += '\n- File extensions (.tsx, .ts) are optional in imports';
+
+    // Error Fixing Guidelines
+    instruction += '\n\n**ERROR FIXING GUIDELINES (When fixing runtime errors)**:';
+    instruction += '\n- Carefully analyze the error message and stack trace to identify the root cause';
+    instruction += '\n- Check for common issues: undefined variables, missing imports, incorrect prop types, async/await errors';
+    instruction += '\n- Ensure all required imports are present at the top of the file';
+    instruction += '\n- Verify that component props match their expected types';
+    instruction += '\n- For TypeScript errors, ensure proper type annotations and null checks';
+    instruction += '\n- When fixing, provide the COMPLETE updated file - do not use partial snippets or placeholders';
+    instruction += '\n- After fixing, briefly explain what caused the error and how it was resolved';
+
     return instruction;
   };
 
