@@ -15,7 +15,6 @@ import { ProjectManager } from './components/ProjectManager';
 import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
 import { CreditsModal } from './components/CreditsModal';
 import { CodeMapModal } from './components/ControlPanel/CodeMapModal';
-import { CodeMap } from './services/codemap/types';
 // Keyboard shortcuts disabled due to browser conflicts
 // import { useKeyboardShortcuts, KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useVersionHistory } from './hooks/useVersionHistory';
@@ -671,8 +670,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
   
   const [isCodeMapModalOpen, setIsCodeMapModalOpen] = useState(false);
-  const [codeMap, setCodeMap] = useState<CodeMap | null>(null);
-  const [isGeneratingCodeMap, setIsGeneratingCodeMap] = useState(false);
 
   // ControlPanel ref for inspect edit handler
   const controlPanelRef = useRef<ControlPanelRef>(null);
@@ -1307,7 +1304,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
        <CodeMapModal
          isOpen={isCodeMapModalOpen}
          onClose={() => setIsCodeMapModalOpen(false)}
-         projectId={project.currentProject?.id}
+         files={files}
        />
 
     </div>

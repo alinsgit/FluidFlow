@@ -5,7 +5,6 @@ import { gitRouter } from './api/git.js';
 import { githubRouter } from './api/github.js';
 import { settingsRouter } from './api/settings.js';
 import { runnerRouter } from './api/runner.js';
-import { codemapRouter } from './api/codemap.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -53,7 +52,6 @@ app.use('/api/git', gitRouter);
 app.use('/api/github', githubRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/runner', runnerRouter);
-app.use('/api/codemap', codemapRouter);
 
 // Error handling middleware (must be after all routes)
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {

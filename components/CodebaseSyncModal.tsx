@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, Upload, FileCode, AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import type { FileSystem } from '@/types';
+import { generateCodeMap, generateContextForPrompt } from '../utils/codemap';
 
 interface SyncPayload {
   displayMessage: string;  // Short summary for chat UI
@@ -161,6 +162,20 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
     setIsSyncing(true);
     setCurrentBatch(0);
 
+    // Generate codemap for project structure understanding
+    const codemapContext = generateContextForPrompt(files);
+    const codemap = generateCodeMap(files);
+    const codemapJson = JSON.stringify({
+      files: codemap.files.map(f => ({
+        path: f.path,
+        type: f.type,
+        exports: f.exports,
+        components: f.components.map(c => c.name),
+        functions: f.functions
+      })),
+      componentTree: codemap.componentTree
+    }, null, 2);
+
     try {
       for (let i = 0; i < batches.length; i++) {
         setCurrentBatch(i + 1);
@@ -179,12 +194,25 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
           `Synced ${batch.length} files (~${batchTokens.toLocaleString()} tokens):\n` +
           batch.map(f => `- \`${f.path}\` (${f.lines} lines)`).join('\n');
 
+        // Include codemap only in the first batch
+        const codemapSection = i === 0 ? `
+## Project Structure Analysis (CodeMap)
+
+${codemapContext}
+
+### CodeMap JSON
+\`\`\`json
+${codemapJson}
+\`\`\`
+
+` : '';
+
         // FULL message for LLM (with file contents)
         const llmMessage = `🔄 **CODEBASE SYNC${batchInfo}**
 
 This message contains the current project files. Use these as the reference for all future requests.
 ${batches.length > 1 ? `\n⚠️ This is batch ${i + 1}/${batches.length}.` : ''}
-
+${codemapSection}
 ## Current Project Files (${batch.length} files, ~${batchTokens.toLocaleString()} tokens)
 
 ${filesContent}

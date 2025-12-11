@@ -41,7 +41,7 @@ function extractFileListFromResponse(response: string): string[] {
 
   return Array.from(files).sort();
 }
-import { generateContextForPrompt } from '../../utils/codemap';
+import { generateContextForPrompt, generateCodeMap } from '../../utils/codemap';
 import { debugLog } from '../../hooks/useDebugStore';
 import { useTechStack } from '../../hooks/useTechStack';
 import { getProviderManager, GenerationRequest, GenerationResponse } from '../../services/ai';
@@ -1094,9 +1094,39 @@ ${prompt}
         const promptParts: string[] = [elementDetails];
         const images: { data: string; mimeType: string }[] = [];
 
-        // Add existing files context
-        const existingFilesJson = JSON.stringify(files, null, 2);
-        promptParts.push(`\n## CURRENT PROJECT FILES:\n\`\`\`json\n${existingFilesJson}\n\`\`\``);
+        // Add codemap context for better AI understanding
+        const codeContext = generateContextForPrompt(files);
+        promptParts.push(`\n${codeContext}`);
+
+        // Add target component file content (more efficient than all files)
+        const targetFilePath = element.componentName
+          ? Object.keys(files).find(p => p.includes(element.componentName!)) || 'src/App.tsx'
+          : 'src/App.tsx';
+        const targetFileContent = files[targetFilePath];
+        if (targetFileContent) {
+          promptParts.push(`\n## TARGET FILE TO MODIFY:\n**${targetFilePath}**\n\`\`\`tsx\n${targetFileContent}\n\`\`\``);
+        }
+
+        // Add related files if any (imports from target file)
+        const targetFileInfo = generateCodeMap(files).files.find(f => f.path === targetFilePath);
+        if (targetFileInfo) {
+          const relatedPaths = targetFileInfo.imports
+            .filter(i => i.from.startsWith('.'))
+            .map(i => {
+              const base = targetFilePath.substring(0, targetFilePath.lastIndexOf('/'));
+              return i.from.startsWith('./')
+                ? `${base}/${i.from.slice(2)}.tsx`
+                : `${base}/${i.from}.tsx`;
+            })
+            .filter(p => files[p]);
+
+          if (relatedPaths.length > 0) {
+            promptParts.push('\n## RELATED FILES (for context only, do NOT modify unless necessary):');
+            for (const path of relatedPaths.slice(0, 3)) {
+              promptParts.push(`\n**${path}**\n\`\`\`tsx\n${files[path]}\n\`\`\``);
+            }
+          }
+        }
 
         const finalPrompt = promptParts.join('\n');
 
