@@ -209,21 +209,21 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
     const codeBlockMatch = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     let jsonString = codeBlockMatch ? codeBlockMatch[1] : response;
 
+    // Trim leading whitespace/newlines (common in AI responses)
+    jsonString = jsonString.replace(/^[\s\r\n]+/, '');
+
     // Remove PLAN comment if present (it has its own JSON that would confuse parsing)
     // Format: // PLAN: {"create":[...],"update":[...],"delete":[],"total":N}
-    // Match just the prefix, then use brace counting for the JSON boundary
-    const planPrefixMatch = jsonString.match(/^(\/\/\s*PLAN:\s*)/m);
-    if (planPrefixMatch && planPrefixMatch.index !== undefined) {
-      const planStart = planPrefixMatch.index;
-      const jsonStart = planStart + planPrefixMatch[1].length;
-
-      // Check if there's a { after the prefix
-      if (jsonString[jsonStart] === '{') {
+    // Strategy: Find the PLAN line, use brace counting to find where its JSON ends
+    if (jsonString.startsWith('//') && jsonString.includes('PLAN')) {
+      // Find where the PLAN JSON starts (first { after //)
+      const firstBrace = jsonString.indexOf('{');
+      if (firstBrace !== -1) {
         // Use brace counting to find where the PLAN JSON ends
         let braceCount = 0;
-        let planEnd = jsonStart;
+        let planEnd = firstBrace;
 
-        for (let i = jsonStart; i < jsonString.length; i++) {
+        for (let i = firstBrace; i < jsonString.length; i++) {
           const char = jsonString[i];
           if (char === '{') braceCount++;
           else if (char === '}') {
@@ -235,10 +235,10 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
           }
         }
 
-        // Remove the PLAN comment (including any trailing whitespace/newlines - handle both \r\n and \n)
+        // Remove everything from start to planEnd (including any trailing whitespace/newlines)
         const afterPlan = jsonString.substring(planEnd).replace(/^[\s\r\n]+/, '');
+        console.log('[parseMultiFileResponse] Removed PLAN comment, remaining:', afterPlan.slice(0, 100) + '...');
         jsonString = afterPlan;
-        console.log('[parseMultiFileResponse] Removed PLAN comment, remaining:', jsonString.slice(0, 100) + '...');
       }
     }
 
