@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, AlertTriangle, X, MessageSquare, FileCode, History, Settings, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Layers, RotateCcw, AlertTriangle, X, MessageSquare, FileCode, History, Settings, ChevronDown, SlidersHorizontal, Upload } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
 import { cleanGeneratedCode, parseMultiFileResponse, GenerationMeta } from '../../utils/cleanCode';
 import { extractFilesFromTruncatedResponse } from '../../utils/extractPartialFiles';
@@ -57,6 +57,7 @@ import { getFluidFlowConfig } from '../../services/fluidflowConfig';
 // Sub-components
 import { ChatPanel } from './ChatPanel';
 import { ChatInput } from './ChatInput';
+import { CodebaseSyncModal } from '../CodebaseSyncModal';
 import { SettingsPanel } from './SettingsPanel';
 import { ModeToggle } from './ModeToggle';
 import { ProjectPanel } from './ProjectPanel';
@@ -184,6 +185,7 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   const [, forceUpdate] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showAIHistory, setShowAIHistory] = useState(false);
+  const [showCodebaseSync, setShowCodebaseSync] = useState(false);
 
   // Modal exclusivity state
   const [openModal, setOpenModal] = useState<'settings' | 'projects' | 'techstack' | 'promptengineer' | 'batchgen' | null>(null);
@@ -268,7 +270,8 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
       contextManager.addMessage(
         sessionIdRef.current,
         lastMsg.role,
-        lastMsg.role === 'user' ? (lastMsg.prompt || '') : (lastMsg.explanation || lastMsg.error || ''),
+        // Use llmContent if available (for codebase sync), otherwise use prompt/explanation
+        lastMsg.role === 'user' ? (lastMsg.llmContent || lastMsg.prompt || '') : (lastMsg.explanation || lastMsg.error || ''),
         { messageId: lastMsg.id }
       );
     }
@@ -2435,13 +2438,24 @@ Fix the error in src/App.tsx.`;
       />
 
       {/* Mode Toggle + Auto-Accept */}
-      <div className="px-3 py-2 border-t border-white/5 flex-shrink-0">
+      <div className="px-3 py-2 border-t border-white/5 flex-shrink-0 flex items-center justify-between gap-2">
         <ModeToggle
           isConsultantMode={isConsultantMode}
           onToggle={() => setIsConsultantMode(!isConsultantMode)}
           autoAcceptChanges={autoAcceptChanges}
           onAutoAcceptChange={onAutoAcceptChangesChange}
         />
+        {/* Sync Codebase Button */}
+        {Object.keys(files).length > 0 && (
+          <button
+            onClick={() => setShowCodebaseSync(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg border border-blue-500/20 transition-all"
+            title="Sync current codebase to AI context"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Sync to AI</span>
+          </button>
+        )}
       </div>
 
       {/* Chat Input */}
@@ -2760,6 +2774,61 @@ Fix the error in src/App.tsx.`;
           }}
         />
       )}
+
+      {/* Codebase Sync Modal */}
+      <CodebaseSyncModal
+        isOpen={showCodebaseSync}
+        onClose={() => setShowCodebaseSync(false)}
+        files={files}
+        onSync={async (payload) => {
+          const { displayMessage, llmMessage, fileCount, tokenEstimate, batchIndex, totalBatches } = payload;
+
+          // Debug log - request
+          console.log(`[CodebaseSync] Batch ${batchIndex + 1}/${totalBatches}`, {
+            fileCount,
+            tokenEstimate,
+            displayMessageLength: displayMessage.length,
+            llmMessageLength: llmMessage.length
+          });
+          debugLog.request('other', {
+            model: 'codebase-sync',
+            prompt: `Sync batch ${batchIndex + 1}/${totalBatches}: ${fileCount} files, ~${tokenEstimate} tokens`,
+            metadata: { fileCount, tokenEstimate, batchIndex, totalBatches }
+          });
+
+          // Create message for chat UI (short display) but with full LLM content
+          const syncMessage: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'user',
+            timestamp: Date.now(),
+            prompt: displayMessage,
+            // Store full content for LLM in a separate field
+            llmContent: llmMessage
+          };
+          setMessages(prev => [...prev, syncMessage]);
+
+          // If this is the last batch, add an AI acknowledgment
+          if (batchIndex === totalBatches - 1) {
+            const totalFiles = Object.keys(files).length;
+            const ackMessage: ChatMessage = {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              timestamp: Date.now(),
+              explanation: `✅ **Codebase synced successfully!**\n\nI now have the complete and up-to-date view of your project (${totalFiles} files). I'll use this as the reference for all future requests.\n\nFeel free to ask me to make changes or improvements!`
+            };
+            setMessages(prev => [...prev, ackMessage]);
+
+            // Debug log - complete
+            console.log('[CodebaseSync] Sync complete', { totalFiles, totalBatches });
+            debugLog.response('other', {
+              id: 'codebase-sync-complete',
+              model: 'codebase-sync',
+              duration: 0,
+              response: `Synced ${totalFiles} files in ${totalBatches} batch(es)`
+            });
+          }
+        }}
+      />
     </aside>
   );
 });

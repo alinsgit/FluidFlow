@@ -32,6 +32,7 @@ export interface ChatMessage {
   timestamp: number;
   // User message
   prompt?: string;
+  llmContent?: string; // Full content for LLM (when different from prompt display)
   attachments?: ChatAttachment[];
   // Assistant message
   explanation?: string;
