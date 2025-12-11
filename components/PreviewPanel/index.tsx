@@ -3,7 +3,7 @@ import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, Pencil, Send, FileText, Wrench, Package, Loader2,
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
-  ChevronLeft, ChevronRight, Globe, GitBranch, Play, AlertTriangle, Box, MessageSquare, Bot
+  ChevronLeft, ChevronRight, Globe, GitBranch, Play, AlertTriangle, Box, MessageSquare, Bot, Map
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getProviderManager } from '../../services/ai';
@@ -28,6 +28,7 @@ import { ComponentInspector, InspectionOverlay, InspectedElement, EditScope } fr
 import DebugPanel from './DebugPanel';
 import { MarkdownPreview } from './MarkdownPreview';
 import { DBStudio } from './DBStudio';
+import { CodeMapTab } from './CodeMapTab';
 import { EnvironmentPanel } from './EnvironmentPanel';
 import { GitPanel } from '../GitPanel';
 import { RunnerPanel } from './RunnerPanel';
@@ -1179,6 +1180,7 @@ Thumbs.db
             {[
               { id: 'preview', icon: Eye, label: 'Preview' },
               { id: 'code', icon: Code2, label: 'Code' },
+              { id: 'codemap', icon: Map, label: 'CodeMap' },
               { id: 'git', icon: GitBranch, label: 'Git' },
               { id: 'run', icon: Play, label: 'Run' },
               { id: 'webcontainer', icon: Box, label: 'WebContainer' },
@@ -1357,6 +1359,10 @@ Thumbs.db
         <div className={activeTab === 'docs' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
           <DocsPanel files={files} setFiles={setFiles} />
         </div>
+        {/* CodeMapTab - always rendered but hidden to preserve state */}
+        <div className={activeTab === 'codemap' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
+          <CodeMapTab files={files} />
+        </div>
         {activeTab === 'debug' ? (
           <DebugPanel />
         ) : activeTab === 'env' ? (
@@ -1409,6 +1415,9 @@ Thumbs.db
               }}
             />
           </div>
+        ) : activeTab === 'database' || activeTab === 'codemap' || activeTab === 'docs' ? (
+          // These tabs are always-rendered above, so return null here to avoid showing FileExplorer
+          null
         ) : activeTab === 'preview' ? (
           <PreviewContent
             appCode={appCode}
