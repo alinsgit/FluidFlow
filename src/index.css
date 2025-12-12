@@ -1,3 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Source detection for Tailwind v4 */
+@source "../index.html";
+@source "../App.tsx";
+@source "../index.tsx";
+@source "../components/**/*.{js,ts,jsx,tsx}";
+@source "../hooks/**/*.{js,ts,jsx,tsx}";
+@source "../services/**/*.{js,ts,jsx,tsx}";
+@source "../utils/**/*.{js,ts,jsx,tsx}";
+@source "../types/**/*.{js,ts,jsx,tsx}";
+
+/* Custom theme extensions */
+@theme {
+  --font-sans: 'Inter', sans-serif;
+
+  /* Glass morphism colors */
+  --color-glass-100: rgba(255, 255, 255, 0.05);
+  --color-glass-200: rgba(255, 255, 255, 0.1);
+  --color-glass-300: rgba(255, 255, 255, 0.15);
+}

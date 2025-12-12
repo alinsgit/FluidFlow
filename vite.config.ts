@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig(({ mode }) => {
@@ -31,11 +32,9 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      tailwindcss(),
       basicSsl(), // Self-signed cert for local HTTPS
     ],
-    css: {
-      postcss: './postcss.config.js',
-    },
     // SEC-004 fix: API keys are NOT exposed in frontend bundle
     // Users must configure their API keys through Settings UI, which stores them
     // securely (encrypted) in localStorage and backend. For development, set

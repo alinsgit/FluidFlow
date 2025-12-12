@@ -6,7 +6,7 @@
 
 Transform wireframes and sketches into functional React applications using AI.
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)](https://vitejs.dev/) [![Multi-AI](https://img.shields.io/badge/AI-Multi--Provider-8B5CF6)](https://ai.google.dev/) [![Tests](https://img.shields.io/badge/Tests-75%20passing-22c55e?logo=vitest)](https://vitest.dev/) [![ESLint](https://img.shields.io/badge/ESLint-0%20errors-4b32c3?logo=eslint)](https://eslint.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org/) [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite)](https://vitejs.dev/) [![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss)](https://tailwindcss.com/) [![Multi-AI](https://img.shields.io/badge/AI-Multi--Provider-8B5CF6)](https://ai.google.dev/) [![Tests](https://img.shields.io/badge/Tests-75%20passing-22c55e?logo=vitest)](https://vitest.dev/) [![ESLint](https://img.shields.io/badge/ESLint-0%20errors-4b32c3?logo=eslint)](https://eslint.org/)
 
 [Features](#features) | [Installation](#installation) | [Usage](#usage) | [Architecture](#architecture) | [Security](#security)
 
@@ -281,7 +281,7 @@ type FileSystem = Record<string, string>;
 {
   "src/App.tsx": "export default function App() {...}",
   "src/components/Header.tsx": "...",
-  "src/index.css": "@tailwind base;..."
+  "src/index.css": "@import 'tailwindcss';..."
 }
 ```
 
@@ -386,16 +386,16 @@ Monitor all AI API interactions in real-time.
 | Category | Technology |
 |----------|------------|
 | Framework | React 19 |
-| Language | TypeScript 5.8 |
-| Build Tool | Vite 6 |
+| Language | TypeScript 5.9 |
+| Build Tool | Vite 7 |
 | AI | Multi-provider (Gemini, OpenAI, Claude, GLM, Ollama, OpenRouter) |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS 4 |
 | Icons | Lucide React |
 | Editor | Monaco Editor |
 | Backend | Express.js 5 |
 | Storage | File system + IndexedDB |
 | Version Control | simple-git |
-| Testing | Vitest 2 |
+| Testing | Vitest 4 |
 | Export | JSZip, FileSaver, StackBlitz SDK |
 
 ---
