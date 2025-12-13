@@ -1,6 +1,32 @@
 import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, StreamChunk, ModelOption } from '../types';
 import { fetchWithTimeout, TIMEOUT_TEST_CONNECTION, TIMEOUT_GENERATE, TIMEOUT_LIST_MODELS } from '../utils/fetchWithTimeout';
 
+// OpenAI-compatible API content types for multimodal messages
+type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+// OpenAI-compatible API message interface
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string | ContentPart[];
+}
+
+// LMStudio request body (OpenAI-compatible)
+interface ChatCompletionRequest {
+  model: string;
+  messages: ChatMessage[];
+  max_tokens: number;
+  temperature: number;
+  stream?: boolean;
+  response_format?: { type: 'json_object' };
+}
+
+// LMStudio model object
+interface LMStudioModel {
+  id: string;
+}
+
 export class LMStudioProvider implements AIProvider {
   readonly config: ProviderConfig;
 
@@ -25,7 +51,7 @@ export class LMStudioProvider implements AIProvider {
   }
 
   async generate(request: GenerationRequest, model: string): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // Build system instruction with optional JSON schema guidance
     let systemContent = request.systemInstruction || '';
@@ -40,7 +66,7 @@ export class LMStudioProvider implements AIProvider {
     }
 
     // Build user message content
-    const content: any[] = [];
+    const content: ContentPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {
@@ -54,7 +80,7 @@ export class LMStudioProvider implements AIProvider {
     content.push({ type: 'text', text: request.prompt });
     messages.push({ role: 'user', content });
 
-    const body: any = {
+    const body: ChatCompletionRequest = {
       model,
       messages,
       max_tokens: request.maxTokens || 4096,
@@ -104,7 +130,7 @@ export class LMStudioProvider implements AIProvider {
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // Build system instruction with optional JSON schema guidance
     let systemContent = request.systemInstruction || '';
@@ -118,7 +144,7 @@ export class LMStudioProvider implements AIProvider {
       messages.push({ role: 'system', content: systemContent });
     }
 
-    const content: any[] = [];
+    const content: ContentPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {
@@ -132,7 +158,7 @@ export class LMStudioProvider implements AIProvider {
     content.push({ type: 'text', text: request.prompt });
     messages.push({ role: 'user', content });
 
-    const body: any = {
+    const body: ChatCompletionRequest = {
       model,
       messages,
       max_tokens: request.maxTokens || 4096,
@@ -244,7 +270,7 @@ export class LMStudioProvider implements AIProvider {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
-    return (data.data || []).map((m: any) => ({
+    return (data.data || []).map((m: LMStudioModel) => ({
       id: m.id,
       name: m.id,
       description: 'Local model',

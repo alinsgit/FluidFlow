@@ -189,7 +189,14 @@ class FluidFlowConfigManager {
 
   // Get context settings
   getContextSettings(): ContextSettings {
-    return this.config.contextSettings || DEFAULT_CONFIG.contextSettings!;
+    // Default context settings (guaranteed to exist)
+    const defaultSettings: ContextSettings = {
+      maxTokensBeforeCompact: 8000,
+      compactToTokens: 2000,
+      autoCompact: false,
+      saveCompactionLogs: true
+    };
+    return this.config.contextSettings ?? defaultSettings;
   }
 
   // Update context settings

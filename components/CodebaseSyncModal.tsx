@@ -300,7 +300,8 @@ ${batches.length === 1 || i === batches.length - 1
           <div className="space-y-1">
             {/* Root files */}
             {folderStructure['']?.map(path => {
-              const file = fileStats.files.find(f => f.path === path)!;
+              const file = fileStats.files.find(f => f.path === path);
+              if (!file) return null;
               return (
                 <label
                   key={path}
@@ -460,7 +461,8 @@ const FolderItem: React.FC<FolderItemProps> = ({
         <div className="ml-4">
           {/* Files in folder */}
           {filesInFolder.map(path => {
-            const file = fileStats.files.find(f => f.path === path)!;
+            const file = fileStats.files.find(f => f.path === path);
+            if (!file) return null;
             return (
               <label
                 key={path}

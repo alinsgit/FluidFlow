@@ -1,6 +1,25 @@
 import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, StreamChunk, ModelOption } from '../types';
 import { fetchWithTimeout, TIMEOUT_TEST_CONNECTION, TIMEOUT_GENERATE, TIMEOUT_LIST_MODELS } from '../utils/fetchWithTimeout';
 
+// Ollama API request interface
+interface OllamaGenerateRequest {
+  model: string;
+  prompt: string;
+  stream: boolean;
+  system?: string;
+  images?: string[];
+  options?: {
+    temperature?: number;
+    num_predict?: number;
+  };
+}
+
+// Ollama model info
+interface OllamaModel {
+  name: string;
+  size: number;
+}
+
 export class OllamaProvider implements AIProvider {
   readonly config: ProviderConfig;
 
@@ -38,7 +57,7 @@ export class OllamaProvider implements AIProvider {
       prompt = request.prompt;
     }
 
-    const body: any = {
+    const body: OllamaGenerateRequest = {
       model,
       prompt,
       stream: false,
@@ -107,7 +126,7 @@ export class OllamaProvider implements AIProvider {
       prompt = request.prompt;
     }
 
-    const body: any = {
+    const body: OllamaGenerateRequest = {
       model,
       prompt,
       stream: true,
@@ -218,7 +237,7 @@ export class OllamaProvider implements AIProvider {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
-    return (data.models || []).map((m: any) => ({
+    return (data.models || []).map((m: OllamaModel) => ({
       id: m.name,
       name: m.name,
       description: `${(m.size / 1e9).toFixed(1)}GB`,

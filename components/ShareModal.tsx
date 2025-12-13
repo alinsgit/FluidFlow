@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Link2, Copy, Check, Twitter, Linkedin, Mail, Loader2 } from 'lucide-react';
 import { FileSystem } from '../types';
 
@@ -57,13 +57,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      generateShareUrl();
-    }
-  }, [isOpen, files]);
-
-  const generateShareUrl = async () => {
+  const generateShareUrl = useCallback(async () => {
     setIsGenerating(true);
     setError(null);
 
@@ -94,7 +88,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [files]);
+
+  useEffect(() => {
+    if (isOpen) {
+      generateShareUrl();
+    }
+  }, [isOpen, generateShareUrl]);
 
   const copyToClipboard = async () => {
     if (!shareUrl) return;
@@ -251,6 +251,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
 };
 
 // Export helper to load project from URL
+// eslint-disable-next-line react-refresh/only-export-components -- Utility function export for external use
 export function loadProjectFromUrl(): FileSystem | null {
   try {
     const params = new URLSearchParams(window.location.search);

@@ -5,27 +5,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { isValidProjectId } from '../utils/validation';
-
-// BUG-015 FIX: Safe JSON parsing helper to prevent crashes on corrupted files
-function safeJsonParse<T>(jsonString: string, fallback: T): T {
-  try {
-    return JSON.parse(jsonString) as T;
-  } catch (error) {
-    console.error('[Git API] JSON parse error:', error instanceof Error ? error.message : error);
-    return fallback;
-  }
-}
-
-// BUG-015 FIX: Safe file read + JSON parse helper
-async function safeReadJson<T>(filePath: string, fallback: T): Promise<T> {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return safeJsonParse(content, fallback);
-  } catch (error) {
-    console.error(`[Git API] Failed to read JSON from ${filePath}:`, error instanceof Error ? error.message : error);
-    return fallback;
-  }
-}
+import { safeReadJson } from '../utils/safeJson';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -166,11 +146,11 @@ router.get('/:id/status', async (req, res) => {
       ahead: status.ahead,
       behind: status.behind
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Git status error:', error);
 
     // Check if it's a corruption error - return 200 so frontend can handle it
-    const errorMessage = error?.message || String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('corrupt') || errorMessage.includes('inflate')) {
       return res.json({
         initialized: true, // Still initialized, just corrupted

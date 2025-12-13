@@ -358,6 +358,8 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
       // Mark as synced
       syncedMessageIdsRef.current.add(msg.id);
     }
+    // Note: contextManager is a singleton, messages array is iterated but we only trigger on length change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
   const existingApp = files['src/App.tsx'];
@@ -387,6 +389,8 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
 
       return response.text || '';
     });
+    // Note: contextManager is a singleton that doesn't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
   // Handle provider changes from settings
@@ -1039,6 +1043,9 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
     scope: EditScope;
   }
 
+  // handleSend is intentionally not wrapped in useCallback - it has many dependencies
+  // and the complexity of tracking them all outweighs the re-render cost
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleSend = async (prompt: string, attachments: ChatAttachment[], _fileContext?: string[], inspectContext?: InspectContext) => {
     // Track if continuation was started (to prevent finally block from clearing isGenerating)
     let continuationStarted = false;
@@ -1190,8 +1197,9 @@ ${prompt}
         promptParts.push(`\n${codeContext}`);
 
         // Add target component file content (more efficient than all files)
-        const targetFilePath = element.componentName
-          ? Object.keys(files).find(p => p.includes(element.componentName!)) || 'src/App.tsx'
+        const componentName = element.componentName;
+        const targetFilePath = componentName
+          ? Object.keys(files).find(p => p.includes(componentName)) || 'src/App.tsx'
           : 'src/App.tsx';
         const targetFileContent = files[targetFilePath];
         if (targetFileContent) {
@@ -1669,8 +1677,9 @@ Write a clear markdown explanation including:
 
                 // Update completed files in plan
                 if (currentFilePlan) {
-                  currentFilePlan.completed = detectedFiles.filter(f => currentFilePlan!.create.includes(f));
-                  setFilePlan({ ...currentFilePlan });
+                  const plan = currentFilePlan; // Capture reference for TypeScript
+                  plan.completed = detectedFiles.filter(f => plan.create.includes(f));
+                  setFilePlan({ ...plan });
 
                   // Show different status based on completion
                   if (currentFilePlan.completed.length >= currentFilePlan.total) {
@@ -1713,6 +1722,7 @@ Write a clear markdown explanation including:
 
         // Save raw response for debugging (stored in window for easy access)
         try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Debug: window extension for dev tools access
           (window as any).__lastAIResponse = {
             raw: fullText,
             timestamp: Date.now(),

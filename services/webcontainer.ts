@@ -310,7 +310,12 @@ class WebContainerService {
 
     // Wait for server to be ready
     return new Promise((resolve) => {
-      const _unsubscribe = this.instance!.on('server-ready', (port, url) => {
+      if (!this.instance) {
+        this.updateState({ status: 'error', error: 'WebContainer instance not initialized' });
+        resolve('');
+        return;
+      }
+      const _unsubscribe = this.instance.on('server-ready', (port, url) => {
         this.updateState({ status: 'running', serverUrl: url });
         this.log(`Dev server ready at ${url} (port ${port})`);
         resolve(url);

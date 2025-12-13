@@ -637,11 +637,12 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
           contentStr = content;
         } else if (typeof content === 'object' && content !== null) {
           // AI might return { content: "...", type: "tsx" } format
-          if ('content' in content && typeof (content as any).content === 'string') {
-            contentStr = (content as any).content;
+          const contentObj = content as Record<string, unknown>;
+          if ('content' in contentObj && typeof contentObj.content === 'string') {
+            contentStr = contentObj.content;
             console.log('[parseMultiFileResponse] Extracted content from object for:', path);
-          } else if ('code' in content && typeof (content as any).code === 'string') {
-            contentStr = (content as any).code;
+          } else if ('code' in contentObj && typeof contentObj.code === 'string') {
+            contentStr = contentObj.code;
             console.log('[parseMultiFileResponse] Extracted code from object for:', path);
           } else {
             console.warn('[parseMultiFileResponse] Object content without string content for:', path, '- keys:', Object.keys(content));

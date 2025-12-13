@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { runnerApi, RunningProjectInfo } from '@/services/projectApi';
 
+// Valid status values for the runner
+type RunnerStatus = 'installing' | 'starting' | 'running' | 'error' | 'stopped';
+
 interface RunnerPanelProps {
   projectId: string | null;
   projectName?: string;
@@ -120,7 +123,7 @@ export const RunnerPanel: React.FC<RunnerPanelProps> = ({
         projectId,
         port: result.port,
         url: result.url,
-        status: result.status as any,
+        status: result.status as RunnerStatus,
         startedAt: Date.now(),
         running: true
       });

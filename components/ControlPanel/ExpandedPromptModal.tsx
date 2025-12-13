@@ -27,6 +27,45 @@ import { ChatAttachment, FileSystem } from '../../types';
 import { promptLibrary, quickPrompts, PromptItem } from '../../data/promptLibrary';
 import { PromptImproverModal } from './PromptImproverModal';
 
+// Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface WindowWithSpeechRecognition extends Window {
+  SpeechRecognition?: new () => SpeechRecognition;
+  webkitSpeechRecognition?: new () => SpeechRecognition;
+}
+
 interface ExpandedPromptModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -85,7 +124,7 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const attachTypeRef = useRef<'sketch' | 'brand'>('sketch');
 
   // Focus textarea when modal opens
@@ -95,6 +134,8 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
       // Move cursor to end
       textareaRef.current.setSelectionRange(prompt.length, prompt.length);
     }
+    // Note: prompt.length is used to position cursor, but we don't want to re-run on prompt changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Auto-resize textarea
@@ -174,19 +215,20 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
       recognitionRef.current?.stop();
       setIsListening(false);
     } else {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
+      const windowWithSpeech = window as WindowWithSpeechRecognition;
+      const SpeechRecognitionAPI = windowWithSpeech.SpeechRecognition || windowWithSpeech.webkitSpeechRecognition;
+      if (!SpeechRecognitionAPI) {
         setError('Voice not supported');
         setTimeout(() => setError(null), 3000);
         return;
       }
 
-      const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognitionAPI();
       recognition.continuous = true;
       recognition.interimResults = true;
 
       recognition.onstart = () => setIsListening(true);
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {

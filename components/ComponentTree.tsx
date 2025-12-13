@@ -140,7 +140,8 @@ function buildComponentTree(files: FileSystem): TreeNode[] {
       children: nodes,
     };
 
-    folders[folderPath].children!.push(fileNode);
+    // Children is guaranteed to exist since we just created the folder with children: []
+    folders[folderPath].children?.push(fileNode);
   });
 
   return tree;
@@ -220,9 +221,9 @@ const TreeNodeView: React.FC<{
       )}
 
       {/* Children */}
-      {isExpanded && hasChildren && (
+      {isExpanded && hasChildren && node.children && (
         <div>
-          {node.children!.map((child, idx) => (
+          {node.children.map((child, idx) => (
             <TreeNodeView
               key={`${child.name}-${idx}`}
               node={child}

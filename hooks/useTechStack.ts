@@ -52,7 +52,8 @@ export const useTechStack = () => {
     setTechStack(prev => ({
       ...prev,
       [category]: {
-        library: library as any,
+        // Dynamic category key requires type assertion; each category has different library union types
+        library: library as TechStackConfig[typeof category]['library'],
         version: version || prev[category].version
       }
     }));

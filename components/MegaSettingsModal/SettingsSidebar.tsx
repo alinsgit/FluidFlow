@@ -109,5 +109,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- Constant export for module API
 export { SETTINGS_CATEGORIES };
 export default SettingsSidebar;

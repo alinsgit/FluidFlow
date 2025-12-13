@@ -260,7 +260,7 @@ export const gitApi = {
    * Create a commit
    */
   commit: (projectId: string, message: string, files?: Record<string, string>) =>
-    apiCall<{ message: string; commit?: { hash: string; summary: any }; clean?: boolean }>(`/git/${projectId}/commit`, {
+    apiCall<{ message: string; commit?: { hash: string; summary: Record<string, unknown> }; clean?: boolean }>(`/git/${projectId}/commit`, {
       method: 'POST',
       body: JSON.stringify({ message, files }),
     }),
@@ -367,7 +367,7 @@ export const githubApi = {
    * Pull from remote
    */
   pull: (projectId: string, options?: { remote?: string; branch?: string }) =>
-    apiCall<{ message: string; summary: any }>(`/github/${projectId}/pull`, {
+    apiCall<{ message: string; summary: Record<string, unknown> }>(`/github/${projectId}/pull`, {
       method: 'POST',
       body: JSON.stringify(options || {}),
     }),

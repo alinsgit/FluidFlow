@@ -179,7 +179,8 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
       if (prevState.past.length === 0) return prevState;
 
       const newPast = [...prevState.past];
-      const newPresent = newPast.pop()!;
+      // Safe: We checked past.length > 0 above, so pop() will always return a value
+      const newPresent = newPast.pop() as HistoryEntry;
 
       return {
         past: newPast,
@@ -195,7 +196,8 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
       if (prevState.future.length === 0) return prevState;
 
       const newFuture = [...prevState.future];
-      const newPresent = newFuture.shift()!;
+      // Safe: We checked future.length > 0 above, so shift() will always return a value
+      const newPresent = newFuture.shift() as HistoryEntry;
 
       return {
         past: [...prevState.past, prevState.present],

@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import Editor, { OnMount, BeforeMount } from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
 import { FileCode, Check, Circle } from 'lucide-react';
 import { FileSystem } from '../../types';
 import { useEditorSettings } from '../../hooks/useEditorSettings';
@@ -33,7 +34,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ files, setFiles, activeF
   const language = getLanguage(activeFile);
   const [isSaved, setIsSaved] = useState(true);
   const [showSaveIndicator, setShowSaveIndicator] = useState(false);
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { settings: editorSettings } = useEditorSettings();
 

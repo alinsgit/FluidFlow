@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { User, Bot, Image, Palette, RotateCcw, FileCode, Plus, Minus, Loader2, AlertCircle, RefreshCw, Zap, Clock, Layers, Bookmark } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { ChatMessage, FileChange } from '../../types';
 
 interface ChatPanelProps {
@@ -109,14 +110,19 @@ const renderMarkdown = (text: string): React.ReactNode => {
         <li key={idx} className="text-slate-300 text-sm ml-4 list-disc">{line.slice(2)}</li>
       );
     }
-    // Bold and inline code - escape HTML first to prevent XSS
+    // Bold and inline code - escape HTML first, then sanitize with DOMPurify
     else if (line.trim()) {
       const escaped = escapeHtml(line);
       const formatted = escaped
         .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>')
         .replace(/`(.+?)`/g, '<code class="bg-slate-800 px-1 rounded text-blue-300">$1</code>');
+      // DOMPurify sanitizes HTML to prevent XSS attacks
+      const sanitized = DOMPurify.sanitize(formatted, {
+        ALLOWED_TAGS: ['strong', 'code'],
+        ALLOWED_ATTR: ['class']
+      });
       elements.push(
-        <p key={idx} className="text-slate-300 text-sm my-1" dangerouslySetInnerHTML={{ __html: formatted }} />
+        <p key={idx} className="text-slate-300 text-sm my-1" dangerouslySetInnerHTML={{ __html: sanitized }} />
       );
     } else {
       elements.push(<div key={idx} className="h-2" />);

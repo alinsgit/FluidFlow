@@ -13,6 +13,7 @@ export interface PerformanceMetrics {
 /**
  * Memoization utility for expensive functions
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic function constraint requires any[] for proper type inference
 export function memoize<T extends (...args: any[]) => any>(
   fn: T,
   keyGenerator?: (...args: Parameters<T>) => string
@@ -28,8 +29,9 @@ export function memoize<T extends (...args: any[]) => any>(
       return fn(...args);
     }
 
-    if (cache.has(key)) {
-      return cache.get(key)!;
+    const cached = cache.get(key);
+    if (cached !== undefined) {
+      return cached;
     }
 
     const result = fn(...args);
@@ -48,6 +50,7 @@ export function memoize<T extends (...args: any[]) => any>(
 /**
  * Debounce utility for rate limiting
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic function constraint requires any[] for proper type inference
 export function debounce<T extends (...args: any[]) => any>(
   fn: T,
   delay: number
@@ -63,6 +66,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle utility for rate limiting
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic function constraint requires any[] for proper type inference
 export function throttle<T extends (...args: any[]) => any>(
   fn: T,
   limit: number
@@ -154,13 +158,24 @@ export class PerformanceMonitor {
   }
 }
 
+// Chrome-specific Performance.memory interface (non-standard)
+interface PerformanceMemory {
+  usedJSHeapSize: number;
+  totalJSHeapSize: number;
+  jsHeapSizeLimit: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: PerformanceMemory;
+}
+
 /**
  * Memory usage tracker
  */
 export function trackMemoryUsage(): number | null {
   if (typeof window !== 'undefined' && 'memory' in window.performance) {
-    const memory = (window.performance as any).memory;
-    return memory.usedJSHeapSize;
+    const performanceWithMemory = window.performance as PerformanceWithMemory;
+    return performanceWithMemory.memory?.usedJSHeapSize ?? null;
   }
   return null;
 }
@@ -243,9 +258,9 @@ export async function analyzeBundleSize(): Promise<BundleAnalysis | null> {
  * Cache utility for API responses
  */
 export class APICache {
-  private cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+  private cache = new Map<string, { data: unknown; timestamp: number; ttl: number }>();
 
-  set(key: string, data: any, ttl: number = 5 * 60 * 1000): void {
+  set(key: string, data: unknown, ttl: number = 5 * 60 * 1000): void {
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
@@ -253,7 +268,7 @@ export class APICache {
     });
   }
 
-  get(key: string): any | null {
+  get<T = unknown>(key: string): T | null {
     const entry = this.cache.get(key);
 
     if (!entry) return null;
@@ -263,7 +278,7 @@ export class APICache {
       return null;
     }
 
-    return entry.data;
+    return entry.data as T;
   }
 
   clear(): void {

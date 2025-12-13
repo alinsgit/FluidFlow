@@ -40,6 +40,15 @@ interface QuestionOptions {
   allowMultiple?: boolean;
 }
 
+// Response type for final prompt generation
+interface FinalPromptResponse {
+  isFinalPrompt: true;
+  finalPrompt: string;
+}
+
+// Union type for parsed JSON from AI response
+type AIResponseData = QuestionOptions | FinalPromptResponse;
+
 interface Option {
   id: string;
   text: string;
@@ -447,10 +456,10 @@ Ask direct questions without providing options or checkboxes. Let users respond 
             throw new Error('JSON too large');
           }
 
-          const questionData = JSON.parse(jsonString) as any;
+          const questionData = JSON.parse(jsonString) as AIResponseData;
 
-          // Check if this is a final prompt response
-          if (questionData.isFinalPrompt && questionData.finalPrompt) {
+          // Check if this is a final prompt response (type guard)
+          if ('isFinalPrompt' in questionData && 'finalPrompt' in questionData) {
             // This is the final prompt - display it
             setFinalPrompt(questionData.finalPrompt);
             setMessages(prev =>
@@ -657,7 +666,7 @@ Create an improved prompt that:
     // Add selected options
     if (selectedOptions.length > 0) {
       const selectedTexts = selectedOptions.map(id => {
-        const option = questionMessage.questionOptions.options.find((opt: any) => opt.id === id);
+        const option = questionMessage.questionOptions.options.find((opt: Option) => opt.id === id);
         return option ? option.text : '';
       }).filter(Boolean);
 
@@ -690,6 +699,8 @@ Create an improved prompt that:
       cleanupOldPromptImproverContexts();
       sendToAI();
     }
+    // Note: messages.length check prevents infinite loop, other deps are stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, originalPrompt]);
 
   // Reset when modal closes
@@ -703,6 +714,8 @@ Create an improved prompt that:
       setSelectedOptions([]);
       setCustomInput('');
     }
+    // Note: contextManager is a singleton
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Auto-scroll to bottom

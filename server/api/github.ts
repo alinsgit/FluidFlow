@@ -4,27 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-
-// BUG-016 FIX: Safe JSON parsing helper to prevent crashes on corrupted files
-function safeJsonParse<T>(jsonString: string, fallback: T): T {
-  try {
-    return JSON.parse(jsonString) as T;
-  } catch (error) {
-    console.error('[GitHub API] JSON parse error:', error instanceof Error ? error.message : error);
-    return fallback;
-  }
-}
-
-// BUG-016 FIX: Safe file read + JSON parse helper
-async function safeReadJson<T>(filePath: string, fallback: T): Promise<T> {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return safeJsonParse(content, fallback);
-  } catch (error) {
-    console.error(`[GitHub API] Failed to read JSON from ${filePath}:`, error instanceof Error ? error.message : error);
-    return fallback;
-  }
-}
+import { safeReadJson } from '../utils/safeJson';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -223,16 +203,17 @@ router.post('/:id/push', rateLimitMiddleware, async (req, res) => {
       remote,
       branch: currentBranch
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Push error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     // Check for authentication error
-    if (error.message?.includes('Authentication') || error.message?.includes('403')) {
+    if (errorMessage.includes('Authentication') || errorMessage.includes('403')) {
       return res.status(401).json({
         error: 'Authentication failed. Make sure you have configured git credentials or use a personal access token.',
-        details: error.message
+        details: errorMessage
       });
     }
-    res.status(500).json({ error: 'Failed to push', details: error.message });
+    res.status(500).json({ error: 'Failed to push', details: errorMessage });
   }
 });
 
@@ -259,9 +240,10 @@ router.post('/:id/pull', async (req, res) => {
       message: 'Pulled successfully',
       summary: result.summary
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Pull error:', error);
-    res.status(500).json({ error: 'Failed to pull', details: error.message });
+    const details = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: 'Failed to pull', details });
   }
 });
 
@@ -285,9 +267,10 @@ router.post('/:id/fetch', async (req, res) => {
     await git.fetch(remote, undefined, fetchOptions);
 
     res.json({ message: `Fetched from ${remote}` });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch', details: error.message });
+    const details = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: 'Failed to fetch', details });
   }
 });
 
@@ -382,9 +365,10 @@ router.post('/clone', rateLimitMiddleware, async (req, res) => {
       message: 'Repository cloned successfully',
       project: meta
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Clone error:', error);
-    res.status(500).json({ error: 'Failed to clone repository', details: error.message });
+    const details = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: 'Failed to clone repository', details });
   }
 });
 
@@ -484,9 +468,10 @@ router.post('/:id/create-repo', rateLimitMiddleware, async (req, res) => {
         private: repo.private
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create repo error:', error);
-    res.status(500).json({ error: 'Failed to create repository', details: error.message });
+    const details = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: 'Failed to create repository', details });
   }
 });
 

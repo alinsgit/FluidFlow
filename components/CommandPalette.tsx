@@ -228,6 +228,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         break;
       }
     }
+    // Note: handleSelect is defined below, adding it would create circular dep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results, selectedIndex, mode, onClose]);
 
   // Handle selection

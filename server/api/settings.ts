@@ -169,7 +169,8 @@ let settingsLockQueue: Promise<void> = Promise.resolve();
 async function withSettingsLock<T>(fn: () => Promise<T>): Promise<T> {
   // Each call chains onto the previous lock, ensuring sequential execution
   // This eliminates the TOCTOU race between checking and acquiring the lock
-  let releaseLock: () => void;
+  // Initialize with no-op to satisfy TypeScript - will be reassigned synchronously in Promise constructor
+  let releaseLock: () => void = () => {};
   const myLock = new Promise<void>((resolve) => {
     releaseLock = resolve;
   });
@@ -185,7 +186,7 @@ async function withSettingsLock<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } finally {
     // Release our lock so the next operation can proceed
-    releaseLock!();
+    releaseLock();
   }
 }
 
@@ -435,9 +436,11 @@ router.post('/snippets', async (req, res) => {
     });
 
     res.status(201).json(newSnippet);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Add snippet error:', error);
-    res.status(error.message?.includes('limit') ? 400 : 500).json({ error: error.message || 'Failed to add snippet' });
+    const errorMessage = error instanceof Error ? error.message : 'Failed to add snippet';
+    const isLimitError = errorMessage.includes('limit');
+    res.status(isLimitError ? 400 : 500).json({ error: errorMessage });
   }
 });
 

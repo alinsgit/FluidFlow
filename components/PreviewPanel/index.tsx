@@ -10,6 +10,12 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
 import { FileSystem, LogEntry, NetworkRequest, AccessibilityReport, TabType, TerminalTab, PreviewDevice, PushResult } from '../../types';
+
+// Type for raw accessibility issue from AI JSON response
+interface RawAccessibilityIssue {
+  type?: string;
+  message?: string;
+}
 import { cleanGeneratedCode, isValidCode } from '../../utils/cleanCode';
 import { debugLog } from '../../hooks/useDebugStore';
 import { attemptAutoFix, classifyError, canAutoFix, wasRecentlyFixed } from '../../services/autoFixService';
@@ -525,7 +531,7 @@ Return ONLY the complete fixed ${targetFile} code.
     } finally {
       setIsAutoFixing(false);
     }
-  }, [appCode, files, setFiles, isAutoFixing, isGenerating, selectedModel, generateSystemInstruction, getRelatedFiles, getRecentLogsContext, parseStackTrace, logs]);
+  }, [appCode, files, setFiles, isAutoFixing, isGenerating, selectedModel, generateSystemInstruction, getRelatedFiles, getRecentLogsContext, parseStackTrace]);
 
   // Auto-fix confirmation handlers
   const handleConfirmAutoFix = useCallback(() => {
@@ -899,9 +905,9 @@ Check for these WCAG 2.1 violations:
         // Normalize the response to match our expected format
         report = {
           score: typeof parsed.score === 'number' ? parsed.score : 0,
-          issues: Array.isArray(parsed.issues) ? parsed.issues.map((issue: any) => ({
-            type: issue.type === 'error' || issue.type === 'warning' ? issue.type : 'warning',
-            message: typeof issue.message === 'string' ? issue.message :
+          issues: Array.isArray(parsed.issues) ? parsed.issues.map((issue: RawAccessibilityIssue | string) => ({
+            type: (typeof issue === 'object' && (issue.type === 'error' || issue.type === 'warning')) ? issue.type : 'warning',
+            message: typeof issue === 'object' && typeof issue.message === 'string' ? issue.message :
                      typeof issue === 'string' ? issue : JSON.stringify(issue)
           })) : []
         };
@@ -1999,6 +2005,25 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
     window.process = { env: { NODE_ENV: 'development' } };
     window.__SANDBOX_READY__ = false;
 
+    // XSS-safe error display helper - escapes HTML entities
+    const escapeHtmlForError = (text) => {
+      const div = document.createElement('div');
+      div.textContent = String(text || 'Unknown error');
+      return div.innerHTML;
+    };
+
+    // Safe error display - prevents XSS via error messages
+    const showSafeError = (prefix, err) => {
+      const root = document.getElementById('root');
+      if (root) {
+        root.textContent = ''; // Clear safely
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'sandbox-error';
+        errorDiv.textContent = prefix + ': ' + (err && err.message ? err.message : String(err || 'Unknown error'));
+        root.appendChild(errorDiv);
+      }
+    };
+
     // Console forwarding with error filtering
     const notify = (type, msg) => window.parent.postMessage({ type: 'CONSOLE_LOG', logType: type, message: typeof msg === 'object' ? JSON.stringify(msg) : String(msg), timestamp: Date.now() }, '*');
 
@@ -2972,7 +2997,7 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
           console.log('[Sandbox] App mounted successfully');
         } catch (err) {
           console.error('[Sandbox] Failed to mount app:', err.message);
-          document.getElementById('root').innerHTML = '<div class="sandbox-error">Error: ' + err.message + '</div>';
+          showSafeError('Error', err);
         }
       \`;
 
@@ -2987,11 +3012,11 @@ const buildIframeHtml = (files: FileSystem, isInspectMode: boolean = false): str
         document.body.appendChild(script);
       } catch (err) {
         console.error('[Sandbox] Bootstrap transpilation failed:', err.message);
-        document.getElementById('root').innerHTML = '<div class="sandbox-error">Bootstrap Error: ' + err.message + '</div>';
+        showSafeError('Bootstrap Error', err);
       }
     })().catch(err => {
       console.error('[Sandbox] Initialization failed:', err.message);
-      document.getElementById('root').innerHTML = '<div class="sandbox-error">Init Error: ' + err.message + '</div>';
+      showSafeError('Init Error', err);
     });
   </script>
 </body>

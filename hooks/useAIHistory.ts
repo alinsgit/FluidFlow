@@ -163,7 +163,9 @@ export function useAIHistory(projectId: string | null): UseAIHistoryReturn {
 
     // Also store in window for immediate debugging access
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Debug: window extension for dev tools access
       (window as any).__lastAIHistoryEntry = newEntry;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Debug: window extension for dev tools access
       (window as any).__aiHistoryCount = history.length + 1;
     } catch (_e) {
       // Ignore

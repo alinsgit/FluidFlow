@@ -12,7 +12,9 @@ import {
   Node,
   Handle,
   Position,
-  MarkerType
+  MarkerType,
+  NodeChange,
+  EdgeChange
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -482,6 +484,8 @@ export const DBStudio: React.FC<DBStudioProps> = ({ files, setFiles }) => {
         showToast(`Loaded ${parsedTables.length} tables from schema.sql`);
       }
     }
+    // Note: setEdges/setTables are stable, we only want to parse on files change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
 
   // Sync tables to nodes
@@ -511,20 +515,22 @@ export const DBStudio: React.FC<DBStudioProps> = ({ files, setFiles }) => {
       };
     });
     setNodes(newNodes);
+    // Note: nodes is used for position lookup only, setNodes is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables, loadedPositions]);
 
   // Wrap onNodesChange to track position changes
-  const handleNodesChange = useCallback((changes: any[]) => {
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes);
     // Check if any position changed
-    const hasPositionChange = changes.some(c => c.type === 'position' && c.dragging === false);
+    const hasPositionChange = changes.some(c => c.type === 'position' && 'dragging' in c && c.dragging === false);
     if (hasPositionChange) {
       setHasUnsavedChanges(true);
     }
   }, [onNodesChange]);
 
   // Wrap onEdgesChange to track edge deletions
-  const handleEdgesChange = useCallback((changes: any[]) => {
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     onEdgesChange(changes);
     const hasEdgeChange = changes.some(c => c.type === 'remove');
     if (hasEdgeChange) {

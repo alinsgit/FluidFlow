@@ -2,6 +2,11 @@ import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, Stre
 import { GoogleGenAI } from '@google/genai';
 import { supportsNativeSchema } from '../utils/schemas';
 
+// Gemini content part types
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
 export class GeminiProvider implements AIProvider {
   readonly config: ProviderConfig;
   private client: GoogleGenAI;
@@ -27,7 +32,7 @@ export class GeminiProvider implements AIProvider {
 
   async generate(request: GenerationRequest, model: string): Promise<GenerationResponse> {
     // Build contents array with conversation history
-    const contents: Array<{ role?: string; parts: any[] }> = [];
+    const contents: Array<{ role?: string; parts: GeminiPart[] }> = [];
 
     // Add conversation history if present
     if (request.conversationHistory && request.conversationHistory.length > 0) {
@@ -46,7 +51,7 @@ export class GeminiProvider implements AIProvider {
     }
 
     // Build current prompt parts
-    const parts: any[] = [];
+    const parts: GeminiPart[] = [];
 
     // Add images if present
     if (request.images) {
@@ -111,7 +116,7 @@ export class GeminiProvider implements AIProvider {
     onChunk: (chunk: StreamChunk) => void
   ): Promise<GenerationResponse> {
     // Build contents array with conversation history
-    const contents: Array<{ role?: string; parts: any[] }> = [];
+    const contents: Array<{ role?: string; parts: GeminiPart[] }> = [];
 
     // Add conversation history if present
     if (request.conversationHistory && request.conversationHistory.length > 0) {
@@ -130,7 +135,7 @@ export class GeminiProvider implements AIProvider {
     }
 
     // Build current prompt parts
-    const parts: any[] = [];
+    const parts: GeminiPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {

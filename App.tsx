@@ -42,13 +42,20 @@ interface WIPData {
   activeFile: string;
   activeTab: string;
   savedAt: number;
+  version?: number; // For conflict detection
 }
+
+// Simple lock to prevent concurrent IndexedDB writes
+let wipWriteLock: Promise<void> = Promise.resolve();
 
 function openWIPDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(WIP_DB_NAME, WIP_DB_VERSION);
 
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      console.error('[WIP] Failed to open database:', request.error);
+      reject(request.error);
+    };
     request.onsuccess = () => resolve(request.result);
 
     request.onupgradeneeded = (event) => {
@@ -68,22 +75,45 @@ async function getWIP(projectId: string): Promise<WIPData | null> {
 
     return new Promise((resolve, reject) => {
       const request = store.get(projectId);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        console.error('[WIP] Failed to get WIP data:', request.error);
+        reject(request.error);
+      };
       request.onsuccess = () => resolve(request.result || null);
     });
-  } catch {
+  } catch (err) {
+    console.error('[WIP] getWIP failed:', err);
     return null;
   }
 }
 
 async function clearWIP(projectId: string): Promise<void> {
+  // Use lock to prevent concurrent operations
+  const previousLock = wipWriteLock;
+  let releaseLock: () => void = () => {};
+  wipWriteLock = new Promise(resolve => { releaseLock = resolve; });
+
   try {
+    await previousLock; // Wait for previous operation
     const db = await openWIPDatabase();
     const tx = db.transaction('wip', 'readwrite');
     const store = tx.objectStore('wip');
-    await store.delete(projectId);
+
+    return new Promise((resolve, reject) => {
+      const request = store.delete(projectId);
+      request.onerror = () => {
+        console.warn('[WIP] Failed to clear:', request.error);
+        reject(request.error);
+      };
+      request.onsuccess = () => {
+        console.log('[WIP] Cleared WIP for project:', projectId);
+        resolve();
+      };
+    });
   } catch (err) {
-    console.warn('[WIP] Failed to clear:', err);
+    console.warn('[WIP] clearWIP failed:', err);
+  } finally {
+    releaseLock();
   }
 }
 
@@ -442,11 +472,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     // 3. We haven't already synced for this project
     if (project.isInitialized && project.currentProject && !hasInitializedFromBackend.current) {
       hasInitializedFromBackend.current = true;
+      // Capture project id before async function to satisfy TypeScript null check
+      const currentProjectId = project.currentProject.id;
 
       // Check for WIP (uncommitted changes) in IndexedDB first
       const restoreWithWIP = async () => {
         try {
-          const wip = await getWIP(project.currentProject!.id);
+          const wip = await getWIP(currentProjectId);
 
           // Store last committed files for comparison
           lastCommittedFilesRef.current = JSON.stringify(project.files);
@@ -486,6 +518,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
       restoreWithWIP();
     }
+    // Note: resetFiles is intentionally excluded - it's a stable hook function
+    // Including project.currentProject would cause infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.isInitialized, project.currentProject?.id, project.files]);
 
   // GIT-CENTRIC SYNC: Files only sync to backend on COMMIT
@@ -495,6 +530,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   // Save WIP to IndexedDB when files change & track uncommitted changes
   useEffect(() => {
     if (!project.currentProject || !hasInitializedFromBackend.current) return;
+    // Capture project id before async function to satisfy TypeScript null check
+    const currentProjectId = project.currentProject.id;
 
     const fileCount = Object.keys(files).length;
     if (fileCount === 0) return;
@@ -512,7 +549,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         const tx = db.transaction('wip', 'readwrite');
         const store = tx.objectStore('wip');
         await store.put({
-          id: project.currentProject!.id,
+          id: currentProjectId,
           files,
           activeFile,
           activeTab,
@@ -527,6 +564,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     // Debounce WIP saves
     const timeout = setTimeout(saveWIP, 1000);
     return () => clearTimeout(timeout);
+    // Note: project.currentProject is accessed via ?. for id - full object would cause loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, activeFile, activeTab, project.currentProject?.id]);
 
   // Auto-save context (version history, UI state) on beforeunload
@@ -551,9 +590,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    // Note: project.currentProject access via ?. for id only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.currentProject?.id, activeFile, activeTab, exportHistory]);
 
   // Periodic auto-save of context (every 30 seconds if there are changes)
+  const AUTO_SAVE_INTERVAL_MS = 30000; // 30 seconds
   useEffect(() => {
     if (!project.currentProject) return;
 
@@ -567,9 +609,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           activeTab,
         });
       }
-    }, 30000); // Every 30 seconds
+    }, AUTO_SAVE_INTERVAL_MS);
 
     return () => clearInterval(interval);
+    // Note: project object is stable, only id changes matter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.currentProject?.id, activeFile, activeTab, exportHistory, project.saveContext]);
 
   // Load project from URL if present (for shared projects)
@@ -581,6 +625,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       const firstSrc = Object.keys(urlProject).find(f => f.startsWith('src/'));
       if (firstSrc) setActiveFile(firstSrc);
     }
+    // Note: setFiles is a stable setter from useState, runs once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Check if first visit and show credits
@@ -804,6 +850,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         break;
       // Other actions handled by child components
     }
+    // Note: resetApp is a stable function, setters are stable from useState
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUndo, canRedo, undo, redo, project]);
 
   // Keyboard shortcuts - DISABLED due to browser conflicts
@@ -879,6 +927,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       console.error('[App] Failed to revert to commit:', err);
       return false;
     }
+    // Note: project properties are accessed individually, full object would cause loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.currentProject, activeFile, resetFiles, project.refreshGitStatus]);
 
   return (

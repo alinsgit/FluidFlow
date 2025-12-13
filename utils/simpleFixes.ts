@@ -995,8 +995,8 @@ function insertImport(code: string, importStatement: string): string {
   // Find the last import statement
   const lastImportMatch = code.match(/^(import\s+.+from\s+['"][^'"]+['"];?\s*\n?)+/m);
 
-  if (lastImportMatch) {
-    const lastImportEnd = lastImportMatch.index! + lastImportMatch[0].length;
+  if (lastImportMatch && lastImportMatch.index !== undefined) {
+    const lastImportEnd = lastImportMatch.index + lastImportMatch[0].length;
     return code.slice(0, lastImportEnd) + importStatement + code.slice(lastImportEnd);
   } else {
     return importStatement + code;
@@ -1025,8 +1025,8 @@ function addNamedImport(code: string, identifier: string, source: string): Simpl
   } else {
     // Add new import at the top (after any existing imports or at very top)
     const lastImportMatch = code.match(/^(import\s+.+from\s+['"][^'"]+['"];?\s*\n?)+/m);
-    if (lastImportMatch) {
-      const lastImportEnd = lastImportMatch.index! + lastImportMatch[0].length;
+    if (lastImportMatch && lastImportMatch.index !== undefined) {
+      const lastImportEnd = lastImportMatch.index + lastImportMatch[0].length;
       newCode = code.slice(0, lastImportEnd) + `import { ${identifier} } from '${source}';\n` + code.slice(lastImportEnd);
     } else {
       newCode = `import { ${identifier} } from '${source}';\n${code}`;

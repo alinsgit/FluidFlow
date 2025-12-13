@@ -73,24 +73,20 @@ export const GenerateButton: React.FC<GenerateButtonProps> = ({
         )}
       </button>
 
-      {/* CSS Animation for Gradient Button */}
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            @keyframes gradient {
-              0% { background-position: 0% 50%; }
-              50% { background-position: 100% 50%; }
-              100% { background-position: 0% 50%; }
-            }
-            .animate-gradient {
-              animation: gradient 3s ease infinite;
-            }
-            @keyframes shimmer {
-              100% { transform: translateX(200%); }
-            }
-          `
-        }}
-      />
+      {/* CSS Animation for Gradient Button - Using static CSS string (safe, no user input) */}
+      <style>{`
+        @keyframes gradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .animate-gradient {
+          animation: gradient 3s ease infinite;
+        }
+        @keyframes shimmer {
+          100% { transform: translateX(200%); }
+        }
+      `}</style>
     </>
   );
 };

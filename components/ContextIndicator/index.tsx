@@ -36,6 +36,8 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
     // Update every 2 seconds
     const interval = setInterval(updateStats, 2000);
     return () => clearInterval(interval);
+    // Note: contextManager is a singleton that doesn't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextId]);
 
   if (!stats) {
@@ -153,5 +155,6 @@ export default ContextIndicator;
 // Re-export all components for external use
 export { ConfirmModal } from './ConfirmModal';
 export { ContextManagerModal } from './ContextManagerModal';
+// eslint-disable-next-line react-refresh/only-export-components -- Utility re-export for module API
 export { getModelContextSize } from './utils';
 export type { ContextIndicatorProps, ContextManagerModalProps, ConfirmModalProps } from './types';

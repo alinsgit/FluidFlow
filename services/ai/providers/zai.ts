@@ -2,6 +2,21 @@ import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, Stre
 import { fetchWithTimeout, TIMEOUT_TEST_CONNECTION, TIMEOUT_GENERATE } from '../utils/fetchWithTimeout';
 import { prepareJsonRequest } from '../utils/jsonOutput';
 
+// OpenAI-compatible API interfaces
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface ChatCompletionRequest {
+  model: string;
+  messages: ChatMessage[];
+  max_tokens: number;
+  temperature: number;
+  stream?: boolean;
+  response_format?: { type: 'json_object' };
+}
+
 export class ZAIProvider implements AIProvider {
   readonly config: ProviderConfig;
 
@@ -32,7 +47,7 @@ export class ZAIProvider implements AIProvider {
   }
 
   async generate(request: GenerationRequest, model: string): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // Use unified JSON output handling
     const jsonRequest = request.responseFormat === 'json'
@@ -57,7 +72,7 @@ export class ZAIProvider implements AIProvider {
 
     messages.push({ role: 'user', content: request.prompt });
 
-    const body: any = {
+    const body: ChatCompletionRequest = {
       model: model || this.config.defaultModel || 'GLM-4.6',
       messages,
       max_tokens: request.maxTokens || 16384, // Reduced to 16K to prevent truncation
@@ -111,7 +126,7 @@ export class ZAIProvider implements AIProvider {
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // Use unified JSON output handling
     const jsonRequest = request.responseFormat === 'json'
@@ -136,7 +151,7 @@ export class ZAIProvider implements AIProvider {
 
     messages.push({ role: 'user', content: request.prompt });
 
-    const body: any = {
+    const body: ChatCompletionRequest = {
       model: model || this.config.defaultModel || 'GLM-4.6',
       messages,
       max_tokens: request.maxTokens || 16384, // Reduced to 16K to prevent truncation

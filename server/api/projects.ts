@@ -5,27 +5,7 @@ import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { isValidProjectId, isValidFilePath, sanitizeFilePath } from '../utils/validation';
-
-// BUG-FIX: Safe JSON parsing helper to prevent crashes on corrupted files
-function safeJsonParse<T>(jsonString: string, fallback: T): T {
-  try {
-    return JSON.parse(jsonString) as T;
-  } catch (_error) {
-    console.error('[Projects] JSON parse error:', _error instanceof Error ? _error.message : _error);
-    return fallback;
-  }
-}
-
-// BUG-FIX: Safe file read + JSON parse helper
-async function safeReadJson<T>(filePath: string, fallback: T): Promise<T> {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return safeJsonParse(content, fallback);
-  } catch (_error) {
-    console.error(`[Projects] Failed to read JSON from ${filePath}:`, _error instanceof Error ? _error.message : _error);
-    return fallback;
-  }
-}
+import { safeReadJson } from '../utils/safeJson';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -216,9 +196,16 @@ router.get('/:id', async (req, res) => {
     // Read all files recursively (excluding .git and other system folders)
     const IGNORED_FOLDERS = ['.git', 'node_modules', '.next', '.nuxt', 'dist', 'build', '.cache'];
     const IGNORED_FILES = ['.DS_Store', 'Thumbs.db'];
+    const MAX_DEPTH = 15; // Prevent stack overflow from deeply nested directories
     let totalSize = 0;
 
-    async function readFilesRecursively(dir: string, basePath: string = '') {
+    async function readFilesRecursively(dir: string, basePath: string = '', depth: number = 0) {
+      // Depth limit to prevent stack overflow
+      if (depth > MAX_DEPTH) {
+        console.warn(`[Projects] Max depth (${MAX_DEPTH}) exceeded at: ${basePath}`);
+        return;
+      }
+
       const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         // Skip ignored folders and files
@@ -230,7 +217,7 @@ router.get('/:id', async (req, res) => {
         const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name;
 
         if (entry.isDirectory()) {
-          await readFilesRecursively(fullPath, relativePath);
+          await readFilesRecursively(fullPath, relativePath, depth + 1);
         } else {
           // PROJ-002 fix: Check file size before reading
           const stat = await fs.stat(fullPath);

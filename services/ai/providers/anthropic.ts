@@ -2,6 +2,31 @@ import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, Stre
 import { fetchWithTimeout, TIMEOUT_TEST_CONNECTION, TIMEOUT_GENERATE } from '../utils/fetchWithTimeout';
 import { prepareJsonRequest } from '../utils/jsonOutput';
 
+// Anthropic API content types for multimodal messages
+type AnthropicContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+
+// Anthropic API message interface (only user/assistant, system is separate parameter)
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string | AnthropicContentPart[];
+}
+
+// Anthropic API request body
+interface AnthropicRequestBody {
+  model: string;
+  messages: AnthropicMessage[];
+  max_tokens: number;
+  temperature: number;
+  stream?: boolean;
+  system?: string;
+  output_format?: {
+    type: 'json_schema';
+    schema: Record<string, unknown>;
+  };
+}
+
 export class AnthropicProvider implements AIProvider {
   readonly config: ProviderConfig;
 
@@ -46,7 +71,7 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async generate(request: GenerationRequest, model: string): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: AnthropicMessage[] = [];
 
     // Use unified JSON output handling
     // Checks schema compatibility (dynamic keys require fallback to prompt guidance)
@@ -67,7 +92,7 @@ export class AnthropicProvider implements AIProvider {
     }
 
     // Build user message content
-    const content: any[] = [];
+    const content: AnthropicContentPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {
@@ -85,7 +110,7 @@ export class AnthropicProvider implements AIProvider {
     content.push({ type: 'text', text: request.prompt });
     messages.push({ role: 'user', content });
 
-    const body: any = {
+    const body: AnthropicRequestBody = {
       model,
       messages,
       max_tokens: request.maxTokens || 4096,
@@ -141,7 +166,7 @@ export class AnthropicProvider implements AIProvider {
     }
 
     const data = await response.json();
-    const textContent = data.content?.find((c: any) => c.type === 'text');
+    const textContent = data.content?.find((c: { type: string; text?: string }) => c.type === 'text');
 
     return {
       text: textContent?.text || '',
@@ -158,7 +183,7 @@ export class AnthropicProvider implements AIProvider {
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: AnthropicMessage[] = [];
 
     // Use unified JSON output handling
     // Checks schema compatibility (dynamic keys require fallback to prompt guidance)
@@ -178,7 +203,7 @@ export class AnthropicProvider implements AIProvider {
       }
     }
 
-    const content: any[] = [];
+    const content: AnthropicContentPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {
@@ -196,7 +221,7 @@ export class AnthropicProvider implements AIProvider {
     content.push({ type: 'text', text: request.prompt });
     messages.push({ role: 'user', content });
 
-    const body: any = {
+    const body: AnthropicRequestBody = {
       model,
       messages,
       max_tokens: request.maxTokens || 4096,

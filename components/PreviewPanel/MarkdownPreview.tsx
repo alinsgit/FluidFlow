@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { FileText, Eye, Code2, Copy, Check, RefreshCw } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
 interface MarkdownPreviewProps {
   content: string;
@@ -133,7 +134,16 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileN
   const [showSource, setShowSource] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
-  const htmlContent = useMemo(() => parseMarkdown(content), [content]);
+  // Parse markdown and sanitize with DOMPurify to prevent XSS
+  const htmlContent = useMemo(() => {
+    const parsed = parseMarkdown(content);
+    return DOMPurify.sanitize(parsed, {
+      ADD_TAGS: ['input'], // Allow checkbox inputs
+      ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'type'],
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
+    });
+  }, [content]);
 
   const copyContent = async () => {
     await navigator.clipboard.writeText(content);

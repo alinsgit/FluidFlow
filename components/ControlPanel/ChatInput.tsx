@@ -6,6 +6,45 @@ import { UploadCards } from './UploadCards';
 import { ExpandedPromptModal } from './ExpandedPromptModal';
 import { PromptImproverModal } from './PromptImproverModal';
 
+// Web Speech API types (not included in TypeScript lib by default)
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface WindowWithSpeechRecognition extends Window {
+  SpeechRecognition?: new () => SpeechRecognition;
+  webkitSpeechRecognition?: new () => SpeechRecognition;
+}
+
 interface ChatInputProps {
   onSend: (prompt: string, attachments: ChatAttachment[], fileContext?: string[]) => void;
   isGenerating: boolean;
@@ -43,7 +82,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [externalPrompt, prompt]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const attachTypeRef = useRef<'sketch' | 'brand'>('sketch');
 
   const handleAttach = (type: 'sketch' | 'brand', file: File, preview: string) => {
@@ -101,20 +140,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       recognitionRef.current?.stop();
       setIsListening(false);
     } else {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
+      const windowWithSpeech = window as WindowWithSpeechRecognition;
+      const SpeechRecognitionAPI = windowWithSpeech.SpeechRecognition || windowWithSpeech.webkitSpeechRecognition;
+      if (!SpeechRecognitionAPI) {
         setError('Voice not supported in this browser');
         setTimeout(() => setError(null), 3000);
         return;
       }
 
-      const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognitionAPI();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
       recognition.onstart = () => setIsListening(true);
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {

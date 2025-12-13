@@ -162,12 +162,13 @@ export const EnvironmentPanel: React.FC<EnvironmentPanelProps> = ({ files, setFi
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
 
-  // Load .env file on mount
+  // Load .env file on mount - intentionally run only once to avoid overwriting user's in-memory changes
   useEffect(() => {
     const envFile = files['.env'] || files['.env.local'];
     if (envFile) {
       setVariables(parseEnvFile(envFile));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally load only on mount, not on files change
   }, []);
 
   // Check if .gitignore exists and has .env

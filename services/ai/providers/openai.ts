@@ -2,6 +2,39 @@ import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, Stre
 import { fetchWithTimeout, TIMEOUT_TEST_CONNECTION, TIMEOUT_GENERATE, TIMEOUT_LIST_MODELS } from '../utils/fetchWithTimeout';
 import { prepareJsonRequest } from '../utils/jsonOutput';
 
+// OpenAI-compatible API content types for multimodal messages
+type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+// OpenAI-compatible API message interface
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string | ContentPart[];
+}
+
+// OpenAI-compatible request body
+interface ChatCompletionRequest {
+  model: string;
+  messages: ChatMessage[];
+  max_tokens: number;
+  temperature: number;
+  stream?: boolean;
+  stream_options?: { include_usage: boolean };
+  response_format?:
+    | { type: 'json_object' }
+    | { type: 'json_schema'; json_schema: { name: string; strict: boolean; schema: Record<string, unknown> } };
+}
+
+// OpenAI model object
+interface OpenAIModel {
+  id: string;
+  name?: string;
+  description?: string;
+  context_length?: number;
+  architecture?: { modality?: string };
+}
+
 export class OpenAIProvider implements AIProvider {
   readonly config: ProviderConfig;
 
@@ -26,7 +59,7 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async generate(request: GenerationRequest, model: string): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // Use unified JSON output handling
     // Supports OpenAI, OpenRouter (native schema), and custom (fallback)
@@ -51,7 +84,7 @@ export class OpenAIProvider implements AIProvider {
     }
 
     // Build user message content
-    const content: any[] = [];
+    const content: ContentPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {
@@ -65,7 +98,7 @@ export class OpenAIProvider implements AIProvider {
     content.push({ type: 'text', text: request.prompt });
     messages.push({ role: 'user', content });
 
-    const body: any = {
+    const body: ChatCompletionRequest = {
       model,
       messages,
       max_tokens: request.maxTokens || 16384,
@@ -132,7 +165,7 @@ export class OpenAIProvider implements AIProvider {
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<GenerationResponse> {
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // Use unified JSON output handling
     // Supports OpenAI, OpenRouter (native schema), and custom (fallback)
@@ -156,7 +189,7 @@ export class OpenAIProvider implements AIProvider {
       }
     }
 
-    const content: any[] = [];
+    const content: ContentPart[] = [];
 
     if (request.images) {
       for (const img of request.images) {
@@ -170,7 +203,7 @@ export class OpenAIProvider implements AIProvider {
     content.push({ type: 'text', text: request.prompt });
     messages.push({ role: 'user', content });
 
-    const body: any = {
+    const body: ChatCompletionRequest = {
       model,
       messages,
       max_tokens: request.maxTokens || 16384,
@@ -339,9 +372,9 @@ export class OpenAIProvider implements AIProvider {
     // OpenRouter returns different structure
     if (this.config.type === 'openrouter') {
       return (data.data || [])
-        .filter((m: any) => m.id && !m.id.includes(':free')) // Filter out free tier duplicates
+        .filter((m: OpenAIModel) => m.id && !m.id.includes(':free')) // Filter out free tier duplicates
         .slice(0, 100) // Limit to top 100 models
-        .map((m: any) => ({
+        .map((m: OpenAIModel) => ({
           id: m.id,
           name: m.name || m.id.split('/').pop() || m.id,
           description: m.description?.slice(0, 50) || `Context: ${m.context_length || 'unknown'}`,
@@ -353,8 +386,8 @@ export class OpenAIProvider implements AIProvider {
 
     // OpenAI models
     return data.data
-      .filter((m: any) => m.id.includes('gpt') || m.id.includes('o1'))
-      .map((m: any) => ({
+      .filter((m: OpenAIModel) => m.id.includes('gpt') || m.id.includes('o1'))
+      .map((m: OpenAIModel) => ({
         id: m.id,
         name: m.id,
         supportsStreaming: !m.id.includes('o1'),

@@ -72,14 +72,8 @@ export const GitPanel: React.FC<GitPanelProps> = ({
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
 
-  // Load commit history when git is initialized
-  useEffect(() => {
-    if (projectId && isGitInitialized) {
-      loadCommits();
-    }
-  }, [projectId, isGitInitialized]);
-
-  const loadCommits = async () => {
+  // Define loadCommits before useEffect
+  const loadCommits = useCallback(async () => {
     if (!projectId) return;
 
     setIsLoadingCommits(true);
@@ -91,7 +85,14 @@ export const GitPanel: React.FC<GitPanelProps> = ({
     } finally {
       setIsLoadingCommits(false);
     }
-  };
+  }, [projectId]);
+
+  // Load commit history when git is initialized
+  useEffect(() => {
+    if (projectId && isGitInitialized) {
+      loadCommits();
+    }
+  }, [projectId, isGitInitialized, loadCommits]);
 
   const loadCommitDetails = async (hash: string) => {
     if (!projectId) return;
@@ -255,7 +256,7 @@ ${changedFilesContext}`;
     } finally {
       setIsReverting(false);
     }
-  }, [revertTargetCommit, onRevertToCommit]);
+  }, [revertTargetCommit, onRevertToCommit, loadCommits]);
 
   // No project selected
   if (!projectId) {
@@ -750,5 +751,6 @@ export { CommitFileIcon } from './CommitFileIcon';
 export { DiffViewer } from './DiffViewer';
 export { DiffModal } from './DiffModal';
 export { CommitDetailsView } from './CommitDetailsView';
+// eslint-disable-next-line react-refresh/only-export-components -- Utility re-export for module API
 export { formatCommitDate } from './utils';
 export type { LocalChange, FileItemProps, CommitFileIconProps, DiffModalProps, DiffViewerProps, CommitDetailsViewProps } from './types';

@@ -14,7 +14,7 @@ interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;
-  data?: any;
+  data?: unknown;
   source?: string;
 }
 
@@ -33,7 +33,7 @@ class Logger {
     return level >= this.logLevel;
   }
 
-  private createLogEntry(level: LogLevel, message: string, data?: any, source?: string): LogEntry {
+  private createLogEntry(level: LogLevel, message: string, data?: unknown, source?: string): LogEntry {
     return {
       timestamp: new Date().toISOString(),
       level,
@@ -43,7 +43,7 @@ class Logger {
     };
   }
 
-  private sanitizeData(data: any, depth: number = 0, maxDepth: number = 10): any {
+  private sanitizeData(data: unknown, depth: number = 0, maxDepth: number = 10): unknown {
     // Prevent stack overflow from deep recursion
     if (depth >= maxDepth) {
       return '[MAX_DEPTH_REACHED]';
@@ -55,7 +55,9 @@ class Logger {
 
     // Remove sensitive fields
     const sensitiveKeys = ['apiKey', 'password', 'token', 'secret', 'key', 'auth', 'bearer', 'credential'];
-    const sanitized = Array.isArray(data) ? [...data] : { ...data };
+    const sanitized: Record<string, unknown> = Array.isArray(data)
+      ? [...data] as unknown as Record<string, unknown>
+      : { ...(data as Record<string, unknown>) };
 
     for (const key in sanitized) {
       if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk.toLowerCase()))) {
@@ -68,7 +70,7 @@ class Logger {
     return sanitized;
   }
 
-  private log(level: LogLevel, message: string, data?: any, source?: string): void {
+  private log(level: LogLevel, message: string, data?: unknown, source?: string): void {
     if (!this.shouldLog(level)) return;
 
     const entry = this.createLogEntry(level, message, data, source);
@@ -87,6 +89,7 @@ class Logger {
           console.debug(prefix, message, data);
           break;
         case LogLevel.INFO:
+          // eslint-disable-next-line no-console -- Logger utility intentionally uses console.info for structured logging
           console.info(prefix, message, data);
           break;
         case LogLevel.WARN:
@@ -103,19 +106,19 @@ class Logger {
     }
   }
 
-  debug(message: string, data?: any, source?: string): void {
+  debug(message: string, data?: unknown, source?: string): void {
     this.log(LogLevel.DEBUG, message, data, source);
   }
 
-  info(message: string, data?: any, source?: string): void {
+  info(message: string, data?: unknown, source?: string): void {
     this.log(LogLevel.INFO, message, data, source);
   }
 
-  warn(message: string, data?: any, source?: string): void {
+  warn(message: string, data?: unknown, source?: string): void {
     this.log(LogLevel.WARN, message, data, source);
   }
 
-  error(message: string, data?: any, source?: string): void {
+  error(message: string, data?: unknown, source?: string): void {
     this.log(LogLevel.ERROR, message, data, source);
   }
 
@@ -176,10 +179,10 @@ export const logger = new Logger();
 
 // Export convenience functions
 export const log = {
-  debug: (message: string, data?: any, source?: string) => logger.debug(message, data, source),
-  info: (message: string, data?: any, source?: string) => logger.info(message, data, source),
-  warn: (message: string, data?: any, source?: string) => logger.warn(message, data, source),
-  error: (message: string, data?: any, source?: string) => logger.error(message, data, source),
+  debug: (message: string, data?: unknown, source?: string) => logger.debug(message, data, source),
+  info: (message: string, data?: unknown, source?: string) => logger.info(message, data, source),
+  warn: (message: string, data?: unknown, source?: string) => logger.warn(message, data, source),
+  error: (message: string, data?: unknown, source?: string) => logger.error(message, data, source),
   aiRequest: (provider: string, model: string, prompt: string, responseTime?: number) =>
     logger.aiRequest(provider, model, prompt, responseTime),
   apiRequest: (method: string, endpoint: string, statusCode: number, responseTime?: number) =>

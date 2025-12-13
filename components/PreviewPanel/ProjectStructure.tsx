@@ -165,8 +165,11 @@ const FileCard: React.FC<{ analysis: FileAnalysis }> = ({ analysis }) => {
   );
 };
 
+// View types for the structure panel tabs
+type ViewType = 'overview' | 'files' | 'deps';
+
 export const ProjectStructure: React.FC<ProjectStructureProps> = ({ files }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'files' | 'deps'>('overview');
+  const [activeView, setActiveView] = useState<ViewType>('overview');
   const { analyses, stats } = useMemo(() => buildProjectStats(files), [files]);
 
   // Group files by type
@@ -201,7 +204,7 @@ export const ProjectStructure: React.FC<ProjectStructureProps> = ({ files }) => 
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveView(id as any)}
+              onClick={() => setActiveView(id as ViewType)}
               className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors ${
                 activeView === id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
               }`}

@@ -52,6 +52,8 @@ export const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
   useEffect(() => {
     setAllContexts(contextManager.listContexts());
     setCompactionLogs(fluidflowConfig.getCompactionLogs());
+    // Note: contextManager and fluidflowConfig are singletons that don't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCompact = async () => {

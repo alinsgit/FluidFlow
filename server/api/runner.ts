@@ -200,14 +200,14 @@ router.post('/:id/start', async (req, res) => {
   }
 
   // Check if already running
-  if (runningProjects.has(id)) {
-    const running = runningProjects.get(id)!;
-    if (running.status === 'running' || running.status === 'installing' || running.status === 'starting') {
+  const existingProject = runningProjects.get(id);
+  if (existingProject) {
+    if (existingProject.status === 'running' || existingProject.status === 'installing' || existingProject.status === 'starting') {
       return res.json({
         message: 'Project is already running',
-        port: running.port,
-        url: running.url,
-        status: running.status
+        port: existingProject.port,
+        url: existingProject.url,
+        status: existingProject.status
       });
     }
     // Clean up old entry
@@ -229,10 +229,11 @@ router.post('/:id/start', async (req, res) => {
   }
 
   // Create running project entry
+  // Process is initially undefined and will be set when installation/start begins
   const runningProject: RunningProject = {
     projectId: id,
     port,
-    process: null as any, // Will be set below
+    process: undefined as unknown as ChildProcess, // Will be set below when spawn is called
     status: 'installing',
     logs: [],
     errorLogs: [],

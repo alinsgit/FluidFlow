@@ -1,9 +1,9 @@
 import React from 'react';
-import { FileText, FilePlus, FileX, GitMerge, Copy } from 'lucide-react';
+import { FileText, FilePlus, FileX, GitMerge, Copy, LucideIcon } from 'lucide-react';
 import { CommitFileChange } from '@/services/projectApi';
 import { CommitFileIconProps } from './types';
 
-const iconConfigs: Record<CommitFileChange['status'], { Icon: React.FC<any>; color: string }> = {
+const iconConfigs: Record<CommitFileChange['status'], { Icon: LucideIcon; color: string }> = {
   added: { Icon: FilePlus, color: 'text-emerald-400' },
   modified: { Icon: FileText, color: 'text-amber-400' },
   deleted: { Icon: FileX, color: 'text-red-400' },

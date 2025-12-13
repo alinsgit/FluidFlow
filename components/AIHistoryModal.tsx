@@ -21,6 +21,21 @@ import {
 } from 'lucide-react';
 import { AIHistoryEntry } from '../services/projectApi';
 
+interface EntryCardProps {
+  entry: AIHistoryEntry;
+  expandedId: string | null;
+  setExpandedId: React.Dispatch<React.SetStateAction<string | null>>;
+  copiedId: string | null;
+  setCopiedId: React.Dispatch<React.SetStateAction<string | null>>;
+  restoringId: string | null;
+  setRestoringId: React.Dispatch<React.SetStateAction<string | null>>;
+  onRestore: (entry: AIHistoryEntry) => Promise<void>;
+  onCopyRaw: (entry: AIHistoryEntry) => Promise<void>;
+  formatDuration: (ms: number) => string;
+  formatSize: (chars: number) => string;
+  formatTime: (timestamp: number) => string;
+}
+
 interface AIHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -48,7 +63,7 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
   if (!isOpen) return null;
 
   // Entry Card Component - defined once for reuse
-  const EntryCard = ({ entry, expandedId, setExpandedId, copiedId, setCopiedId: _setCopiedId, restoringId, setRestoringId: _setRestoringId, onRestore: _onRestore, onCopyRaw: _onCopyRaw, formatDuration, formatSize, formatTime }: any) => (
+  const EntryCard = ({ entry, expandedId, setExpandedId, copiedId, setCopiedId: _setCopiedId, restoringId, setRestoringId: _setRestoringId, onRestore: _onRestore, onCopyRaw: _onCopyRaw, formatDuration, formatSize, formatTime }: EntryCardProps) => (
     <div
       key={entry.id}
       className={`border rounded-lg overflow-hidden transition-colors ${

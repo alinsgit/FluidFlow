@@ -199,6 +199,7 @@ export function useDebugStore() {
   }, []);
 
   // Include updateCount in deps to recompute when global state changes trigger re-render
+  // updateCount changes when globalListeners notify, triggering useMemo recomputation
   const filteredLogs = useMemo(() => {
     const { types, categories, searchQuery } = globalDebugState.filter;
     return globalDebugState.logs.filter(log => {
@@ -220,6 +221,7 @@ export function useDebugStore() {
       }
       return true;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateCount intentionally triggers recomputation on global state changes
   }, [updateCount]);
 
   return {

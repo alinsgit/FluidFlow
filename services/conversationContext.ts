@@ -6,7 +6,7 @@ export interface ContextMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ConversationContext {
@@ -15,7 +15,7 @@ export interface ConversationContext {
   messages: ContextMessage[];
   createdAt: number;
   lastUpdatedAt: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   // Token estimate for context management
   estimatedTokens: number;
 }
@@ -138,7 +138,7 @@ class ConversationContextManager {
     contextId: string,
     role: 'user' | 'assistant' | 'system',
     content: string,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
     actualTokens?: number // Optional: actual token count from API
   ): ContextMessage {
     const context = this.getContext(contextId);

@@ -10,7 +10,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { FileSystem, TabType } from '../types';
 import { ProjectMeta, GitStatus as GitStatusResult } from '../services/projectApi';
-import { useProject } from '../hooks/useProject';
+import { useProject, PendingSyncConfirmation } from '../hooks/useProject';
 import { useVersionHistory, HistoryEntry } from '../hooks/useVersionHistory';
 import { safeJsonParse } from '../utils/safeJson';
 import { gitApi, projectApi } from '../services/projectApi';
@@ -88,7 +88,7 @@ export interface AppContextValue {
   cancelReview: () => void;
 
   // Sync confirmation
-  pendingSyncConfirmation: any;
+  pendingSyncConfirmation: PendingSyncConfirmation | null;
   confirmPendingSync: () => Promise<boolean>;
   cancelPendingSync: () => void;
 
@@ -267,10 +267,12 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
 
     if (project.isInitialized && project.currentProject && !hasInitializedFromBackend.current) {
       hasInitializedFromBackend.current = true;
+      // Capture project id before async function to satisfy TypeScript null check
+      const currentProjectId = project.currentProject.id;
 
       const restoreWithWIP = async () => {
         try {
-          const wip = await getWIP(project.currentProject!.id);
+          const wip = await getWIP(currentProjectId);
           lastCommittedFilesRef.current = JSON.stringify(project.files);
 
           if (wip && wip.files && Object.keys(wip.files).length > 0) {
@@ -302,11 +304,14 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
 
       restoreWithWIP();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when project id changes, not on every currentProject property change
   }, [project.isInitialized, project.currentProject?.id, project.files, resetFiles]);
 
   // Save WIP to IndexedDB when files change
   useEffect(() => {
     if (!project.currentProject || !hasInitializedFromBackend.current) return;
+    // Capture project id before setTimeout callback to satisfy TypeScript null check
+    const currentProjectId = project.currentProject.id;
     if (Object.keys(files).length === 0) return;
 
     const currentFilesJson = JSON.stringify(files);
@@ -316,7 +321,7 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
 
     const timeout = setTimeout(() => {
       saveWIPData({
-        id: project.currentProject!.id,
+        id: currentProjectId,
         files,
         activeFile,
         activeTab,
@@ -325,6 +330,7 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
     }, 1000);
 
     return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only track project id, not full currentProject object
   }, [files, activeFile, activeTab, project.currentProject?.id]);
 
   // Review change handler
@@ -422,6 +428,7 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
       console.error('[AppContext] Revert failed:', err);
       return false;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only track specific project properties, not full object
   }, [project.currentProject, activeFile, resetFiles, project.refreshGitStatus]);
 
   // Project operations with WIP handling
@@ -603,6 +610,7 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
 
 // ============ Hook ============
 
+// eslint-disable-next-line react-refresh/only-export-components -- Context hook pattern
 export function useAppContext(): AppContextValue {
   const context = useContext(AppContext);
   if (!context) {
@@ -613,12 +621,13 @@ export function useAppContext(): AppContextValue {
 
 // ============ Selective Hooks ============
 // These allow components to subscribe to specific slices of state
-
+// eslint-disable-next-line react-refresh/only-export-components -- Context hook pattern
 export function useFiles() {
   const { files, setFiles, activeFile, setActiveFile } = useAppContext();
   return { files, setFiles, activeFile, setActiveFile };
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- Context hook pattern
 export function useProject2() {
   const ctx = useAppContext();
   return {
@@ -638,6 +647,7 @@ export function useProject2() {
   };
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- Context hook pattern
 export function useGit() {
   const ctx = useAppContext();
   return {
@@ -652,6 +662,7 @@ export function useGit() {
   };
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- Context hook pattern
 export function useUIState() {
   const ctx = useAppContext();
   return {
@@ -668,6 +679,7 @@ export function useUIState() {
   };
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- Context hook pattern
 export function useHistory() {
   const ctx = useAppContext();
   return {

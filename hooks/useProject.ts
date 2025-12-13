@@ -115,6 +115,22 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
   const restoreAbortedRef = useRef<boolean>(false); // Track if restore was cancelled
   const openProjectIdRef = useRef<string | null>(null); // Track current openProject operation
 
+  // Refresh projects list - defined before useEffect that uses it
+  const refreshProjects = useCallback(async () => {
+    setState(prev => ({ ...prev, isLoadingProjects: true, error: null }));
+
+    try {
+      const projects = await projectApi.list();
+      setState(prev => ({ ...prev, projects, isLoadingProjects: false }));
+    } catch (_err) {
+      setState(prev => ({
+        ...prev,
+        isLoadingProjects: false,
+        error: 'Failed to load projects',
+      }));
+    }
+  }, []);
+
   // Check server health on mount
   useEffect(() => {
     const checkHealth = async () => {
@@ -133,7 +149,7 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
     if (state.isServerOnline) {
       refreshProjects();
     }
-  }, [state.isServerOnline]);
+  }, [state.isServerOnline, refreshProjects]);
 
   // Restore last opened project from localStorage when server comes online
   useEffect(() => {
@@ -205,22 +221,6 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
 
     restoreProject();
   }, [state.isServerOnline, onFilesChange]);
-
-  // Refresh projects list
-  const refreshProjects = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoadingProjects: true, error: null }));
-
-    try {
-      const projects = await projectApi.list();
-      setState(prev => ({ ...prev, projects, isLoadingProjects: false }));
-    } catch (_err) {
-      setState(prev => ({
-        ...prev,
-        isLoadingProjects: false,
-        error: 'Failed to load projects',
-      }));
-    }
-  }, []);
 
   // Create new project
   const createProject = useCallback(async (

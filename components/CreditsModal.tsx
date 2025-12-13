@@ -286,7 +286,9 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
                               // Fallback to emoji if image fails to load
                               const target = e.target as HTMLImageElement;
                               target.style.display = 'none';
-                              target.parentElement!.innerHTML = `<span class="text-3xl">📦</span>`;
+                              if (target.parentElement) {
+                                target.parentElement.innerHTML = `<span class="text-3xl">📦</span>`;
+                              }
                             }}
                           />
                         ) : (
