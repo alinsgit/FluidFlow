@@ -5,5 +5,18 @@
       "Bash(npm run test:run:*)",
       "Bash(npm run lint:*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git add -A && git commit -m \"auto-save: Claude session checkpoint\" --allow-empty-message 2>nul || echo done"
+          }
+        ]
+      }
+    ]
   }
 }

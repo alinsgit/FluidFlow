@@ -732,7 +732,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
      label: string;
      newFiles: FileSystem;
   } | null>(null);
-  const [autoAcceptChanges, setAutoAcceptChanges] = useState(false);
+  const [autoAcceptChanges, setAutoAcceptChanges] = useState(false); // false = show DiffModal, true = auto-apply (checkpoint saved either way)
 
   // Auto-checkpoint: save files to backend after each AI generation
   const saveCheckpoint = useCallback(async (filesToSave: FileSystem, label: string) => {
@@ -757,9 +757,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   }, [project.currentProject]);
 
   const reviewChange = (label: string, newFiles: FileSystem) => {
+     console.log(`[ReviewChange] Called with label: "${label}", autoAccept: ${autoAcceptChanges}, files: ${Object.keys(newFiles).length}`);
+
      if (autoAcceptChanges) {
         // Auto-accept: apply changes directly without showing modal
-        setFiles(newFiles);
+        console.log('[ReviewChange] Auto-accept mode - applying changes with checkpoint');
+        // Pass label to setFiles - this creates a history entry (checkpoint) automatically!
+        setFiles(newFiles, label);
 
         // If the active file was deleted in the new state, reset it
         if (!newFiles[activeFile]) {
@@ -767,17 +771,20 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
            setActiveFile(firstSrc || 'package.json');
         }
 
-        // Auto-checkpoint: save to backend after AI generation
+        // Also save to backend (if project exists)
         saveCheckpoint(newFiles, label);
      } else {
-        // Show review modal
+        // Show review modal - checkpoint will be saved when user confirms
+        console.log('[ReviewChange] Manual mode - showing DiffModal');
         setPendingReview({ label, newFiles });
      }
   };
 
   const confirmChange = () => {
      if (pendingReview) {
-        setFiles(pendingReview.newFiles);
+        console.log(`[ConfirmChange] User confirmed changes: "${pendingReview.label}", files: ${Object.keys(pendingReview.newFiles).length}`);
+        // Pass label to setFiles - this creates a history entry (checkpoint) automatically!
+        setFiles(pendingReview.newFiles, pendingReview.label);
 
         // If the active file was deleted in the new state, reset it
         if (!pendingReview.newFiles[activeFile]) {
@@ -785,7 +792,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
              setActiveFile(firstSrc || 'package.json');
         }
 
-        // Auto-checkpoint: save to backend after user approves changes
+        // Also save to backend (if project exists)
         saveCheckpoint(pendingReview.newFiles, pendingReview.label);
 
         setPendingReview(null);

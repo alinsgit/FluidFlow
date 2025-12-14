@@ -60,7 +60,6 @@ Transform wireframes and sketches into functional React applications using AI.
 | **Consultant Mode** | Get UX/UI suggestions before generating code |
 | **Prompt Improver** | Interactive AI assistant to refine and enhance your prompts |
 | **Auto-Fix** | Automatically detects and fixes runtime errors |
-| **Quick Edit** | Make targeted changes via natural language prompts |
 | **Inspect & Edit** | Click elements to modify specific components |
 | **Accessibility Audit** | WCAG 2.1 compliance checking with auto-fix |
 | **Responsiveness Fix** | AI-powered mobile optimization |
@@ -70,7 +69,6 @@ Transform wireframes and sketches into functional React applications using AI.
 
 - **ZIP Download** - Complete Vite + React + Tailwind project
 - **GitHub Push** - Direct repository creation and push
-- **StackBlitz** - One-click cloud IDE export
 
 ### Developer Tools
 

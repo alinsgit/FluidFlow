@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
-  ShieldCheck, Pencil, Send, FileText, Wrench, Package, Loader2,
+  ShieldCheck, FileText, Wrench, Package, Loader2,
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown, Shield,
   ChevronLeft, ChevronRight, Globe, GitBranch, Play, AlertTriangle, Box, MessageSquare, Bot, Map
 } from 'lucide-react';
@@ -96,11 +96,6 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [isAuditing, setIsAuditing] = useState(false);
   const [isFixing, setIsFixing] = useState(false);
   const [showAccessReport, setShowAccessReport] = useState(false);
-
-  // Quick Edit
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editPrompt, setEditPrompt] = useState('');
-  const [isQuickEditing, setIsQuickEditing] = useState(false);
 
   // Export
   const [showExportModal, setShowExportModal] = useState(false);
@@ -742,8 +737,6 @@ Return ONLY the complete fixed ${targetFile} code.
     setHoveredElement(null);
     // Force iframe refresh to apply new event listeners
     setKey(prev => prev + 1);
-    // Also disable edit mode when entering inspect mode
-    if (newMode) setIsEditMode(false);
   };
 
   // Handle targeted component edit
@@ -986,49 +979,6 @@ ${appCode}`,
     }
   };
 
-  const handleQuickEdit = async () => {
-    if (!editPrompt.trim() || !appCode) return;
-    setIsQuickEditing(true);
-
-    const manager = getProviderManager();
-    const activeConfig = manager.getActiveConfig();
-    const currentModel = activeConfig?.defaultModel || selectedModel;
-
-    const requestId = debugLog.request('quick-edit', {
-      model: currentModel,
-      prompt: editPrompt
-    });
-    const startTime = Date.now();
-
-    try {
-      const response = await manager.generate({
-        prompt: `Edit this React code based on: "${editPrompt}"\n\nCode: ${appCode}\n\nOutput ONLY the full updated code.`,
-        systemInstruction: 'You are an expert React developer. Return only valid React/TypeScript code without any markdown formatting.',
-        debugCategory: 'quick-edit'
-      }, currentModel);
-      const fixedCode = cleanGeneratedCode(response.text || '');
-
-      debugLog.response('quick-edit', {
-        id: requestId,
-        model: currentModel,
-        duration: Date.now() - startTime,
-        response: fixedCode.slice(0, 500) + '...'
-      });
-
-      setFiles({ ...files, 'src/App.tsx': fixedCode });
-      setIsEditMode(false);
-      setEditPrompt('');
-    } catch (e) {
-      console.error(e);
-      debugLog.error('quick-edit', e instanceof Error ? e.message : 'Quick edit failed', {
-        id: requestId,
-        duration: Date.now() - startTime
-      });
-    } finally {
-      setIsQuickEditing(false);
-    }
-  };
-
   const fixError = async (logId: string, message: string) => {
     setLogs(prev => prev.map(l => l.id === logId ? { ...l, isFixing: true } : l));
     try {
@@ -1262,9 +1212,6 @@ Thumbs.db
             <>
               {appCode && !isGenerating && (
                 <>
-                  <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg border transition-all ${isEditMode ? 'bg-orange-500/10 text-orange-300 border-orange-500/20' : 'bg-slate-500/10 text-slate-400 border-transparent hover:text-white'}`} title="Quick Edit">
-                    <Pencil className="w-4 h-4" />
-                  </button>
                   <button
                     onClick={toggleInspectMode}
                     className={`p-2 rounded-lg border transition-all ${
@@ -1454,12 +1401,6 @@ Thumbs.db
             previewDevice={previewDevice}
             isGenerating={isGenerating}
             isFixingResp={isFixingResp}
-            isEditMode={isEditMode}
-            editPrompt={editPrompt}
-            setEditPrompt={setEditPrompt}
-            isQuickEditing={isQuickEditing}
-            handleQuickEdit={handleQuickEdit}
-            setIsEditMode={setIsEditMode}
             iframeKey={key}
             logs={logs}
             networkLogs={networkLogs}
@@ -1662,12 +1603,6 @@ const PreviewContent: React.FC<{
   previewDevice: PreviewDevice;
   isGenerating: boolean;
   isFixingResp: boolean;
-  isEditMode: boolean;
-  editPrompt: string;
-  setEditPrompt: (v: string) => void;
-  isQuickEditing: boolean;
-  handleQuickEdit: () => void;
-  setIsEditMode: (v: boolean) => void;
   iframeKey: number;
   logs: LogEntry[];
   networkLogs: NetworkRequest[];
@@ -1703,7 +1638,7 @@ const PreviewContent: React.FC<{
   onGoForward: () => void;
   onReload: () => void;
 }> = (props) => {
-  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, isEditMode, editPrompt, setEditPrompt, isQuickEditing, handleQuickEdit, setIsEditMode, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, pendingAutoFix, handleConfirmAutoFix, handleDeclineAutoFix, failedAutoFixError, onSendErrorToChat, handleSendErrorToChat, handleDismissFailedError, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit, iframeRef, currentUrl, canGoBack, canGoForward, onNavigate, onGoBack, onGoForward, onReload } = props;
+  const { appCode, iframeSrc, previewDevice, isGenerating, isFixingResp, iframeKey, logs, networkLogs, isConsoleOpen, setIsConsoleOpen, activeTerminalTab, setActiveTerminalTab, setLogs, setNetworkLogs, fixError, autoFixToast, isAutoFixing, pendingAutoFix, handleConfirmAutoFix, handleDeclineAutoFix, failedAutoFixError, onSendErrorToChat, handleSendErrorToChat, handleDismissFailedError, isInspectMode, hoveredElement, inspectedElement, isInspectEditing, onCloseInspector, onInspectEdit, iframeRef, currentUrl, canGoBack, canGoForward, onNavigate, onGoBack, onGoForward, onReload } = props;
 
   // Local state for URL input
   const [urlInput, setUrlInput] = useState(currentUrl);
@@ -1904,25 +1839,6 @@ const PreviewContent: React.FC<{
                 selectedRect={inspectedElement?.rect || null}
               />
             </div>
-
-            {isEditMode && (
-              <div className="absolute left-1/2 -translate-x-1/2 w-[90%] md:w-[600px] z-50 animate-in slide-in-from-bottom-4 duration-300 bottom-8">
-                <div className="flex items-center gap-2 p-1.5 bg-slate-900/90 backdrop-blur-xl border border-orange-500/30 rounded-full shadow-2xl ring-1 ring-orange-500/20">
-                  <div className="pl-3 pr-2 text-orange-400"><Pencil className="w-4 h-4" /></div>
-                  <input type="text" value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleQuickEdit()} placeholder="Describe a specific change..." className="flex-1 bg-transparent border-none text-sm text-white placeholder-slate-400 focus:ring-0 px-2 h-9" autoFocus aria-label="Quick edit prompt" />
-                  {isQuickEditing ? (
-                    <div className="pr-3 pl-2"><Loader2 className="w-4 h-4 text-orange-400 animate-spin" /></div>
-                  ) : (
-                    <button onClick={handleQuickEdit} disabled={!editPrompt.trim()} className="p-2 rounded-full bg-orange-600 text-white hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Submit edit">
-                      <Send className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="text-center mt-2">
-                  <button onClick={() => setIsEditMode(false)} className="text-[10px] text-slate-500 hover:text-slate-300">Cancel Edit</button>
-                </div>
-              </div>
-            )}
 
             {/* Component Inspector Panel */}
             {inspectedElement && (

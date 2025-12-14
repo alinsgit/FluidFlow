@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Search, FileCode, Hash, Command,
   FileText, CornerDownLeft, ArrowUp, ArrowDown,
-  Settings, Trash2, Download, Github, Zap, Eye, Code2,
+  Settings, Trash2, Download, Github, Eye, Code2,
   Undo2, Redo2, Palette, Layers, Rocket, Link2, Cpu
 } from 'lucide-react';
 import { FileSystem } from '../types';
@@ -35,8 +35,7 @@ const QUICK_ACTIONS = [
   { id: 'component-tree', label: 'Component Tree (Ctrl+Shift+T)', icon: <Layers className="w-4 h-4 text-green-400" /> },
   { id: 'deploy', label: 'Deploy to Vercel/Netlify', icon: <Rocket className="w-4 h-4 text-purple-400" /> },
   { id: 'share', label: 'Share via URL', icon: <Link2 className="w-4 h-4 text-green-400" /> },
-  { id: 'export-stackblitz', label: 'Export to StackBlitz', icon: <Zap className="w-4 h-4 text-blue-400" /> },
-  { id: 'export-github', label: 'Push to GitHub', icon: <Github className="w-4 h-4 text-purple-400" /> },
+    { id: 'export-github', label: 'Push to GitHub', icon: <Github className="w-4 h-4 text-purple-400" /> },
   { id: 'export-zip', label: 'Download as ZIP', icon: <Download className="w-4 h-4 text-green-400" /> },
   { id: 'toggle-preview', label: 'Toggle Preview', icon: <Eye className="w-4 h-4 text-cyan-400" /> },
   { id: 'settings', label: 'Open Settings', icon: <Settings className="w-4 h-4 text-slate-400" /> },
