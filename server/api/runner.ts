@@ -100,7 +100,8 @@ const MAX_LOG_ENTRIES = 1000; // Limit log entries to prevent memory leak
 interface RunningProject {
   projectId: string;
   port: number;
-  process: ChildProcess;
+  // BUG-F01/F02 FIX: Process can be null when not yet spawned or after cleanup on error
+  process: ChildProcess | null;
   status: 'installing' | 'starting' | 'running' | 'error' | 'stopped';
   logs: string[];
   errorLogs: string[];
@@ -229,11 +230,11 @@ router.post('/:id/start', async (req, res) => {
   }
 
   // Create running project entry
-  // Process is initially undefined and will be set when installation/start begins
+  // BUG-F01 FIX: Process is initially null and will be set when installation/start begins
   const runningProject: RunningProject = {
     projectId: id,
     port,
-    process: undefined as unknown as ChildProcess, // Will be set below when spawn is called
+    process: null, // Will be set below when spawn is called
     status: 'installing',
     logs: [],
     errorLogs: [],

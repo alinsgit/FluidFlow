@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Link2, Copy, Check, Twitter, Linkedin, Mail, Loader2 } from 'lucide-react';
 import { FileSystem } from '../types';
 
@@ -56,6 +56,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const generateShareUrl = useCallback(async () => {
     setIsGenerating(true);
@@ -100,7 +110,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
     if (!shareUrl) return;
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const shareVia = (platform: 'twitter' | 'linkedin' | 'email') => {

@@ -792,7 +792,7 @@ Use appropriate SQL types: INT, BIGINT, SERIAL, VARCHAR(255), TEXT, BOOLEAN, DAT
                 <input
                   type="number"
                   value={rowCount}
-                  onChange={(e) => setRowCount(Math.max(1, parseInt(e.target.value) || 10))}
+                  onChange={(e) => setRowCount(Math.max(1, parseInt(e.target.value, 10) || 10))}
                   className="w-full mt-1 px-2 py-1 bg-slate-900 border border-white/10 rounded text-sm text-white outline-none"
                   min="1"
                   max="1000"

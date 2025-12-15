@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   GitBranch, GitCommit, Check, X, Plus, RefreshCw, Loader2,
   FileText, FilePlus, FileX, ChevronDown, ChevronUp,
@@ -71,6 +71,16 @@ export const GitPanel: React.FC<GitPanelProps> = ({
   const [diffFile, setDiffFile] = useState<string | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Define loadCommits before useEffect
   const loadCommits = useCallback(async () => {
@@ -130,7 +140,10 @@ export const GitPanel: React.FC<GitPanelProps> = ({
     try {
       await navigator.clipboard.writeText(hash);
       setCopiedHash(hash);
-      setTimeout(() => setCopiedHash(null), 2000);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopiedHash(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }

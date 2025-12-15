@@ -115,10 +115,17 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
       setHasSeenCredits(true);
     }
 
-    // Trigger animation on mount
+    // Trigger animation on mount with cleanup
+    let animationTimeout: ReturnType<typeof setTimeout> | null = null;
     if (isOpen) {
-      setTimeout(() => setIsAnimating(true), 100);
+      animationTimeout = setTimeout(() => setIsAnimating(true), 100);
     }
+
+    return () => {
+      if (animationTimeout) {
+        clearTimeout(animationTimeout);
+      }
+    };
   }, [isOpen]);
 
   const handleClose = () => {
@@ -143,10 +150,12 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
   };
 
   const nextProject = () => {
+    if (projects.length === 0) return;
     setCurrentProjectIndex((prev) => (prev + 1) % projects.length);
   };
 
   const prevProject = () => {
+    if (projects.length === 0) return;
     setCurrentProjectIndex((prev) => (prev - 1 + projects.length) % projects.length);
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Search, Copy, Check, ChevronRight, Code2, Layout, Database, Zap, X, Sparkles, Plus, Trash2, Star } from 'lucide-react';
 import { settingsApi } from '../services/projectApi';
 
@@ -387,6 +387,16 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
   const [customSnippets, setCustomSnippets] = useState<Snippet[]>([]);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newSnippet, setNewSnippet] = useState({ name: '', code: '', category: 'Custom' });
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const loadCustomSnippets = useCallback(async () => {
     try {
@@ -467,7 +477,10 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
   const handleCopy = async (snippet: Snippet) => {
     await navigator.clipboard.writeText(snippet.code);
     setCopiedId(snippet.id);
-    setTimeout(() => setCopiedId(null), 2000);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleInsert = (snippet: Snippet) => {

@@ -309,6 +309,12 @@ router.get('/:id/diff', async (req, res) => {
   try {
     const { id } = req.params;
     const { cached } = req.query;
+
+    // BUG-S01 FIX: Validate project ID to prevent path traversal
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
+
     const filesDir = getFilesDir(id);
 
     if (!existsSync(filesDir)) {
@@ -463,6 +469,12 @@ router.post('/:id/branch', async (req, res) => {
 router.get('/:id/branches', async (req, res) => {
   try {
     const { id } = req.params;
+
+    // BUG-S01 FIX: Validate project ID to prevent path traversal
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
+
     const filesDir = getFilesDir(id);
 
     if (!existsSync(filesDir)) {

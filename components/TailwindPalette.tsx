@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Check, X, Palette, Layout, Type, Box, Move, Sparkles } from 'lucide-react';
 
 interface TailwindPaletteProps {
@@ -92,11 +92,24 @@ export const TailwindPalette: React.FC<TailwindPaletteProps> = ({ isOpen, onClos
   const [activeTab, setActiveTab] = useState<'colors' | 'utilities'>('colors');
   const [selectedColor, setSelectedColor] = useState('blue');
   const [copiedClass, setCopiedClass] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = async (className: string) => {
     await navigator.clipboard.writeText(className);
     setCopiedClass(className);
-    setTimeout(() => setCopiedClass(null), 1500);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => setCopiedClass(null), 1500);
   };
 
   const handleInsert = (className: string) => {

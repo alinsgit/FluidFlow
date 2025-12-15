@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -59,6 +59,16 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
   const [showRawResponse, setShowRawResponse] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -275,7 +285,10 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
     try {
       await navigator.clipboard.writeText(entry.rawResponse);
       setCopiedId(entry.id);
-      setTimeout(() => setCopiedId(null), 2000);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
     } catch (e) {
       console.error('Failed to copy:', e);
     }

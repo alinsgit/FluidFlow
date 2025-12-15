@@ -50,13 +50,45 @@ export async function safeReadJson<T>(
 
 /**
  * Safe JSON stringify helper
+ * BUG-S02 FIX: Handles BigInt and Symbol values that would otherwise throw
  * @param value - Value to stringify
  * @param fallback - String to return if stringify fails
  * @returns JSON string or fallback
  */
 export function safeJsonStringify(value: unknown, fallback: string = '{}'): string {
+  // Handle undefined and functions explicitly - JSON.stringify returns undefined for these
+  if (value === undefined || typeof value === 'function') {
+    return fallback;
+  }
+
+  // Handle Symbol directly at top level
+  if (typeof value === 'symbol') {
+    return fallback;
+  }
+
+  // BUG-S02 FIX: Handle BigInt directly at top level
+  if (typeof value === 'bigint') {
+    return `"${value.toString()}"`;
+  }
+
   try {
-    return JSON.stringify(value);
+    // Custom replacer to handle BigInt and Symbol values in nested objects
+    const replacer = (_key: string, val: unknown): unknown => {
+      if (typeof val === 'bigint') {
+        return val.toString();
+      }
+      if (typeof val === 'symbol') {
+        return undefined; // Symbols are excluded (same as JSON.stringify default)
+      }
+      return val;
+    };
+
+    const result = JSON.stringify(value, replacer);
+    // JSON.stringify can return undefined for some edge cases
+    if (result === undefined) {
+      return fallback;
+    }
+    return result;
   } catch (error) {
     console.error('[SafeJson] Stringify error:', error instanceof Error ? error.message : error);
     return fallback;
