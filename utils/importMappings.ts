@@ -215,11 +215,13 @@ export const DND_IMPORTS: Record<string, string> = {
 
 // Utility libraries
 export const UTILITY_IMPORTS: Record<string, string> = {
-  // clsx/classnames
+  // clsx/classnames/tailwind-merge
   'clsx': 'clsx',
   'cx': 'clsx',
   'classNames': 'classnames',
-  'cn': 'clsx', // commonly used alias - also check @/lib/utils
+  'twMerge': 'tailwind-merge',
+  'twJoin': 'tailwind-merge',
+  // Note: 'cn' is special - usually from @/lib/utils (shadcn), handled separately
   // date-fns
   'format': 'date-fns',
   'parseISO': 'date-fns',
@@ -227,12 +229,35 @@ export const UTILITY_IMPORTS: Record<string, string> = {
   'formatRelative': 'date-fns',
   'addDays': 'date-fns',
   'subDays': 'date-fns',
+  'addMonths': 'date-fns',
+  'subMonths': 'date-fns',
+  'addYears': 'date-fns',
+  'subYears': 'date-fns',
+  'addHours': 'date-fns',
+  'subHours': 'date-fns',
   'isValid': 'date-fns',
   'differenceInDays': 'date-fns',
+  'differenceInHours': 'date-fns',
+  'differenceInMinutes': 'date-fns',
   'startOfWeek': 'date-fns',
   'endOfWeek': 'date-fns',
+  'startOfMonth': 'date-fns',
+  'endOfMonth': 'date-fns',
+  'startOfDay': 'date-fns',
+  'endOfDay': 'date-fns',
   'isBefore': 'date-fns',
   'isAfter': 'date-fns',
+  'isEqual': 'date-fns',
+  'isSameDay': 'date-fns',
+  'isSameMonth': 'date-fns',
+  'isToday': 'date-fns',
+  'isPast': 'date-fns',
+  'isFuture': 'date-fns',
+  'formatDistanceToNow': 'date-fns',
+  'formatDuration': 'date-fns',
+  'intervalToDuration': 'date-fns',
+  // dayjs
+  'dayjs': 'dayjs',
   // lodash
   'debounce': 'lodash',
   'throttle': 'lodash',
@@ -241,8 +266,31 @@ export const UTILITY_IMPORTS: Record<string, string> = {
   'groupBy': 'lodash',
   'sortBy': 'lodash',
   'uniqBy': 'lodash',
+  'orderBy': 'lodash',
+  'keyBy': 'lodash',
+  'mapValues': 'lodash',
+  'omit': 'lodash',
+  'pick': 'lodash',
+  'get': 'lodash',
+  'set': 'lodash',
+  'merge': 'lodash',
+  'flatten': 'lodash',
+  'flattenDeep': 'lodash',
+  'chunk': 'lodash',
+  'compact': 'lodash',
+  'difference': 'lodash',
+  'intersection': 'lodash',
+  'union': 'lodash',
+  'uniq': 'lodash',
+  'range': 'lodash',
+  'capitalize': 'lodash',
+  'camelCase': 'lodash',
+  'kebabCase': 'lodash',
+  'snakeCase': 'lodash',
   // axios
   'axios': 'axios',
+  // ky (fetch wrapper)
+  'ky': 'ky',
   // uuid
   'v4': 'uuid',
   'uuidv4': 'uuid',
@@ -251,16 +299,170 @@ export const UTILITY_IMPORTS: Record<string, string> = {
   // immer
   'produce': 'immer',
   'Draft': 'immer',
+  'enableMapSet': 'immer',
   // react-use hooks
   'useDebounce': 'react-use',
   'useThrottle': 'react-use',
   'useLocalStorage': 'react-use',
+  'useSessionStorage': 'react-use',
   'useWindowSize': 'react-use',
   'useMedia': 'react-use',
   'usePrevious': 'react-use',
   'useAsync': 'react-use',
+  'useAsyncFn': 'react-use',
   'useToggle': 'react-use',
   'useCopyToClipboard': 'react-use',
+  'useKeyPress': 'react-use',
+  'useInterval': 'react-use',
+  'useTimeout': 'react-use',
+  'useMountedState': 'react-use',
+  'useList': 'react-use',
+  'useMap': 'react-use',
+  'useSet': 'react-use',
+  'useCounter': 'react-use',
+  'useBoolean': 'react-use',
+  'useClickAway': 'react-use',
+  'useHover': 'react-use',
+  'useScroll': 'react-use',
+  // usehooks-ts
+  'useOnClickOutside': 'usehooks-ts',
+  'useEventListener': 'usehooks-ts',
+  'useMediaQuery': 'usehooks-ts',
+  'useDarkMode': 'usehooks-ts',
+  'useReadLocalStorage': 'usehooks-ts',
+  'useIsClient': 'usehooks-ts',
+  'useIsMounted': 'usehooks-ts',
+  'useIsFirstRender': 'usehooks-ts',
+  'useEffectOnce': 'usehooks-ts',
+  'useUpdateEffect': 'usehooks-ts',
+  // sanitization
+  'DOMPurify': 'dompurify',
+};
+
+// Additional popular libraries
+export const ADDITIONAL_IMPORTS: Record<string, string> = {
+  // Embla Carousel
+  'useEmblaCarousel': 'embla-carousel-react',
+  'EmblaCarousel': 'embla-carousel-react',
+  // Swiper
+  'Swiper': 'swiper/react',
+  'SwiperSlide': 'swiper/react',
+  // React Spring
+  'useSpring': 'react-spring',
+  'animated': 'react-spring',
+  'useTrail': 'react-spring',
+  'useSprings': 'react-spring',
+  'useChain': 'react-spring',
+  'config': 'react-spring',
+  // React Intersection Observer
+  'useIntersectionObserver': 'react-intersection-observer',
+  // React Helmet
+  'Helmet': 'react-helmet-async',
+  'HelmetProvider': 'react-helmet-async',
+  // React Error Boundary
+  'ErrorBoundary': 'react-error-boundary',
+  'useErrorBoundary': 'react-error-boundary',
+  // React Icons (specific icon sets)
+  'FaGithub': 'react-icons/fa',
+  'FaTwitter': 'react-icons/fa',
+  'FaFacebook': 'react-icons/fa',
+  'FaLinkedin': 'react-icons/fa',
+  'FaInstagram': 'react-icons/fa',
+  'FaYoutube': 'react-icons/fa',
+  'FaDiscord': 'react-icons/fa',
+  'FaCheck': 'react-icons/fa',
+  'FaTimes': 'react-icons/fa',
+  'FaSearch': 'react-icons/fa',
+  'FaUser': 'react-icons/fa',
+  'FaHeart': 'react-icons/fa',
+  'FaStar': 'react-icons/fa',
+  'FaHome': 'react-icons/fa',
+  'FaCog': 'react-icons/fa',
+  'FaBars': 'react-icons/fa',
+  'FaArrowRight': 'react-icons/fa',
+  'FaArrowLeft': 'react-icons/fa',
+  'FaPlus': 'react-icons/fa',
+  'FaMinus': 'react-icons/fa',
+  'FaTrash': 'react-icons/fa',
+  'FaEdit': 'react-icons/fa',
+  'FaEye': 'react-icons/fa',
+  'FaEyeSlash': 'react-icons/fa',
+  'FaSpinner': 'react-icons/fa',
+  'FaCircle': 'react-icons/fa',
+  'FaSquare': 'react-icons/fa',
+  // Material Design Icons
+  'MdHome': 'react-icons/md',
+  'MdSettings': 'react-icons/md',
+  'MdSearch': 'react-icons/md',
+  'MdMenu': 'react-icons/md',
+  'MdClose': 'react-icons/md',
+  'MdCheck': 'react-icons/md',
+  'MdAdd': 'react-icons/md',
+  'MdRemove': 'react-icons/md',
+  'MdDelete': 'react-icons/md',
+  'MdEdit': 'react-icons/md',
+  'MdArrowBack': 'react-icons/md',
+  'MdArrowForward': 'react-icons/md',
+  'MdKeyboardArrowDown': 'react-icons/md',
+  'MdKeyboardArrowUp': 'react-icons/md',
+  'MdKeyboardArrowLeft': 'react-icons/md',
+  'MdKeyboardArrowRight': 'react-icons/md',
+  // Hero Icons
+  'HiHome': 'react-icons/hi',
+  'HiMenu': 'react-icons/hi',
+  'HiX': 'react-icons/hi',
+  'HiSearch': 'react-icons/hi',
+  'HiCheck': 'react-icons/hi',
+  'HiPlus': 'react-icons/hi',
+  'HiMinus': 'react-icons/hi',
+  'HiChevronDown': 'react-icons/hi',
+  'HiChevronUp': 'react-icons/hi',
+  'HiChevronLeft': 'react-icons/hi',
+  'HiChevronRight': 'react-icons/hi',
+  // Bootstrap Icons
+  'BsGithub': 'react-icons/bs',
+  'BsTwitter': 'react-icons/bs',
+  'BsLinkedin': 'react-icons/bs',
+  'BsInstagram': 'react-icons/bs',
+  'BsFacebook': 'react-icons/bs',
+  // Cryptocurrency
+  'BsBitcoin': 'react-icons/bs',
+  'BsEthereum': 'react-icons/bs',
+  // Vaul (Drawer)
+  'Drawer': 'vaul',
+  // CMDK (Command menu)
+  'Command': 'cmdk',
+  // React Day Picker
+  'DayPicker': 'react-day-picker',
+  // Date picker
+  'DatePicker': 'react-datepicker',
+  // React Select
+  'Select': 'react-select',
+  'AsyncSelect': 'react-select/async',
+  'CreatableSelect': 'react-select/creatable',
+  // React Dropzone
+  'useDropzone': 'react-dropzone',
+  // React Markdown
+  'ReactMarkdown': 'react-markdown',
+  'Markdown': 'react-markdown',
+  // React Syntax Highlighter
+  'SyntaxHighlighter': 'react-syntax-highlighter',
+  'Prism': 'react-syntax-highlighter/dist/esm/styles/prism',
+  // React PDF
+  'Document': 'react-pdf',
+  'Page': 'react-pdf',
+  // QR Code
+  'QRCode': 'react-qr-code',
+  'QRCodeSVG': 'qrcode.react',
+  // Copy to clipboard
+  'CopyToClipboard': 'react-copy-to-clipboard',
+  // JSON viewer
+  'JsonView': 'react-json-view',
+  // React Player (video/audio)
+  'ReactPlayer': 'react-player',
+  // React Confetti
+  'Confetti': 'react-confetti',
+  'useWindowSize': 'react-use', // commonly used with confetti
 };
 
 // Lucide React icons - comprehensive list
@@ -721,6 +923,7 @@ export const COMMON_IMPORTS: Record<string, string> = {
   ...TABLE_IMPORTS,
   ...DND_IMPORTS,
   ...UTILITY_IMPORTS,
+  ...ADDITIONAL_IMPORTS,
   ...LUCIDE_ICONS,
 };
 

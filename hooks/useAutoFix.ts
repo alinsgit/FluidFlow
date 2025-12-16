@@ -2,16 +2,18 @@
  * Auto-Fix Hook
  *
  * Manages automatic error fixing functionality for the preview panel.
+ * Uses the ultra-powerful ErrorFixEngine for guaranteed error resolution.
  * Handles error classification, simple pattern-based fixes, and AI-powered fixes.
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { getProviderManager } from '../services/ai';
 import { FileSystem, LogEntry } from '../types';
-import { cleanGeneratedCode, isValidCode } from '../utils/cleanCode';
 import { debugLog } from './useDebugStore';
-import { attemptAutoFix, classifyError, canAutoFix, wasRecentlyFixed } from '../services/autoFixService';
-import { parseStackTrace, buildAutoFixPrompt } from '../utils/errorContext';
+import { classifyError, canAutoFix, wasRecentlyFixed, recordFixAttempt, attemptAutoFix } from '../services/autoFixService';
+import { tryFixBareSpecifierMultiFile } from '../utils/simpleFixes';
+import { parseStackTrace } from '../utils/errorContext';
+import { ErrorFixEngine, FixStrategy } from '../services/errorFixEngine';
+import { verifyFix } from '../services/fixVerification';
 
 interface UseAutoFixOptions {
   files: FileSystem;
@@ -36,6 +38,7 @@ interface UseAutoFixReturn {
   currentError: string | null;
   currentErrorStack: string | undefined;
   errorTargetFile: string;
+  currentFixStrategy: FixStrategy | null;
   setCurrentError: (error: string | null) => void;
   setCurrentErrorStack: (stack: string | undefined) => void;
   setErrorTargetFile: (file: string) => void;
@@ -45,6 +48,7 @@ interface UseAutoFixReturn {
   handleDeclineAutoFix: () => void;
   handleSendErrorToChat: () => void;
   handleDismissFailedError: () => void;
+  abortFix: () => void;
 
   // Error processing
   processError: (errorMsg: string, stack?: string) => void;
@@ -96,7 +100,13 @@ export function useAutoFix({
     };
   }, []);
 
-  // Main auto-fix function
+  // Current fix strategy for UI display
+  const [currentFixStrategy, setCurrentFixStrategy] = useState<FixStrategy | null>(null);
+
+  // Engine instance ref
+  const engineRef = useRef<ErrorFixEngine | null>(null);
+
+  // Main auto-fix function using ErrorFixEngine
   const autoFixError = useCallback(async (errorMessage: string) => {
     console.log('[AutoFix] autoFixError called:', errorMessage.slice(0, 100));
 
@@ -122,73 +132,87 @@ export function useAutoFix({
     const startTime = Date.now();
 
     try {
-      const manager = getProviderManager();
-      const activeConfig = manager.getActiveConfig();
-
-      if (!activeConfig) {
-        throw new Error('No AI provider configured');
-      }
-
-      const modelToUse = activeConfig.defaultModel;
-      setAutoFixToast('📦 Building context...');
-
       // Determine target file
       const stackInfo = parseStackTrace(errorMessage);
       const targetFile = stackInfo.file || 'src/App.tsx';
-      const targetFileContent = files[targetFile] || appCode || '';
 
-      if (!targetFileContent) {
-        throw new Error(`Target file not found: ${targetFile}`);
-      }
-
-      // Build prompt using utility
-      const systemPrompt = buildAutoFixPrompt({
+      // Create and run the ErrorFixEngine
+      const engine = new ErrorFixEngine({
+        files: filesRef.current,
         errorMessage,
+        errorStack: currentErrorStack,
         targetFile,
-        targetFileContent,
-        files,
-        techStackContext: generateSystemInstruction(),
+        appCode,
         logs,
+        systemInstruction: generateSystemInstruction(),
+        onProgress: (stage, progress) => {
+          setAutoFixToast(`${stage} (${progress}%)`);
+        },
+        onStrategyChange: (strategy) => {
+          setCurrentFixStrategy(strategy);
+          console.log('[AutoFix] Strategy changed to:', strategy);
+        },
+        maxAttempts: 10,
+        timeout: 90000, // 90 seconds max
       });
 
-      const shortModelName = modelToUse.split('/').pop()?.replace('models-', '') || modelToUse;
-      setAutoFixToast(`🤖 Fixing ${targetFile.split('/').pop()} (${shortModelName})...`);
+      engineRef.current = engine;
 
-      const response = await manager.generate({
-        prompt: systemPrompt,
-        responseFormat: 'text'
-      }, modelToUse);
-
-      setAutoFixToast('⚙️ Processing fix...');
-
-      const fixedCode = cleanGeneratedCode(response.text || '');
-      const errorClassification = classifyError(errorMessage);
+      const result = await engine.fix();
 
       debugLog.response('auto-fix', {
         id: requestId,
-        model: modelToUse,
+        model: selectedModel,
         duration: Date.now() - startTime,
-        response: fixedCode.slice(0, 500) + '...',
+        response: `Strategy: ${result.strategy}, Attempts: ${result.attempts}`,
         metadata: {
-          success: !!(fixedCode && isValidCode(fixedCode)),
-          category: errorClassification.category,
+          success: result.success,
+          strategy: result.strategy,
+          attempts: result.attempts,
         }
       });
 
-      if (fixedCode && isValidCode(fixedCode)) {
-        setFiles({ ...files, [targetFile]: fixedCode });
-        setAutoFixToast(`✅ Fixed ${targetFile.split('/').pop()}!`);
-        setFailedAutoFixError(null);
+      if (result.success && Object.keys(result.fixedFiles).length > 0) {
+        // Verify the fix before applying
+        const changedFiles = Object.keys(result.fixedFiles);
+        const verification = verifyFix({
+          originalError: errorMessage,
+          originalFiles: filesRef.current,
+          fixedFiles: { ...filesRef.current, ...result.fixedFiles },
+          changedFiles,
+          strictMode: false,
+        });
 
-        // Clear the error from logs
-        setLogs(prev => prev.map(l =>
-          l.message === errorMessage ? { ...l, isFixed: true } : l
-        ));
+        if (verification.isValid || verification.confidence !== 'low') {
+          // Apply the fix
+          setFiles({ ...filesRef.current, ...result.fixedFiles });
+
+          const fileNames = changedFiles.map(f => f.split('/').pop()).join(', ');
+          setAutoFixToast(`✅ Fixed ${fileNames}!`);
+          setFailedAutoFixError(null);
+
+          // Clear the error from logs
+          setLogs(prev => prev.map(l =>
+            l.message === errorMessage ? { ...l, isFixed: true } : l
+          ));
+
+          console.log('[AutoFix] Fix applied successfully:', {
+            strategy: result.strategy,
+            files: changedFiles,
+            verification: verification.confidence,
+          });
+        } else {
+          // Fix verification failed
+          console.warn('[AutoFix] Fix verification failed:', verification.issues);
+          setFailedAutoFixError(errorMessage);
+          setAutoFixToast(null);
+        }
 
         if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
         toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
       } else {
-        console.warn('[AutoFix] Fix failed - invalid code generated');
+        console.warn('[AutoFix] All fix strategies exhausted');
+        console.warn('[AutoFix] Failure report:', result.error);
         setFailedAutoFixError(errorMessage);
         setAutoFixToast(null);
       }
@@ -203,8 +227,10 @@ export function useAutoFix({
       });
     } finally {
       setIsAutoFixing(false);
+      setCurrentFixStrategy(null);
+      engineRef.current = null;
     }
-  }, [appCode, files, setFiles, setLogs, logs, isAutoFixing, isGenerating, selectedModel, generateSystemInstruction]);
+  }, [appCode, isAutoFixing, isGenerating, selectedModel, generateSystemInstruction, logs, currentErrorStack, setFiles, setLogs]);
 
   // Confirmation handlers
   const handleConfirmAutoFix = useCallback(() => {
@@ -227,6 +253,17 @@ export function useAutoFix({
 
   const handleDismissFailedError = useCallback(() => {
     setFailedAutoFixError(null);
+  }, []);
+
+  // Abort current fix operation
+  const abortFix = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.abort();
+      console.log('[AutoFix] Fix operation aborted by user');
+    }
+    setIsAutoFixing(false);
+    setAutoFixToast(null);
+    setCurrentFixStrategy(null);
   }, []);
 
   // Process error from message listener
@@ -269,11 +306,35 @@ export function useAutoFix({
         const errorLower = errorMsg.toLowerCase();
         const isBareSpecifierError = errorLower.includes('bare specifier') || errorLower.includes('was not remapped');
 
+        // Try multi-file bare specifier fix first
+        if (isBareSpecifierError) {
+          console.log('[AutoFix] Attempting multi-file bare specifier fix');
+          const multiFileResult = tryFixBareSpecifierMultiFile(errorMsg, filesRef.current);
+
+          if (multiFileResult.fixed && multiFileResult.multiFileChanges) {
+            const changedFiles = Object.keys(multiFileResult.multiFileChanges);
+            console.log('[AutoFix] Multi-file fix successful, changed files:', changedFiles);
+
+            lastFixedErrorRef.current = errorMsg;
+            setFiles({ ...filesRef.current, ...multiFileResult.multiFileChanges });
+            setAutoFixToast(`⚡ ${multiFileResult.description}`);
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
+            console.log('[AutoFix] Applied multi-file fix:', multiFileResult.description);
+
+            // Record fix analytics
+            recordFixAttempt(errorMsg, 'import', 'bare-specifier-multifile', true, Date.now() - Date.now());
+            return;
+          }
+        }
+
+        // Single file fix fallback
         let targetFile = 'src/App.tsx';
         let targetFileContent = appCode;
 
         if (isBareSpecifierError) {
-          const specifierMatch = errorMsg.match(/["']?(src\/[\w./-]+)["']?\s*was a bare specifier/i);
+          // Find the file that imports the bare specifier
+          const specifierMatch = errorMsg.match(/["']?(src\/[\w./-]+)["']?\s*(?:was a bare specifier|was not remapped)/i);
           if (specifierMatch) {
             const bareSpecifier = specifierMatch[1];
             const bareWithoutExt = bareSpecifier.replace(/\.(tsx?|jsx?)$/, '');
@@ -308,6 +369,9 @@ export function useAutoFix({
           if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
           toastTimeoutRef.current = setTimeout(() => setAutoFixToast(null), 3000);
           console.log('[AutoFix] Applied:', fixResult.description, `(${fixResult.fixType})`, 'to:', targetFile);
+
+          // Record fix analytics
+          recordFixAttempt(errorMsg, errorInfo.category, fixResult.fixType || 'local', true, 0);
           return;
         }
 
@@ -343,6 +407,7 @@ export function useAutoFix({
     currentError,
     currentErrorStack,
     errorTargetFile,
+    currentFixStrategy,
     setCurrentError,
     setCurrentErrorStack,
     setErrorTargetFile,
@@ -352,6 +417,7 @@ export function useAutoFix({
     handleDeclineAutoFix,
     handleSendErrorToChat,
     handleDismissFailedError,
+    abortFix,
 
     // Error processing
     processError,

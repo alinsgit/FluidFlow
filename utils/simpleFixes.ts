@@ -16,6 +16,66 @@ interface SimpleFixResult {
   newCode: string;
   description: string;
   fixType: 'import' | 'typo' | 'syntax' | 'jsx' | 'runtime' | 'react' | 'none';
+  // Multi-file support
+  multiFileChanges?: Record<string, string>;
+}
+
+/**
+ * Extract bare specifier path from error message
+ */
+function extractBareSpecifier(errorMessage: string): string | null {
+  const patterns = [
+    /["']?(src\/[\w./-]+)["']?\s*was a bare specifier/i,
+    /["']?(src\/[\w./-]+)["']?\s*was not remapped/i,
+    /specifier\s*["'](src\/[\w./-]+)["']/i,
+    /cannot find module\s*["'](src\/[\w./-]+)["']/i,
+    /failed to resolve\s*["'](src\/[\w./-]+)["']/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = errorMessage.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Calculate relative path from importing file to target file
+ */
+function calculateRelativeImportPath(fromFile: string, bareSpecifier: string): string {
+  // Normalize paths
+  const fromParts = fromFile.replace(/\\/g, '/').split('/');
+  fromParts.pop(); // Remove filename, keep directory
+
+  // Remove 'src/' prefix and extension from bare specifier
+  const toPath = bareSpecifier.replace(/^src\//, '');
+  const toPathWithoutExt = toPath.replace(/\.(tsx?|jsx?)$/, '');
+  const toParts = toPathWithoutExt.split('/');
+
+  // Calculate from directory (relative to src)
+  const fromDir = fromParts.filter(p => p && p !== 'src');
+  const toDir = toParts.slice(0, -1);
+  const toFile = toParts[toParts.length - 1];
+
+  // Find common prefix
+  let commonLength = 0;
+  for (let i = 0; i < Math.min(fromDir.length, toDir.length); i++) {
+    if (fromDir[i] === toDir[i]) {
+      commonLength++;
+    } else {
+      break;
+    }
+  }
+
+  // Calculate relative path
+  const upCount = fromDir.length - commonLength;
+  const downPath = [...toDir.slice(commonLength), toFile];
+
+  if (upCount === 0) {
+    return './' + downPath.join('/');
+  } else {
+    return '../'.repeat(upCount) + downPath.join('/');
+  }
 }
 
 /**
@@ -25,14 +85,12 @@ interface SimpleFixResult {
 function tryFixBareSpecifier(errorMessage: string, code: string): SimpleFixResult {
   console.log('[SimpleFix] tryFixBareSpecifier called with error:', errorMessage.slice(0, 100));
 
-  // Match error pattern: "src/..." was a bare specifier
-  const match = errorMessage.match(/["']?(src\/[\w./-]+)["']?\s*was a bare specifier/i);
-  if (!match) {
+  const bareSpecifier = extractBareSpecifier(errorMessage);
+  if (!bareSpecifier) {
     console.log('[SimpleFix] No bare specifier pattern match');
     return { fixed: false, newCode: code, description: '', fixType: 'none' };
   }
 
-  const bareSpecifier = match[1];
   console.log('[SimpleFix] Found bare specifier:', bareSpecifier);
 
   // Convert src/components/Hero.tsx -> ./components/Hero
@@ -84,6 +142,76 @@ function tryFixBareSpecifier(errorMessage: string, code: string): SimpleFixResul
 
   console.log('[SimpleFix] Import not found in code, searching for:', patterns);
   return { fixed: false, newCode: code, description: '', fixType: 'none' };
+}
+
+/**
+ * Multi-file bare specifier fix - finds ALL files importing the bad path
+ */
+export function tryFixBareSpecifierMultiFile(
+  errorMessage: string,
+  files: Record<string, string>
+): SimpleFixResult {
+  const bareSpecifier = extractBareSpecifier(errorMessage);
+  if (!bareSpecifier) {
+    return { fixed: false, newCode: '', description: '', fixType: 'none' };
+  }
+
+  console.log('[SimpleFix] Multi-file bare specifier fix for:', bareSpecifier);
+
+  const multiFileChanges: Record<string, string> = {};
+  let totalFixes = 0;
+  const bareWithoutExt = bareSpecifier.replace(/\.(tsx?|jsx?)$/, '');
+
+  // Search all files for imports of this bare specifier
+  for (const [filePath, content] of Object.entries(files)) {
+    if (!content || !filePath.match(/\.(tsx?|jsx?)$/)) continue;
+
+    // Check if this file imports the bare specifier
+    const importPatterns = [
+      bareSpecifier,
+      bareWithoutExt,
+    ];
+
+    let newContent = content;
+    let fileModified = false;
+
+    for (const pattern of importPatterns) {
+      const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(
+        `(import\\s+(?:[\\w,{}\\s*]+)\\s+from\\s*)(['"])${escaped}\\2`,
+        'g'
+      );
+
+      if (regex.test(newContent)) {
+        // Calculate the correct relative path for THIS file
+        const relativePath = calculateRelativeImportPath(filePath, bareSpecifier);
+
+        console.log(`[SimpleFix] Fixing in ${filePath}: "${pattern}" → "${relativePath}"`);
+
+        regex.lastIndex = 0;
+        newContent = newContent.replace(regex, `$1$2${relativePath}$2`);
+        fileModified = true;
+      }
+    }
+
+    if (fileModified && newContent !== content) {
+      multiFileChanges[filePath] = newContent;
+      totalFixes++;
+    }
+  }
+
+  if (totalFixes > 0) {
+    const firstFile = Object.keys(multiFileChanges)[0];
+    return {
+      fixed: true,
+      newCode: multiFileChanges[firstFile] || '',
+      description: `Fixed bare specifier in ${totalFixes} file(s): "${bareSpecifier}"`,
+      fixType: 'import',
+      multiFileChanges
+    };
+  }
+
+  return { fixed: false, newCode: '', description: '', fixType: 'none' };
 }
 
 /**
@@ -205,6 +333,65 @@ function detectMissingImports(code: string): { identifier: string; source: strin
 }
 
 /**
+ * Special handling for shadcn 'cn' utility function
+ * This is typically defined in @/lib/utils or ./lib/utils
+ */
+function tryFixCnHelper(code: string): SimpleFixResult {
+  // Check if cn is used but not imported
+  if (!/\bcn\s*\(/.test(code)) {
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // Check if already imported
+  if (/import\s*{[^}]*\bcn\b[^}]*}\s*from/.test(code)) {
+    return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // Check if @/lib/utils exists in the project (common shadcn pattern)
+  // Or try to import from @/lib/utils first
+  const importStatement = `import { cn } from '@/lib/utils';\n`;
+
+  // Check if file has other @/ imports (indicates shadcn project)
+  if (/@\//.test(code)) {
+    const newCode = insertImport(code, importStatement);
+    return {
+      fixed: true,
+      newCode,
+      description: "Added import: cn from '@/lib/utils'",
+      fixType: 'import'
+    };
+  }
+
+  // Otherwise, add clsx + twMerge imports and define cn inline
+  let newCode = code;
+
+  // Add clsx import if not present
+  if (!/import.*clsx/.test(code)) {
+    newCode = `import { clsx, type ClassValue } from 'clsx';\n` + newCode;
+  }
+
+  // Add twMerge import if not present
+  if (!/import.*twMerge/.test(code)) {
+    newCode = `import { twMerge } from 'tailwind-merge';\n` + newCode;
+  }
+
+  // Add cn function after imports
+  const lastImportMatch = newCode.match(/^(import\s+.+from\s+['"][^'"]+['"];?\s*\n?)+/m);
+  if (lastImportMatch && lastImportMatch.index !== undefined) {
+    const insertPos = lastImportMatch.index + lastImportMatch[0].length;
+    const cnFunction = `\nfunction cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs));\n}\n\n`;
+    newCode = newCode.slice(0, insertPos) + cnFunction + newCode.slice(insertPos);
+  }
+
+  return {
+    fixed: true,
+    newCode,
+    description: "Added cn helper function with clsx and tailwind-merge",
+    fixType: 'import'
+  };
+}
+
+/**
  * Fix missing imports (React hooks and common third-party)
  */
 function tryFixMissingImport(errorMessage: string, code: string): SimpleFixResult {
@@ -237,6 +424,11 @@ function tryFixMissingImport(errorMessage: string, code: string): SimpleFixResul
       return addImport(code, id, source);
     }
     return { fixed: false, newCode: code, description: '', fixType: 'none' };
+  }
+
+  // Special handling for 'cn' (shadcn utility)
+  if (identifier === 'cn') {
+    return tryFixCnHelper(code);
   }
 
   // Check if already imported

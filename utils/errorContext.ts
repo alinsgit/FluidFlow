@@ -6,7 +6,7 @@
  */
 
 import { FileSystem, LogEntry } from '@/types';
-import { classifyError, ErrorCategory } from '@/services/autoFixService';
+import { classifyError, ErrorCategory, ErrorClassification } from '@/services/autoFixService';
 
 /**
  * Parse stack trace to identify error location
@@ -156,19 +156,32 @@ const CATEGORY_HINTS: Record<ErrorCategory, string> = {
   import: `- Check if the import source exists and is correct
 - For motion animations, use 'motion/react' (not 'framer-motion')
 - For React Router v7, imports are from 'react-router' (not 'react-router-dom')
-- Verify named vs default exports match`,
+- Lucide icons: import from 'lucide-react' (named exports)
+- Verify named vs default exports match
+- For bare specifiers like 'src/...', convert to relative paths ('./...')`,
   syntax: `- Check for missing brackets, parentheses, or semicolons
 - Verify JSX syntax is valid
-- Ensure template literals are properly closed`,
+- Ensure template literals are properly closed
+- Check for missing commas in object/array literals`,
+  jsx: `- Ensure all JSX tags are properly closed
+- Self-closing tags (img, input, br, hr) should use />
+- Adjacent JSX elements must be wrapped in a parent or Fragment
+- Check for unclosed JSX expressions {}`,
   type: `- Check type definitions in types.ts if available
 - Ensure props match expected types
-- Verify generic type parameters`,
-  runtime: `- Check for null/undefined access
+- Verify generic type parameters
+- Add optional chaining (?.) for possibly undefined values`,
+  runtime: `- Add null checks or optional chaining (?.) for object access
 - Verify async operations are properly awaited
-- Ensure state is initialized before use`,
-  react: `- Verify hook rules (only call in component body)
-- Check key props for list items
-- Ensure proper event handler binding`,
+- Ensure state is initialized before use
+- Check for proper array/iterable handling`,
+  react: `- Verify hook rules (only call in component body, not in conditions)
+- Add unique key props for list items (use item.id or index as fallback)
+- Ensure proper event handler binding
+- Use useEffect for side effects, not during render`,
+  async: `- Add 'async' keyword before function that uses 'await'
+- Ensure Promise chains are properly handled
+- Use try-catch for async error handling`,
   transient: '',
   unknown: '',
 };
@@ -194,14 +207,35 @@ export function buildAutoFixPrompt(context: AutoFixPromptContext): string {
   const stackInfo = parseStackTrace(errorMessage);
   const categoryHint = CATEGORY_HINTS[errorClassification.category] || '';
 
-  // Build related files section
+  // Build related files section with smart truncation
   let relatedFilesSection = '';
   const relatedEntries = Object.entries(relatedFiles).filter(([path]) => path !== targetFile);
   if (relatedEntries.length > 0) {
     relatedFilesSection = '\n## Related Files (may contain relevant code)\n';
     for (const [path, content] of relatedEntries) {
-      const truncated = content.length > 2000 ? content.slice(0, 2000) + '\n// ... truncated' : content;
+      // Smart truncation - keep more context for smaller files
+      const maxSize = relatedEntries.length > 3 ? 1500 : 2500;
+      const truncated = content.length > maxSize ? content.slice(0, maxSize) + '\n// ... truncated' : content;
       relatedFilesSection += `### ${path}\n\`\`\`tsx\n${truncated}\n\`\`\`\n`;
+    }
+  }
+
+  // Build suggested fix section if available
+  let suggestedFixSection = '';
+  if (errorClassification.suggestedFix) {
+    suggestedFixSection = `\n## Suggested Fix\n${errorClassification.suggestedFix}`;
+    if (errorClassification.affectedIdentifier) {
+      suggestedFixSection += ` (identifier: \`${errorClassification.affectedIdentifier}\`)`;
+    }
+    suggestedFixSection += '\n';
+  }
+
+  // Build error location section
+  let errorLocation = targetFile;
+  if (stackInfo.line) {
+    errorLocation += `:${stackInfo.line}`;
+    if (stackInfo.column) {
+      errorLocation += `:${stackInfo.column}`;
     }
   }
 
@@ -213,8 +247,8 @@ ${techStackContext}
 - **Error Message**: ${errorMessage}
 - **Error Category**: ${errorClassification.category}
 - **Priority**: ${errorClassification.priority}/5
-- **Target File**: ${targetFile}${stackInfo.line ? ` (line ${stackInfo.line})` : ''}
-
+- **Location**: ${errorLocation}
+${suggestedFixSection}
 ${recentLogsContext}
 
 ## Available Files in Project
@@ -230,10 +264,14 @@ ${targetFileContent}
 ## Fix Guidelines
 1. ONLY fix the specific error - do not refactor unrelated code
 2. Maintain the existing code style and patterns
-3. Ensure all imports are correct (check the tech stack above for correct package names)
-4. If a component is undefined, check if it should be imported or defined
-5. For missing exports, check related files above for correct export names
-6. Pay attention to special characters in strings (like apostrophes)
+3. Ensure all imports are correct:
+   - motion/react for animations
+   - react-router for routing (not react-router-dom)
+   - lucide-react for icons
+4. If a component/function is undefined, add the appropriate import
+5. For missing exports, check related files for correct export names
+6. Use optional chaining (?.) for potentially null/undefined values
+7. Pay attention to special characters (escape apostrophes in strings)
 
 ${categoryHint ? `## Category-Specific Hints\n${categoryHint}` : ''}
 
@@ -242,4 +280,25 @@ Return ONLY the complete fixed ${targetFile} code.
 - No explanations or comments about the fix
 - No markdown code blocks or backticks
 - Just valid TypeScript/TSX code that can directly replace the file`;
+}
+
+/**
+ * Build a minimal prompt for simple fixes (less tokens)
+ */
+export function buildMinimalFixPrompt(
+  errorMessage: string,
+  code: string,
+  classification: ErrorClassification
+): string {
+  return `Fix this ${classification.category} error in React/TypeScript:
+
+Error: ${errorMessage}
+${classification.suggestedFix ? `Hint: ${classification.suggestedFix}` : ''}
+
+Code:
+\`\`\`tsx
+${code}
+\`\`\`
+
+Return ONLY the fixed code, no explanations.`;
 }

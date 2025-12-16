@@ -25,6 +25,115 @@ export interface FixAttempt {
   success: boolean;
 }
 
+// Fix analytics for tracking success rates
+export interface FixAnalytics {
+  totalAttempts: number;
+  successfulFixes: number;
+  failedFixes: number;
+  fixesByCategory: Record<string, { attempts: number; successes: number }>;
+  fixesByType: Record<string, { attempts: number; successes: number }>;
+  averageFixTime: number;
+  recentFixes: Array<{
+    timestamp: number;
+    errorSignature: string;
+    category: string;
+    fixType: string;
+    success: boolean;
+    timeMs: number;
+  }>;
+}
+
+// Global analytics instance
+const fixAnalytics: FixAnalytics = {
+  totalAttempts: 0,
+  successfulFixes: 0,
+  failedFixes: 0,
+  fixesByCategory: {},
+  fixesByType: {},
+  averageFixTime: 0,
+  recentFixes: []
+};
+
+/**
+ * Record a fix attempt for analytics
+ */
+export function recordFixAttempt(
+  errorMessage: string,
+  category: string,
+  fixType: string,
+  success: boolean,
+  timeMs: number
+): void {
+  fixAnalytics.totalAttempts++;
+
+  if (success) {
+    fixAnalytics.successfulFixes++;
+  } else {
+    fixAnalytics.failedFixes++;
+  }
+
+  // Update category stats
+  if (!fixAnalytics.fixesByCategory[category]) {
+    fixAnalytics.fixesByCategory[category] = { attempts: 0, successes: 0 };
+  }
+  fixAnalytics.fixesByCategory[category].attempts++;
+  if (success) {
+    fixAnalytics.fixesByCategory[category].successes++;
+  }
+
+  // Update fix type stats
+  if (!fixAnalytics.fixesByType[fixType]) {
+    fixAnalytics.fixesByType[fixType] = { attempts: 0, successes: 0 };
+  }
+  fixAnalytics.fixesByType[fixType].attempts++;
+  if (success) {
+    fixAnalytics.fixesByType[fixType].successes++;
+  }
+
+  // Update average fix time
+  const totalTime = fixAnalytics.averageFixTime * (fixAnalytics.totalAttempts - 1) + timeMs;
+  fixAnalytics.averageFixTime = totalTime / fixAnalytics.totalAttempts;
+
+  // Keep last 50 fixes
+  fixAnalytics.recentFixes.unshift({
+    timestamp: Date.now(),
+    errorSignature: errorMessage.slice(0, 100),
+    category,
+    fixType,
+    success,
+    timeMs
+  });
+
+  if (fixAnalytics.recentFixes.length > 50) {
+    fixAnalytics.recentFixes.pop();
+  }
+
+  // Log analytics periodically
+  if (fixAnalytics.totalAttempts % 10 === 0) {
+    console.log('[AutoFix Analytics]', {
+      total: fixAnalytics.totalAttempts,
+      successRate: `${((fixAnalytics.successfulFixes / fixAnalytics.totalAttempts) * 100).toFixed(1)}%`,
+      avgTime: `${fixAnalytics.averageFixTime.toFixed(0)}ms`
+    });
+  }
+}
+
+/**
+ * Get current fix analytics
+ */
+export function getFixAnalytics(): FixAnalytics {
+  return { ...fixAnalytics };
+}
+
+/**
+ * Get success rate for a specific category
+ */
+export function getCategorySuccessRate(category: string): number {
+  const stats = fixAnalytics.fixesByCategory[category];
+  if (!stats || stats.attempts === 0) return 0;
+  return stats.successes / stats.attempts;
+}
+
 interface FixHistoryEntry {
   errorHash: string;
   attempts: number;
@@ -63,26 +172,117 @@ class AutoFixState {
   private fixQueue: Array<{ error: string; code: string; resolve: (result: AutoFixResult) => void }> = [];
 
   /**
-   * Generate a hash for an error message (for deduplication)
+   * Generate a semantic hash for an error message (for deduplication)
+   * This extracts the error "signature" - the meaningful parts that identify the error type
    */
   private hashError(error: string): string {
-    // Normalize error message (remove line numbers, file paths, etc.)
-    const normalized = error
-      .toLowerCase()
-      .replace(/line\s*\d+/gi, 'line X')
-      .replace(/:\d+:\d+/g, ':X:X')
-      .replace(/at\s+\S+\s+\([^)]+\)/g, 'at X')
-      .replace(/\d+/g, 'N')
-      .trim();
+    // Extract error signature components
+    const signature = this.extractErrorSignature(error);
 
-    // Simple hash
+    // Hash the signature
     let hash = 0;
-    for (let i = 0; i < normalized.length; i++) {
-      const char = normalized.charCodeAt(i);
+    for (let i = 0; i < signature.length; i++) {
+      const char = signature.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash;
     }
     return hash.toString(36);
+  }
+
+  /**
+   * Extract a semantic signature from an error message
+   * This normalizes the error to its core meaning, removing variable parts
+   */
+  private extractErrorSignature(error: string): string {
+    const errorLower = error.toLowerCase();
+
+    // Bare specifier errors - extract the path
+    const bareSpecifierMatch = error.match(/["']?(src\/[\w./-]+)["']?\s*(?:was a bare specifier|was not remapped)/i);
+    if (bareSpecifierMatch) {
+      return `bare-specifier:${bareSpecifierMatch[1]}`;
+    }
+
+    // "X is not defined" errors - extract the identifier
+    const notDefinedMatch = error.match(/['"]?(\w+)['"]?\s+is\s+not\s+defined/i);
+    if (notDefinedMatch) {
+      return `not-defined:${notDefinedMatch[1].toLowerCase()}`;
+    }
+
+    // "Cannot find module" errors
+    const moduleMatch = error.match(/cannot find module ['"]([^'"]+)['"]/i);
+    if (moduleMatch) {
+      return `module-not-found:${moduleMatch[1]}`;
+    }
+
+    // "Cannot read property X of undefined/null"
+    const propMatch = error.match(/cannot read propert(?:y|ies) (?:of (?:undefined|null) \(reading )?['"](\w+)['"]/i);
+    if (propMatch) {
+      return `property-access:${propMatch[1].toLowerCase()}`;
+    }
+
+    // "X is not a function"
+    const notFunctionMatch = error.match(/['"]?(\w+)['"]?\s+is\s+not\s+a\s+function/i);
+    if (notFunctionMatch) {
+      return `not-function:${notFunctionMatch[1].toLowerCase()}`;
+    }
+
+    // Syntax errors - extract the token
+    const syntaxMatch = error.match(/unexpected token ['"]?([^'"]+)['"]?/i);
+    if (syntaxMatch) {
+      return `syntax:unexpected-${syntaxMatch[1].toLowerCase()}`;
+    }
+
+    // Missing bracket/brace errors
+    if (errorLower.includes("expected '}'") || errorLower.includes('missing }')) {
+      return 'syntax:missing-brace';
+    }
+    if (errorLower.includes("expected ')'") || errorLower.includes('missing )')) {
+      return 'syntax:missing-paren';
+    }
+    if (errorLower.includes("expected ']'") || errorLower.includes('missing ]')) {
+      return 'syntax:missing-bracket';
+    }
+
+    // JSX errors
+    if (errorLower.includes('unterminated jsx') || errorLower.includes('expected corresponding jsx closing tag')) {
+      const tagMatch = error.match(/<\/?(\w+)/);
+      return `jsx:unclosed-${tagMatch ? tagMatch[1].toLowerCase() : 'tag'}`;
+    }
+
+    // React key prop error
+    if (errorLower.includes('unique "key" prop') || errorLower.includes('each child in a list')) {
+      return 'react:missing-key';
+    }
+
+    // Hook errors
+    if (errorLower.includes('hooks can only be called') || errorLower.includes('invalid hook call')) {
+      return 'react:invalid-hook';
+    }
+
+    // TypeScript errors - extract the error code if present
+    const tsErrorMatch = error.match(/TS(\d+)/);
+    if (tsErrorMatch) {
+      return `typescript:TS${tsErrorMatch[1]}`;
+    }
+
+    // Transpilation errors - extract the file
+    const transpileMatch = error.match(/transpilation failed for\s+([\w./]+)/i);
+    if (transpileMatch) {
+      return `transpile:${transpileMatch[1]}`;
+    }
+
+    // Fallback: normalize and truncate
+    const normalized = error
+      .toLowerCase()
+      .replace(/line\s*\d+/gi, '')
+      .replace(/:\d+:\d+/g, '')
+      .replace(/at\s+\S+\s+\([^)]+\)/g, '')
+      .replace(/\d+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100);
+
+    return `generic:${normalized}`;
   }
 
   /**
@@ -606,21 +806,27 @@ export type ErrorCategory =
   | 'runtime'     // Runtime errors (null access, etc.)
   | 'react'       // React-specific errors
   | 'type'        // Type errors
+  | 'jsx'         // JSX-specific errors
+  | 'async'       // Async/await errors
   | 'transient'   // Transient errors (safe to ignore)
   | 'unknown';    // Unknown/unfixable errors
 
-/**
- * Classify an error for better handling
- */
-export function classifyError(errorMessage: string): {
+export interface ErrorClassification {
   category: ErrorCategory;
   isFixable: boolean;
   isIgnorable: boolean;
   priority: number; // 1-5, higher = more important
-} {
+  suggestedFix?: string;
+  affectedIdentifier?: string;
+}
+
+/**
+ * Classify an error for better handling
+ */
+export function classifyError(errorMessage: string): ErrorClassification {
   const msg = errorMessage.toLowerCase();
 
-  // Transient/ignorable errors
+  // Transient/ignorable errors - expanded list
   const transientPatterns = [
     /resizeobserver/i,
     /script error/i,
@@ -632,6 +838,17 @@ export function classifyError(errorMessage: string): {
     /cannot redefine property/i,
     /hydration/i,
     /minified react error/i,
+    /websocket/i,
+    /socket hang up/i,
+    /econnrefused/i,
+    /econnreset/i,
+    /etimedout/i,
+    /deprecation warning/i,
+    /favicon\.ico/i,
+    /sourcemap/i,
+    /hot module replacement/i,
+    /hmr/i,
+    /fast refresh/i,
   ];
 
   if (transientPatterns.some(p => p.test(msg))) {
@@ -643,80 +860,175 @@ export function classifyError(errorMessage: string): {
     };
   }
 
-  // Import errors - expanded patterns
-  if (/is not defined/i.test(msg) ||
-      /cannot find module/i.test(msg) ||
-      /bare specifier/i.test(msg) ||
-      /module specifier/i.test(msg) ||
-      /was not remapped/i.test(msg) ||
-      /failed to resolve/i.test(msg) ||
-      /failed to load/i.test(msg) ||
-      /could not resolve/i.test(msg) ||
-      /unable to resolve/i.test(msg) ||
-      /module not found/i.test(msg) ||
-      /export.*not found/i.test(msg) ||
-      /does not provide an export/i.test(msg)) {
+  // Bare specifier errors - highest priority, easily fixable
+  if (/bare specifier/i.test(msg) || /was not remapped/i.test(msg)) {
+    const pathMatch = errorMessage.match(/["']?(src\/[\w./-]+)["']?/i);
     return {
       category: 'import',
       isFixable: true,
       isIgnorable: false,
-      priority: 4
+      priority: 5,
+      suggestedFix: 'Convert bare specifier to relative path',
+      affectedIdentifier: pathMatch?.[1]
     };
   }
 
+  // Import/Module errors
+  const importPatterns = [
+    { pattern: /['"]?(\w+)['"]?\s+is\s+not\s+defined/i, type: 'not-defined' },
+    { pattern: /cannot find module ['"]([^'"]+)['"]/i, type: 'module-not-found' },
+    { pattern: /cannot find name ['"]?(\w+)['"]?/i, type: 'name-not-found' },
+    { pattern: /module specifier ['"]([^'"]+)['"]/i, type: 'module-specifier' },
+    { pattern: /failed to resolve ['"]([^'"]+)['"]/i, type: 'resolve-failed' },
+    { pattern: /could not resolve ['"]([^'"]+)['"]/i, type: 'resolve-failed' },
+    { pattern: /module not found.*['"]([^'"]+)['"]/i, type: 'module-not-found' },
+    { pattern: /export ['"]?(\w+)['"]?.*not found/i, type: 'export-not-found' },
+    { pattern: /does not provide an export named ['"]?(\w+)['"]?/i, type: 'export-not-found' },
+  ];
+
+  for (const { pattern, type } of importPatterns) {
+    const match = errorMessage.match(pattern);
+    if (match) {
+      return {
+        category: 'import',
+        isFixable: true,
+        isIgnorable: false,
+        priority: 4,
+        suggestedFix: `Fix ${type}: ${match[1]}`,
+        affectedIdentifier: match[1]
+      };
+    }
+  }
+
+  // JSX-specific errors
+  const jsxPatterns = [
+    { pattern: /unterminated jsx/i, fix: 'Close JSX element' },
+    { pattern: /expected corresponding jsx closing tag/i, fix: 'Add closing tag' },
+    { pattern: /adjacent jsx elements/i, fix: 'Wrap in Fragment' },
+    { pattern: /void element.*must.*self-closing/i, fix: 'Convert to self-closing' },
+    { pattern: /jsx element implicitly has type 'any'/i, fix: 'Add type annotation' },
+  ];
+
+  for (const { pattern, fix } of jsxPatterns) {
+    if (pattern.test(msg)) {
+      return {
+        category: 'jsx',
+        isFixable: true,
+        isIgnorable: false,
+        priority: 5,
+        suggestedFix: fix
+      };
+    }
+  }
+
   // Syntax errors
-  if (/unexpected token/i.test(msg) ||
-      /missing/i.test(msg) && /[;:{}()[\]]/i.test(msg) ||
-      /expected/i.test(msg)) {
+  const syntaxPatterns = [
+    { pattern: /unexpected token ['"]?([^'"]+)['"]?/i, fix: 'Fix syntax error' },
+    { pattern: /missing.*[;:{}()[\]]/i, fix: 'Add missing punctuation' },
+    { pattern: /expected.*[;:{}()[\]]/i, fix: 'Add expected punctuation' },
+    { pattern: /unterminated string/i, fix: 'Close string literal' },
+    { pattern: /unterminated template/i, fix: 'Close template literal' },
+    { pattern: /unexpected end of input/i, fix: 'Complete the statement' },
+  ];
+
+  for (const { pattern, fix } of syntaxPatterns) {
+    if (pattern.test(msg)) {
+      return {
+        category: 'syntax',
+        isFixable: true,
+        isIgnorable: false,
+        priority: 5,
+        suggestedFix: fix
+      };
+    }
+  }
+
+  // Async/await errors
+  if (/await.*only.*async/i.test(msg) ||
+      /await.*outside.*async/i.test(msg) ||
+      /unexpected reserved word.*await/i.test(msg)) {
     return {
-      category: 'syntax',
+      category: 'async',
       isFixable: true,
       isIgnorable: false,
-      priority: 5
+      priority: 4,
+      suggestedFix: 'Add async keyword to function'
     };
   }
 
   // Runtime errors
-  if (/cannot read propert/i.test(msg) ||
-      /is not a function/i.test(msg) ||
-      /cannot destructure/i.test(msg) ||
-      /undefined is not/i.test(msg) ||
-      /null is not/i.test(msg)) {
-    return {
-      category: 'runtime',
-      isFixable: true,
-      isIgnorable: false,
-      priority: 4
-    };
+  const runtimePatterns = [
+    { pattern: /cannot read propert(?:y|ies).*['"](\w+)['"]/i, fix: 'Add optional chaining' },
+    { pattern: /['"]?(\w+)['"]?\s+is\s+not\s+a\s+function/i, fix: 'Check function reference' },
+    { pattern: /cannot destructure property ['"](\w+)['"]/i, fix: 'Add default value' },
+    { pattern: /undefined is not/i, fix: 'Add null check' },
+    { pattern: /null is not/i, fix: 'Add null check' },
+    { pattern: /is not iterable/i, fix: 'Check array/iterable' },
+    { pattern: /maximum call stack/i, fix: 'Fix infinite recursion' },
+  ];
+
+  for (const { pattern, fix } of runtimePatterns) {
+    const match = errorMessage.match(pattern);
+    if (match) {
+      return {
+        category: 'runtime',
+        isFixable: true,
+        isIgnorable: false,
+        priority: 4,
+        suggestedFix: fix,
+        affectedIdentifier: match[1]
+      };
+    }
   }
 
-  // React-specific
-  if (/unique.*key.*prop/i.test(msg) ||
-      /each child in a list/i.test(msg) ||
-      /invalid hook/i.test(msg) ||
-      /hooks can only be called/i.test(msg) ||
-      /objects are not valid as a react child/i.test(msg)) {
-    return {
-      category: 'react',
-      isFixable: /key.*prop/i.test(msg), // Only key errors are auto-fixable
-      isIgnorable: false,
-      priority: 3
-    };
+  // React-specific errors
+  const reactPatterns = [
+    { pattern: /unique.*key.*prop/i, fixable: true, fix: 'Add key prop' },
+    { pattern: /each child in a list/i, fixable: true, fix: 'Add key prop' },
+    { pattern: /invalid hook call/i, fixable: false, fix: 'Move hook to component top level' },
+    { pattern: /hooks can only be called/i, fixable: false, fix: 'Check hook rules' },
+    { pattern: /objects are not valid as a react child/i, fixable: false, fix: 'Convert object to string' },
+    { pattern: /cannot update.*component.*while rendering/i, fixable: false, fix: 'Use useEffect for side effects' },
+    { pattern: /too many re-renders/i, fixable: false, fix: 'Fix render loop' },
+  ];
+
+  for (const { pattern, fixable, fix } of reactPatterns) {
+    if (pattern.test(msg)) {
+      return {
+        category: 'react',
+        isFixable: fixable,
+        isIgnorable: false,
+        priority: 3,
+        suggestedFix: fix
+      };
+    }
   }
 
-  // Type errors (usually need manual fix)
-  if (/type.*is not assignable/i.test(msg) ||
-      /argument of type/i.test(msg) ||
-      /property.*does not exist on type/i.test(msg)) {
-    return {
-      category: 'type',
-      isFixable: false,
-      isIgnorable: false,
-      priority: 2
-    };
+  // Type errors
+  const typePatterns = [
+    { pattern: /type ['"]?([^'"]+)['"]? is not assignable/i, fix: 'Fix type mismatch' },
+    { pattern: /argument of type ['"]?([^'"]+)['"]?/i, fix: 'Fix argument type' },
+    { pattern: /property ['"]?(\w+)['"]? does not exist on type/i, fix: 'Check property name' },
+    { pattern: /object is possibly.*undefined/i, fix: 'Add null check' },
+    { pattern: /object is possibly.*null/i, fix: 'Add null check' },
+    { pattern: /implicitly has.*'any' type/i, fix: 'Add type annotation' },
+  ];
+
+  for (const { pattern, fix } of typePatterns) {
+    const match = errorMessage.match(pattern);
+    if (match) {
+      return {
+        category: 'type',
+        isFixable: false, // Type errors usually need manual review
+        isIgnorable: false,
+        priority: 2,
+        suggestedFix: fix,
+        affectedIdentifier: match[1]
+      };
+    }
   }
 
-  // Unknown
+  // Unknown - check if simple fix is available
   return {
     category: 'unknown',
     isFixable: canTrySimpleFix(errorMessage),
