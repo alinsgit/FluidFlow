@@ -26,8 +26,8 @@ export const PACKAGE_REGISTRY: Record<string, PackageConfig> = {
   'motion': { package: 'motion', version: '12.0.0', external: ['react', 'react-dom'] },
   'motion/react': { package: 'motion', version: '12.0.0', subpath: '/react', external: ['react', 'react-dom'] },
 
-  // Routing
-  'react-router': { package: 'react-router', version: '6.28.0', external: ['react'] },
+  // Routing - both point to react-router-dom for Link/NavLink compatibility
+  'react-router': { package: 'react-router-dom', version: '6.28.0', external: ['react', 'react-dom'] },
   'react-router-dom': { package: 'react-router-dom', version: '6.28.0', external: ['react', 'react-dom'] },
 
   // State management

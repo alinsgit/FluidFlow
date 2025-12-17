@@ -765,9 +765,10 @@ function getBootstrapScript(files: FileSystem): string {
           "react/jsx-dev-runtime": "https://esm.sh/react@19.0.0/jsx-dev-runtime",
           "react-dom": "https://esm.sh/react-dom@19.0.0",
           "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-          // React Router - using our custom shim for sandbox compatibility
+          // React Router - both point to our custom shim for sandbox compatibility
+          // This handles cases where AI imports from 'react-router' instead of 'react-router-dom'
           "react-router-dom": routerShimUrl,
-          "react-router": "https://esm.sh/react-router@6.28.0?external=react",
+          "react-router": routerShimUrl,
           // Icons
           "lucide-react": "https://esm.sh/lucide-react@0.469.0",
           // Utilities
