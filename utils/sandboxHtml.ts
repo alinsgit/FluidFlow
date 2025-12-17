@@ -7,6 +7,7 @@
 
 import type { FileSystem } from '@/types';
 import { KNOWN_LUCIDE_ICONS_LIST } from './importMappings';
+import { analyzeFilesForImports } from './importResolver';
 
 /**
  * Build the complete HTML document for the iframe sandbox preview.
@@ -18,6 +19,15 @@ import { KNOWN_LUCIDE_ICONS_LIST } from './importMappings';
  * - Inspect mode support
  */
 export function buildIframeHtml(files: FileSystem, isInspectMode: boolean = false): string {
+  // Analyze files for additional imports (proactive resolution)
+  const dynamicImports = analyzeFilesForImports(files);
+
+  // Build HTML with dynamic imports injected
+  const html = buildIframeHtmlTemplate(files, isInspectMode);
+  return html.replace('__DYNAMIC_IMPORTS_PLACEHOLDER__', JSON.stringify(dynamicImports));
+}
+
+function buildIframeHtmlTemplate(files: FileSystem, isInspectMode: boolean): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -744,6 +754,9 @@ function getBootstrapScript(files: FileSystem): string {
       \`;
       const routerShimUrl = URL.createObjectURL(new Blob([routerShimCode], { type: 'application/javascript' }));
 
+      // Dynamic imports detected from user code (proactive resolution)
+      const dynamicImports = __DYNAMIC_IMPORTS_PLACEHOLDER__;
+
       const importMap = {
         imports: {
           // React core
@@ -770,9 +783,17 @@ function getBootstrapScript(files: FileSystem): string {
           // State management (lightweight)
           "zustand": "https://esm.sh/zustand@5.0.1?external=react",
           // Form handling
-          "react-hook-form": "https://esm.sh/react-hook-form@7.53.2?external=react"
+          "react-hook-form": "https://esm.sh/react-hook-form@7.53.2?external=react",
+          // Dynamic imports (auto-detected from code)
+          ...dynamicImports
         }
       };
+
+      // Log dynamic imports for debugging
+      const dynamicKeys = Object.keys(dynamicImports);
+      if (dynamicKeys.length > 0) {
+        console.log('[Sandbox] Auto-resolved imports:', dynamicKeys.join(', '));
+      }
 
       // Helper to resolve relative paths to absolute
       function resolvePath(fromFile, importPath) {
