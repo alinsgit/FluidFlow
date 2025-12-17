@@ -1,6 +1,6 @@
 // AI Provider Types and Interfaces
 
-export type ProviderType = 'gemini' | 'openai' | 'anthropic' | 'zai' | 'ollama' | 'lmstudio' | 'openrouter' | 'custom';
+export type ProviderType = 'gemini' | 'openai' | 'anthropic' | 'zai' | 'cerebras' | 'ollama' | 'lmstudio' | 'openrouter' | 'custom';
 
 /**
  * Retry utility with exponential backoff for transient errors
@@ -198,6 +198,18 @@ export const DEFAULT_PROVIDERS: Record<ProviderType, Omit<ProviderConfig, 'id' |
       { id: 'GLM-4.5-air', name: 'GLM-4.5 Air', description: 'Fast & efficient', supportsVision: true, supportsStreaming: true, contextWindow: 128000 },
     ],
     defaultModel: 'GLM-4.6',
+  },
+  cerebras: {
+    type: 'cerebras',
+    name: 'Cerebras',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    models: [
+      { id: 'llama3.1-8b', name: 'Llama 3.1 8B', description: '~2200 tok/s', supportsVision: false, supportsStreaming: true, contextWindow: 32000, maxOutput: 8000 },
+      { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', description: '~2100 tok/s', supportsVision: false, supportsStreaming: true, contextWindow: 128000 },
+      { id: 'qwen-3-32b', name: 'Qwen 3 32B', description: '~2600 tok/s', supportsVision: false, supportsStreaming: true, contextWindow: 131000 },
+      { id: 'gpt-oss-120b', name: 'GPT-OSS 120B', description: '~3000 tok/s', supportsVision: false, supportsStreaming: true, contextWindow: 131000, maxOutput: 40000 },
+    ],
+    defaultModel: 'llama-3.3-70b',
   },
   ollama: {
     type: 'ollama',

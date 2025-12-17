@@ -1,6 +1,6 @@
 // AI Service - Provider Management
 import { AIProvider, ProviderConfig, DEFAULT_PROVIDERS, GenerationRequest, GenerationResponse, StreamChunk } from './types';
-import { GeminiProvider, OpenAIProvider, AnthropicProvider, OllamaProvider, LMStudioProvider, ZAIProvider } from './providers';
+import { GeminiProvider, OpenAIProvider, AnthropicProvider, OllamaProvider, LMStudioProvider, ZAIProvider, CerebrasProvider } from './providers';
 import { settingsApi } from '../projectApi';
 import { encryptProviderConfigs, decryptProviderConfigs } from '../../utils/clientEncryption';
 import { debugLog } from '../../hooks/useDebugStore';
@@ -23,6 +23,9 @@ export function createProvider(config: ProviderConfig): AIProvider {
     case 'zai':
       // Z.AI GLM - special handling
       return new ZAIProvider(config);
+    case 'cerebras':
+      // Cerebras - ultra-fast inference
+      return new CerebrasProvider(config);
     case 'anthropic':
       return new AnthropicProvider(config);
     case 'ollama':
