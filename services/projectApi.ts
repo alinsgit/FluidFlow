@@ -651,10 +651,13 @@ export const runnerApi = {
 
   /**
    * Start a project (npm install + npm run dev)
+   * @param projectId - Project ID or '_temp' for uncommitted VFS runs
+   * @param files - Optional VFS files to sync to disk before running
    */
-  start: (projectId: string) =>
+  start: (projectId: string, files?: Record<string, string>) =>
     apiCall<{ message: string; port: number; url: string; status: string }>(`/runner/${projectId}/start`, {
       method: 'POST',
+      body: files ? JSON.stringify({ files }) : undefined,
     }),
 
   /**

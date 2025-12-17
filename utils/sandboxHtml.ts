@@ -695,8 +695,19 @@ function getBootstrapScript(files: FileSystem): string {
         import * as ReactRouterDom from 'https://esm.sh/react-router-dom@6.28.0?external=react,react-dom';
         import React from 'https://esm.sh/react@19.0.0';
 
-        // Re-export everything from react-router-dom
-        export * from 'https://esm.sh/react-router-dom@6.28.0?external=react,react-dom';
+        // Re-export everything from react-router-dom EXCEPT Link, NavLink, useNavigate, BrowserRouter
+        export {
+          Routes, Route, Navigate, Outlet, useLocation, useParams, useSearchParams,
+          useMatch, useMatches, useResolvedPath, useHref, useInRouterContext,
+          useNavigationType, useOutlet, useOutletContext, useRoutes,
+          MemoryRouter, HashRouter, Router, RouterProvider, createBrowserRouter,
+          createHashRouter, createMemoryRouter, createRoutesFromElements,
+          createRoutesFromChildren, generatePath, matchPath, matchRoutes,
+          renderMatches, resolvePath, Form, ScrollRestoration, useFetcher,
+          useFetchers, useFormAction, useLoaderData, useActionData,
+          useNavigation, useRevalidator, useRouteError, useRouteLoaderData,
+          useSubmit, useBeforeUnload, unstable_usePrompt, unstable_useBlocker
+        } from 'https://esm.sh/react-router-dom@6.28.0?external=react,react-dom';
 
         // Custom BrowserRouter that uses MemoryRouter internally for sandbox compatibility
         export function BrowserRouter({ children, ...props }) {
@@ -734,12 +745,14 @@ function getBootstrapScript(files: FileSystem): string {
           return children;
         }
 
-        // Override useNavigate to use our sandbox history
+        // Override useNavigate to use our sandbox history AND update MemoryRouter
         const originalUseNavigate = ReactRouterDom.useNavigate;
         export function useNavigate() {
           const memoryNavigate = originalUseNavigate();
           return (to, options) => {
-            // Update our sandbox router
+            // Update MemoryRouter first
+            memoryNavigate(to, options);
+            // Then update our sandbox router for URL display
             if (typeof to === 'string') {
               if (options?.replace) {
                 window.__SANDBOX_HISTORY__.replaceState(options?.state || null, '', to);
@@ -750,6 +763,67 @@ function getBootstrapScript(files: FileSystem): string {
               window.__SANDBOX_HISTORY__.go(to);
             }
           };
+        }
+
+        // Custom Link that updates both MemoryRouter AND sandbox router
+        export function Link({ to, replace, state, children, ...props }) {
+          const navigate = useNavigate();
+
+          const handleClick = (e) => {
+            // Allow default behavior for modified clicks (new tab, etc)
+            if (e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || e.button !== 0) {
+              return;
+            }
+            e.preventDefault();
+            navigate(to, { replace, state });
+            if (props.onClick) props.onClick(e);
+          };
+
+          return React.createElement('a', {
+            ...props,
+            href: typeof to === 'string' ? to : to.pathname,
+            onClick: handleClick
+          }, children);
+        }
+
+        // Custom NavLink that updates both MemoryRouter AND sandbox router
+        export function NavLink({ to, replace, state, children, className, style, end, ...props }) {
+          const location = ReactRouterDom.useLocation();
+          const navigate = useNavigate();
+
+          // Determine if this NavLink is active
+          const toPath = typeof to === 'string' ? to : to.pathname;
+          const isActive = end
+            ? location.pathname === toPath
+            : location.pathname.startsWith(toPath);
+
+          const handleClick = (e) => {
+            if (e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || e.button !== 0) {
+              return;
+            }
+            e.preventDefault();
+            navigate(to, { replace, state });
+            if (props.onClick) props.onClick(e);
+          };
+
+          // Handle className as function or string
+          const computedClassName = typeof className === 'function'
+            ? className({ isActive, isPending: false })
+            : className;
+
+          // Handle style as function or object
+          const computedStyle = typeof style === 'function'
+            ? style({ isActive, isPending: false })
+            : style;
+
+          return React.createElement('a', {
+            ...props,
+            href: toPath,
+            onClick: handleClick,
+            className: computedClassName,
+            style: computedStyle,
+            'aria-current': isActive ? 'page' : undefined
+          }, typeof children === 'function' ? children({ isActive, isPending: false }) : children);
         }
       \`;
       const routerShimUrl = URL.createObjectURL(new Blob([routerShimCode], { type: 'application/javascript' }));

@@ -36,7 +36,7 @@ import { WebContainerPanel } from './WebContainerPanel';
 import { ErrorFixPanel } from './ErrorFixPanel';
 import { DocsPanel } from './DocsPanel';
 import { PreviewContent } from './PreviewContent';
-import { GitStatus } from '../../services/projectApi';
+import { GitStatus, runnerApi } from '../../services/projectApi';
 
 interface PreviewPanelProps {
   files: FileSystem;
@@ -96,6 +96,9 @@ export const PreviewPanel = memo(function PreviewPanel({
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
+  // Runner status for indicator
+  const [isRunnerActive, setIsRunnerActive] = useState(false);
+
   // Close settings when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -108,6 +111,27 @@ export const PreviewPanel = memo(function PreviewPanel({
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showSettings]);
+
+  // Check runner status periodically
+  useEffect(() => {
+    if (!projectId) {
+      setIsRunnerActive(false);
+      return;
+    }
+
+    const checkStatus = async () => {
+      try {
+        const status = await runnerApi.status(projectId);
+        setIsRunnerActive(status.running || status.status === 'installing' || status.status === 'starting');
+      } catch {
+        setIsRunnerActive(false);
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, [projectId]);
 
   // App code reference
   const appCode = files['src/App.tsx'];
@@ -301,27 +325,32 @@ export const PreviewPanel = memo(function PreviewPanel({
 
           <div className="flex p-1 bg-slate-950/50 rounded-lg border border-white/5">
             {[
+              { id: 'run', icon: Play, label: 'Run', hasIndicator: true },
               { id: 'preview', icon: Eye, label: 'Preview' },
               { id: 'code', icon: Code2, label: 'Code' },
               { id: 'codemap', icon: Map, label: 'CodeMap' },
               { id: 'git', icon: GitBranch, label: 'Git' },
-              { id: 'run', icon: Play, label: 'Run' },
               { id: 'webcontainer', icon: Box, label: 'WebContainer' },
               { id: 'database', icon: Database, label: 'DB Studio' },
               { id: 'docs', icon: FileText, label: 'Docs' },
               { id: 'env', icon: Shield, label: 'Env' },
               { id: 'debug', icon: Bug, label: 'Debug' },
               { id: 'errorfix', icon: Bot, label: 'Error Fix' }
-            ].map(({ id, icon: Icon, label }) => (
+            ].map(({ id, icon: Icon, label, hasIndicator }) => (
               <button
                 key={id}
                 onClick={() => handleTabChange(id as TabType)}
                 className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${
                   activeTab === id ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                }`}
+                } ${hasIndicator && isRunnerActive ? 'ring-1 ring-emerald-500/50' : ''}`}
                 title={label}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <div className="relative">
+                  <Icon className={`w-3.5 h-3.5 ${hasIndicator && isRunnerActive ? 'text-emerald-400' : ''}`} />
+                  {hasIndicator && isRunnerActive && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  )}
+                </div>
                 {activeTab === id && <span>{label}</span>}
               </button>
             ))}
@@ -508,6 +537,7 @@ export const PreviewPanel = memo(function PreviewPanel({
               projectId={projectId || null}
               projectName={files['package.json'] ? (() => { try { return JSON.parse(files['package.json']).name; } catch { return undefined; }})() : undefined}
               hasCommittedFiles={Boolean(gitStatus?.initialized)}
+              files={files}
             />
           </div>
         ) : activeTab === 'webcontainer' ? (

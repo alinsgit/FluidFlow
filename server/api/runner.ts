@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'fs';
 import { isValidProjectId, isValidInteger } from '../utils/validation';
+
+// Type for VFS files
+type FileSystem = Record<string, string>;
 
 const router = Router();
 
@@ -148,6 +151,109 @@ function releasePort(port: number): void {
 // Get project files directory
 const getFilesDir = (id: string) => path.join(PROJECTS_DIR, id, 'files');
 
+// Temp directory for running uncommitted VFS files
+const TEMP_RUN_DIR = path.join(process.cwd(), 'projects', '_temp_run');
+
+/**
+ * Sync VFS files to disk
+ * Creates directories as needed and writes all files
+ */
+function syncFilesToDisk(targetDir: string, files: FileSystem): void {
+  // Clean the directory first (but keep node_modules if exists for faster installs)
+  const nodeModulesPath = path.join(targetDir, 'node_modules');
+  const hadNodeModules = existsSync(nodeModulesPath);
+
+  // Remove all files except node_modules
+  if (existsSync(targetDir)) {
+    const entries = readdirSync(targetDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name !== 'node_modules') {
+        const fullPath = path.join(targetDir, entry.name);
+        rmSync(fullPath, { recursive: true, force: true });
+      }
+    }
+  } else {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  // Write all files
+  for (const [filePath, content] of Object.entries(files)) {
+    const fullPath = path.join(targetDir, filePath);
+    const dir = path.dirname(fullPath);
+
+    // Create directory if needed
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+
+    // Write file
+    writeFileSync(fullPath, content, 'utf-8');
+  }
+
+  console.log(`[Runner] Synced ${Object.keys(files).length} files to ${targetDir}${hadNodeModules ? ' (preserved node_modules)' : ''}`);
+}
+
+// COEP/CORP headers required for iframe embedding in FluidFlow
+const COEP_HEADERS_CONFIG = `
+  server: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Resource-Policy': 'cross-origin'
+    }
+  }`;
+
+/**
+ * Ensure vite.config.ts has COEP headers for iframe embedding
+ * This allows the running app to be displayed in FluidFlow's RunnerPanel iframe
+ */
+function ensureViteCoepHeaders(filesDir: string): void {
+  const viteConfigPath = path.join(filesDir, 'vite.config.ts');
+
+  if (!existsSync(viteConfigPath)) {
+    console.log('[Runner] No vite.config.ts found, skipping COEP injection');
+    return;
+  }
+
+  try {
+    let content = readFileSync(viteConfigPath, 'utf-8');
+
+    // Check if COEP headers are already present
+    if (content.includes('Cross-Origin-Embedder-Policy')) {
+      console.log('[Runner] vite.config.ts already has COEP headers');
+      return;
+    }
+
+    // Find the closing of defineConfig and inject server config before it
+    // Handle both `defineConfig({...})` and `export default {...}`
+
+    // Pattern 1: defineConfig({ ... })
+    // We need to find the last closing bracket before the final )
+    const defineConfigMatch = content.match(/defineConfig\s*\(\s*\{/);
+    if (defineConfigMatch) {
+      // Find position to insert - look for the last } before the closing )
+      // Simple approach: find the last }) and insert before the }
+      const lastBracketIndex = content.lastIndexOf('})');
+      if (lastBracketIndex > 0) {
+        // Check if there's already a comma before the closing brace
+        const beforeBracket = content.substring(0, lastBracketIndex).trimEnd();
+        const needsComma = !beforeBracket.endsWith(',') && !beforeBracket.endsWith('{');
+
+        const insertion = (needsComma ? ',' : '') + COEP_HEADERS_CONFIG;
+        content = content.substring(0, lastBracketIndex) + insertion + '\n' + content.substring(lastBracketIndex);
+
+        writeFileSync(viteConfigPath, content, 'utf-8');
+        console.log('[Runner] Injected COEP headers into vite.config.ts');
+        return;
+      }
+    }
+
+    console.log('[Runner] Could not find insertion point for COEP headers in vite.config.ts');
+  } catch (err) {
+    console.error('[Runner] Failed to inject COEP headers:', err);
+  }
+}
+
 // List all running projects
 router.get('/', (req, res) => {
   const projects = Array.from(runningProjects.entries()).map(([_id, info]) => ({
@@ -185,19 +291,35 @@ router.get('/:id', (req, res) => {
 });
 
 // Start a project
+// Accepts optional 'files' in body to sync VFS to disk before running
 router.post('/:id/start', async (req, res) => {
   const { id } = req.params;
+  const { files } = req.body as { files?: FileSystem };
 
-  // Validate project ID to prevent path traversal
-  if (!isValidProjectId(id)) {
+  // Special case: "_temp" project ID for running uncommitted VFS files
+  const isTempRun = id === '_temp';
+
+  // Validate project ID to prevent path traversal (skip for temp)
+  if (!isTempRun && !isValidProjectId(id)) {
     return res.status(400).json({ error: 'Invalid project ID' });
   }
 
-  const filesDir = getFilesDir(id);
+  // Determine target directory
+  const filesDir = isTempRun ? TEMP_RUN_DIR : getFilesDir(id);
 
-  // Check if project exists
+  // If files provided, sync them to disk first
+  if (files && Object.keys(files).length > 0) {
+    try {
+      syncFilesToDisk(filesDir, files);
+    } catch (err) {
+      console.error('[Runner] Failed to sync files:', err);
+      return res.status(500).json({ error: 'Failed to sync files to disk' });
+    }
+  }
+
+  // Check if project/files exist
   if (!existsSync(filesDir)) {
-    return res.status(404).json({ error: 'Project not found' });
+    return res.status(404).json({ error: 'Project not found. Provide files in request body for temp runs.' });
   }
 
   // Check if already running
@@ -246,6 +368,9 @@ router.post('/:id/start', async (req, res) => {
 
   // RUN-002 fix: Release reservation once properly registered
   releasePort(port);
+
+  // Ensure vite.config.ts has COEP headers for iframe embedding
+  ensureViteCoepHeaders(filesDir);
 
   // Check if node_modules exists
   const nodeModulesPath = path.join(filesDir, 'node_modules');
