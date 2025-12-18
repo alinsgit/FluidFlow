@@ -13,7 +13,7 @@ function isJsxTagStart(code: string, i: number): boolean {
   if (code[i] !== '<') return false;
   const nextChar = code[i + 1];
   // JSX tags start with <letter, </, or <>
-  return /[A-Za-z\/!>]/.test(nextChar || '');
+  return /[A-Za-z/!>]/.test(nextChar || '');
 }
 
 /**
@@ -74,20 +74,59 @@ export function fixJsxTextContent(code: string): string {
       result += code.slice(i, tagEnd + 1);
       i = tagEnd + 1;
 
-      // Now collect text content until next JSX tag (not comparison operators)
+      // Now collect text content until next JSX tag
+      // Skip over JSX expressions {..} as they contain JavaScript code, not text
       let textContent = '';
       while (i < len && !isJsxTagStart(code, i)) {
+        // If we hit a JSX expression, copy it verbatim (don't escape inside)
+        if (code[i] === '{') {
+          let braceDepth = 1;
+          textContent += code[i];
+          i++;
+          while (i < len && braceDepth > 0) {
+            if (code[i] === '{') braceDepth++;
+            if (code[i] === '}') braceDepth--;
+            textContent += code[i];
+            i++;
+          }
+          continue;
+        }
         textContent += code[i];
         i++;
       }
 
       // If we have text content with non-whitespace, escape problematic chars
+      // But NOT inside JSX expressions, and NOT arrow functions (=>)
       if (textContent.length > 0 && textContent.trim().length > 0) {
-        // Escape > and < that appear in text content
-        // But NOT if they're already in a JSX expression like {'>'}
-        textContent = textContent
-          .replace(/(?<!\{['"]?)>(?!['"]?\})/g, "{'>'}")
-          .replace(/(?<!\{['"]?)<(?!['"]?\})/g, "{'<'}");
+        // Process text in segments, preserving JSX expressions
+        let processed = '';
+        let j = 0;
+        while (j < textContent.length) {
+          if (textContent[j] === '{') {
+            // Find matching closing brace and copy verbatim
+            let depth = 1;
+            processed += textContent[j];
+            j++;
+            while (j < textContent.length && depth > 0) {
+              if (textContent[j] === '{') depth++;
+              if (textContent[j] === '}') depth--;
+              processed += textContent[j];
+              j++;
+            }
+          } else if (textContent[j] === '>' && textContent[j - 1] !== '=') {
+            // Escape standalone > (not part of =>)
+            processed += "{'>'}";
+            j++;
+          } else if (textContent[j] === '<' && !isJsxTagStart(textContent, j)) {
+            // Escape standalone < (not a JSX tag)
+            processed += "{'<'}";
+            j++;
+          } else {
+            processed += textContent[j];
+            j++;
+          }
+        }
+        textContent = processed;
       }
 
       result += textContent;

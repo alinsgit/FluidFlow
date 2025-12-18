@@ -58,6 +58,10 @@ export function useChatOrchestrator({
     streamingStatus, setStreamingStatus,
     streamingChars, setStreamingChars,
     streamingFiles, setStreamingFiles,
+    fileProgress,
+    setFileProgress,
+    updateFileProgress,
+    initFileProgressFromPlan,
     filePlan, setFilePlan,
     truncatedContent, setTruncatedContent,
     continuationState, setContinuationState,
@@ -114,6 +118,9 @@ export function useChatOrchestrator({
     reviewChange,
     handleContinueGeneration,
     addAIHistoryEntry: aiHistory.addEntry,
+    updateFileProgress,
+    initFileProgressFromPlan,
+    setFileProgress,
   });
 
   // Context management
@@ -322,6 +329,7 @@ Fix the error in src/App.tsx.`;
     streamingStatus,
     streamingChars,
     streamingFiles,
+    fileProgress,
     filePlan,
     truncatedContent,
     continuationState,

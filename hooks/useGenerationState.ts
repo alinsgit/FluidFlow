@@ -22,12 +22,23 @@ export interface GenerationMeta {
   isComplete: boolean;
 }
 
+// File progress during streaming
+export interface FileProgress {
+  path: string;
+  action: 'create' | 'update' | 'delete';
+  expectedLines: number;
+  receivedChars: number;
+  progress: number; // 0-100
+  status: 'pending' | 'streaming' | 'complete';
+}
+
 // File plan detected from response start (// PLAN: {...})
 export interface FilePlan {
   create: string[];
   delete: string[];
   total: number;
   completed: string[];
+  sizes?: Record<string, number>; // Estimated line counts per file
 }
 
 // Truncation retry state
@@ -64,6 +75,12 @@ export interface UseGenerationStateReturn {
   streamingFiles: string[];
   setStreamingFiles: (files: string[]) => void;
 
+  // File progress (for progress bars during streaming)
+  fileProgress: Map<string, FileProgress>;
+  setFileProgress: (progress: Map<string, FileProgress>) => void;
+  updateFileProgress: (path: string, updates: Partial<FileProgress>) => void;
+  initFileProgressFromPlan: (plan: FilePlan) => void;
+
   // File plan
   filePlan: FilePlan | null;
   setFilePlan: (plan: FilePlan | null) => void;
@@ -91,6 +108,9 @@ export function useGenerationState(): UseGenerationStateReturn {
   const [streamingChars, setStreamingChars] = useState(0);
   const [streamingFiles, setStreamingFiles] = useState<string[]>([]);
 
+  // File progress state - for progress bars during streaming
+  const [fileProgress, setFileProgress] = useState<Map<string, FileProgress>>(new Map());
+
   // File plan state - detected from response start
   const [filePlan, setFilePlan] = useState<FilePlan | null>(null);
 
@@ -103,12 +123,56 @@ export function useGenerationState(): UseGenerationStateReturn {
   // External prompt for auto-fill
   const [externalPrompt, setExternalPrompt] = useState<string>('');
 
+  // Initialize file progress from plan (called when PLAN is detected)
+  const initFileProgressFromPlan = useCallback((plan: FilePlan) => {
+    const progress = new Map<string, FileProgress>();
+
+    // Add created files
+    for (const path of plan.create) {
+      progress.set(path, {
+        path,
+        action: 'create',
+        expectedLines: plan.sizes?.[path] || 100,
+        receivedChars: 0,
+        progress: 0,
+        status: 'pending'
+      });
+    }
+
+    // Add deleted files (always complete)
+    for (const path of plan.delete) {
+      progress.set(path, {
+        path,
+        action: 'delete',
+        expectedLines: 0,
+        receivedChars: 0,
+        progress: 100,
+        status: 'complete'
+      });
+    }
+
+    setFileProgress(progress);
+  }, []);
+
+  // Update progress for a specific file
+  const updateFileProgress = useCallback((path: string, updates: Partial<FileProgress>) => {
+    setFileProgress(prev => {
+      const newProgress = new Map(prev);
+      const existing = newProgress.get(path);
+      if (existing) {
+        newProgress.set(path, { ...existing, ...updates });
+      }
+      return newProgress;
+    });
+  }, []);
+
   // Reset streaming state (called after generation starts)
   const resetStreamingState = useCallback(() => {
     setStreamingStatus('');
     setStreamingChars(0);
     setStreamingFiles([]);
     setFilePlan(null);
+    setFileProgress(new Map());
   }, []);
 
   // Reset all state (called on full reset)
@@ -127,6 +191,12 @@ export function useGenerationState(): UseGenerationStateReturn {
     setStreamingChars,
     streamingFiles,
     setStreamingFiles,
+
+    // File progress
+    fileProgress,
+    setFileProgress,
+    updateFileProgress,
+    initFileProgressFromPlan,
 
     // File plan
     filePlan,

@@ -135,12 +135,12 @@ export const BASE_GENERATION_INSTRUCTION = `You are an expert React Developer cr
 
 Your response MUST have this EXACT structure:
 
-LINE 1: \`// PLAN: {"create":["new-files"],"update":["existing-files"],"delete":[],"total":N}\`
+LINE 1: \`// PLAN: {"create":["new-files"],"update":["existing-files"],"delete":[],"total":N,"sizes":{"file":lines}}\`
 LINE 2+: Single-line JSON object with files
 
 ### COMPLETE EXAMPLE:
 \`\`\`
-// PLAN: {"create":["src/components/Header.tsx"],"update":["src/App.tsx"],"delete":[],"total":2}
+// PLAN: {"create":["src/components/Header.tsx"],"update":["src/App.tsx"],"delete":[],"total":2,"sizes":{"src/App.tsx":15,"src/components/Header.tsx":20}}
 {"explanation":"Added responsive Header component with navigation","files":{"src/App.tsx":"import { Header } from './components/Header';\\n\\nexport default function App() {\\n  return (\\n    <div className=\\"min-h-screen bg-gray-50\\">\\n      <Header />\\n      <main className=\\"container mx-auto px-4 py-8\\">\\n        <h1 className=\\"text-3xl font-bold\\">Welcome</h1>\\n      </main>\\n    </div>\\n  );\\n}","src/components/Header.tsx":"import { Menu } from 'lucide-react';\\n\\nexport function Header() {\\n  return (\\n    <header className=\\"bg-white shadow-sm\\">\\n      <nav className=\\"container mx-auto px-4 py-4 flex items-center justify-between\\">\\n        <span className=\\"text-xl font-bold\\">Logo</span>\\n        <button className=\\"p-2 hover:bg-gray-100 rounded-lg\\" data-ff-group=\\"header\\" data-ff-id=\\"menu-btn\\">\\n          <Menu className=\\"w-6 h-6\\" />\\n        </button>\\n      </nav>\\n    </header>\\n  );\\n}"}}
 \`\`\`
 
@@ -374,7 +374,7 @@ You are UPDATING an existing codebase. Be surgical and efficient.
 
 ### RESPONSE FORMAT:
 \`\`\`
-// PLAN: {"create":["src/components/NewFeature.tsx"],"update":["src/App.tsx"],"delete":["src/old/Unused.tsx"],"total":2}
+// PLAN: {"create":["src/components/NewFeature.tsx"],"update":["src/App.tsx"],"delete":["src/old/Unused.tsx"],"total":2,"sizes":{"src/App.tsx":30,"src/components/NewFeature.tsx":45}}
 {"explanation":"Added NewFeature component with dark mode support","files":{"src/App.tsx":"[COMPLETE UPDATED CONTENT]","src/components/NewFeature.tsx":"[COMPLETE NEW FILE CONTENT]"},"deletedFiles":["src/old/Unused.tsx"]}
 \`\`\`
 
@@ -407,7 +407,7 @@ Continue from where you left off - generate the REMAINING files only.
 ## RESPONSE FORMAT
 
 \`\`\`
-// PLAN: {"create":["src/components/Footer.tsx","src/components/Sidebar.tsx"],"update":[],"delete":[],"total":2}
+// PLAN: {"create":["src/components/Footer.tsx","src/components/Sidebar.tsx"],"update":[],"delete":[],"total":2,"sizes":{"src/components/Footer.tsx":20,"src/components/Sidebar.tsx":35}}
 {"explanation":"Batch 2/3: Footer and Sidebar components","files":{"src/components/Footer.tsx":"import { Github, Twitter } from 'lucide-react';\\n\\nexport function Footer() {\\n  return (\\n    <footer className=\\"bg-gray-900 text-white py-8\\">\\n      <div className=\\"container mx-auto px-4 flex justify-between items-center\\">\\n        <p>&copy; 2024 Company</p>\\n        <div className=\\"flex gap-4\\">\\n          <a href=\\"#\\" className=\\"hover:text-gray-300\\"><Github className=\\"w-5 h-5\\" /></a>\\n          <a href=\\"#\\" className=\\"hover:text-gray-300\\"><Twitter className=\\"w-5 h-5\\" /></a>\\n        </div>\\n      </div>\\n    </footer>\\n  );\\n}","src/components/Sidebar.tsx":"..."},"generationMeta":{"totalFilesPlanned":8,"filesInThisBatch":["src/components/Footer.tsx","src/components/Sidebar.tsx"],"completedFiles":["src/App.tsx","src/components/Header.tsx","src/components/Footer.tsx","src/components/Sidebar.tsx"],"remainingFiles":["src/components/Card.tsx","src/hooks/useTheme.ts"],"currentBatch":2,"totalBatches":3,"isComplete":false}}
 \`\`\`
 

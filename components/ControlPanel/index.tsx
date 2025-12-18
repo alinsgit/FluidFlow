@@ -152,6 +152,10 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     streamingStatus, setStreamingStatus,
     streamingChars, setStreamingChars,
     streamingFiles, setStreamingFiles,
+    fileProgress,
+    setFileProgress,
+    updateFileProgress,
+    initFileProgressFromPlan,
     filePlan, setFilePlan,
     truncatedContent, setTruncatedContent,
     continuationState, setContinuationState,
@@ -209,6 +213,9 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     reviewChange,
     handleContinueGeneration,
     addAIHistoryEntry: aiHistory.addEntry,
+    updateFileProgress,
+    initFileProgressFromPlan,
+    setFileProgress,
   });
 
   // Context management (extracted to hook)
@@ -566,6 +573,7 @@ Fix the error in src/App.tsx.`;
         continuationState={continuationState}
         onContinueGeneration={() => handleContinueGeneration()}
         filePlan={filePlan}
+        fileProgress={fileProgress}
         onSaveCheckpoint={() => {
           // Check if there are files to checkpoint
           if (Object.keys(files).length === 0) {

@@ -15,7 +15,7 @@ import {
   supportsAdditionalProperties,
 } from '../services/ai/utils/schemas';
 import { CONTINUATION_SYSTEM_INSTRUCTION } from '../components/ControlPanel/prompts';
-import { FilePlan, TruncatedContent, ContinuationState } from './useGenerationState';
+import { FilePlan, TruncatedContent, ContinuationState, FileProgress } from './useGenerationState';
 import { useStreamingResponse } from './useStreamingResponse';
 import { useResponseParser } from './useResponseParser';
 import {
@@ -80,6 +80,10 @@ export interface UseCodeGenerationOptions {
     originalFiles?: FileSystem
   ) => Promise<void>;
   addAIHistoryEntry: (entry: AIHistoryEntry) => void;
+  // File progress tracking callbacks (optional)
+  updateFileProgress?: (path: string, updates: Partial<FileProgress>) => void;
+  initFileProgressFromPlan?: (plan: FilePlan) => void;
+  setFileProgress?: (progress: Map<string, FileProgress>) => void;
 }
 
 export interface UseCodeGenerationReturn {
@@ -102,6 +106,9 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
     reviewChange,
     handleContinueGeneration,
     addAIHistoryEntry,
+    updateFileProgress,
+    initFileProgressFromPlan,
+    setFileProgress,
   } = options;
 
   const existingApp = files['src/App.tsx'];
@@ -112,6 +119,8 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
     setStreamingFiles,
     setStreamingStatus,
     setFilePlan,
+    updateFileProgress,
+    initFileProgressFromPlan,
   });
 
   const { parseStandardResponse, parseSearchReplaceResponse } = useResponseParser({
@@ -438,6 +447,10 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
       setStreamingChars(0);
       setStreamingFiles([]);
       setFilePlan(null);
+      // Clear file progress from previous generation
+      if (setFileProgress) {
+        setFileProgress(new Map());
+      }
 
       const genRequestId = debugLog.request('generation', {
         model: currentModel,
@@ -654,6 +667,7 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
       setStreamingChars,
       setStreamingFiles,
       setFilePlan,
+      setFileProgress,
       setMessages,
       processStreamingResponse,
       parseStandardResponse,

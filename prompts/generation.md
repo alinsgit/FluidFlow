@@ -28,7 +28,7 @@ JSON with Files (parsed by `parseMultiFileResponse`)
 Your response MUST follow this EXACT structure:
 
 ```
-// PLAN: {"create":["src/components/Header.tsx","src/components/Footer.tsx"],"update":["src/App.tsx"],"delete":[],"total":3}
+// PLAN: {"create":["src/components/Header.tsx","src/components/Footer.tsx"],"update":["src/App.tsx"],"delete":[],"total":3,"sizes":{"src/App.tsx":25,"src/components/Header.tsx":40,"src/components/Footer.tsx":30}}
 {"explanation":"Created responsive layout with Header and Footer components","files":{"src/App.tsx":"import { Header } from './components/Header';\\nimport { Footer } from './components/Footer';\\n\\nexport default function App() {\\n  return (\\n    <div className=\\"min-h-screen flex flex-col\\">\\n      <Header />\\n      <main className=\\"flex-1 container mx-auto px-4 py-8\\">\\n        <h1 className=\\"text-3xl font-bold\\">Welcome</h1>\\n      </main>\\n      <Footer />\\n    </div>\\n  );\\n}","src/components/Header.tsx":"...","src/components/Footer.tsx":"..."}}
 ```
 
@@ -37,6 +37,7 @@ Your response MUST follow this EXACT structure:
 - `update`: Array of EXISTING files to modify
 - `delete`: Array of files to remove
 - `total`: Sum of create + update (not delete)
+- `sizes`: Object mapping file paths to estimated line counts (for progress tracking)
 
 ## JSON STRING ENCODING
 

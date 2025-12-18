@@ -57,7 +57,17 @@ interface ChatPanelProps {
     delete: string[];
     total: number;
     completed: string[];
+    sizes?: Record<string, number>;
   } | null;
+  // File progress (for progress bars during streaming)
+  fileProgress?: Map<string, {
+    path: string;
+    action: 'create' | 'update' | 'delete';
+    expectedLines: number;
+    receivedChars: number;
+    progress: number;
+    status: 'pending' | 'streaming' | 'complete';
+  }>;
   // Time travel prop
   onTimeTravel?: (files: FileSystem | null) => void;
 }
@@ -513,6 +523,7 @@ export const ChatPanel = memo(function ChatPanel({
   continuationState,
   onContinueGeneration,
   filePlan,
+  fileProgress,
   onSaveCheckpoint,
   onTimeTravel
 }: ChatPanelProps) {
@@ -798,31 +809,51 @@ export const ChatPanel = memo(function ChatPanel({
                       />
                     </div>
 
-                    <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
                       {/* Files to create */}
                       {filePlan.create.map((file) => {
-                        const isCompleted = filePlan.completed.includes(file);
-                        const isCurrentlyStreaming = streamingFiles?.includes(file) && !isCompleted;
+                        const progress = fileProgress?.get(file);
+                        // Use fileProgress.status for actual completion (content fully received)
+                        // NOT filePlan.completed which just means file path was detected
+                        const isCompleted = progress?.status === 'complete';
+                        const isCurrentlyStreaming = streamingFiles?.includes(file) || progress?.status === 'streaming';
+                        const progressPercent = progress?.progress ?? 0;
+                        const isStreaming = progress?.status === 'streaming' || (isCurrentlyStreaming && !isCompleted);
+
                         return (
                           <div
                             key={file}
-                            className={`flex items-center gap-2 text-xs font-mono px-2 py-1 rounded transition-all ${
+                            className={`text-xs font-mono rounded transition-all overflow-hidden ${
                               isCompleted
                                 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
-                                : isCurrentlyStreaming
-                                ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300 animate-pulse'
-                                : 'bg-slate-900/50 text-slate-500'
+                                : isStreaming
+                                ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300'
+                                : 'bg-slate-900/50 text-slate-500 border border-transparent'
                             }`}
-                            title={file}
+                            title={`${file}${progress ? ` - ${progressPercent}%` : ''}`}
                           >
-                            {isCompleted ? (
-                              <span className="w-4 h-4 flex items-center justify-center text-emerald-400">✓</span>
-                            ) : isCurrentlyStreaming ? (
-                              <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-                            ) : (
-                              <Clock className="w-3.5 h-3.5 text-slate-600" />
+                            <div className="flex items-center gap-2 px-2 py-1">
+                              {isCompleted ? (
+                                <span className="w-4 h-4 flex items-center justify-center text-emerald-400">✓</span>
+                              ) : isStreaming ? (
+                                <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                              ) : (
+                                <Clock className="w-3.5 h-3.5 text-slate-600" />
+                              )}
+                              <span className="truncate flex-1">{getFileName(file)}</span>
+                              {isStreaming && progressPercent > 0 && (
+                                <span className="text-[10px] text-blue-400 tabular-nums">{progressPercent}%</span>
+                              )}
+                            </div>
+                            {/* Per-file progress bar */}
+                            {isStreaming && !isCompleted && (
+                              <div className="h-0.5 bg-slate-800">
+                                <div
+                                  className="h-full bg-linear-to-r from-blue-500 to-cyan-400 transition-all duration-500 ease-out"
+                                  style={{ width: `${progressPercent}%` }}
+                                />
+                              </div>
                             )}
-                            <span className="truncate">{getFileName(file)}</span>
                           </div>
                         );
                       })}
