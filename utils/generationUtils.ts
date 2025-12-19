@@ -8,10 +8,12 @@
 import { FileSystem, FileChange, ChatAttachment } from '../types';
 import { generateContextForPrompt } from './codemap';
 import {
-  BASE_GENERATION_INSTRUCTION,
   SEARCH_REPLACE_MODE_INSTRUCTION,
   STANDARD_UPDATE_INSTRUCTION,
+  STANDARD_UPDATE_INSTRUCTION_MARKER,
 } from '../components/ControlPanel/prompts';
+import { getGenerationPrompt } from '../services/promptTemplates';
+import type { AIResponseFormat } from '../services/fluidflowConfig';
 
 /**
  * Calculate file changes between old and new file systems
@@ -88,15 +90,18 @@ export function createTokenUsage(
 
 /**
  * Build system instruction for code generation
+ * @param responseFormat - Optional override for response format (json or marker)
  */
 export function buildSystemInstruction(
   existingApp: boolean,
   hasBrand: boolean,
   isEducationMode: boolean,
   diffModeEnabled: boolean,
-  techStackInstruction: string
+  techStackInstruction: string,
+  responseFormat?: AIResponseFormat
 ): string {
-  let systemInstruction = BASE_GENERATION_INSTRUCTION;
+  // Use format-aware base generation prompt
+  let systemInstruction = getGenerationPrompt(responseFormat);
 
   if (hasBrand) {
     systemInstruction += `\n\n**BRANDING**: Extract the PRIMARY DOMINANT COLOR from the brand logo and use it for primary actions/accents.`;
@@ -109,12 +114,23 @@ export function buildSystemInstruction(
   // Add technology stack instructions
   systemInstruction += techStackInstruction;
 
-  // Add update mode instructions
+  // Add update mode instructions based on format
   if (existingApp) {
-    if (diffModeEnabled) {
+    const isMarkerFormat = responseFormat === 'marker';
+
+    // Search/Replace mode is JSON-only - ignore diffMode for marker format
+    if (diffModeEnabled && !isMarkerFormat) {
       systemInstruction += SEARCH_REPLACE_MODE_INSTRUCTION;
     } else {
-      systemInstruction += STANDARD_UPDATE_INSTRUCTION;
+      // Use format-appropriate update instructions
+      systemInstruction += isMarkerFormat
+        ? STANDARD_UPDATE_INSTRUCTION_MARKER
+        : STANDARD_UPDATE_INSTRUCTION;
+    }
+
+    // Log format decision
+    if (isMarkerFormat && diffModeEnabled) {
+      console.log('[SystemInstruction] Marker format selected - ignoring diff mode (JSON-only feature)');
     }
   }
 

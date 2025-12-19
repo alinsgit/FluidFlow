@@ -10,11 +10,14 @@ import { FileSystem } from '../types';
 import {
   cleanGeneratedCode,
   parseMultiFileResponse,
+  parseUnifiedResponse,
   GenerationMeta,
   parseSearchReplaceModeResponse,
   mergeSearchReplaceChanges,
 } from '../utils/cleanCode';
+import { emergencyCodeBlockExtraction } from '../utils/truncationRecovery';
 import { debugLog } from './useDebugStore';
+import type { StreamingFormat } from './useStreamingResponse';
 
 export interface StandardParseResult {
   explanation: string;
@@ -23,12 +26,18 @@ export interface StandardParseResult {
   mergedFiles: FileSystem;
   wasTruncated: boolean;
   generationMeta?: GenerationMeta;
+  /** Response format detected */
+  format?: 'json' | 'marker';
+  /** Files that were started but not completed (will NOT be merged) */
+  incompleteFiles?: string[];
   continuation?: {
     prompt: string;
     remainingFiles: string[];
     currentBatch: number;
     totalBatches: number;
   };
+  /** True if format fallback was used (AI didn't follow expected format) */
+  formatFallbackUsed?: boolean;
 }
 
 export interface SearchReplaceParseResult {
@@ -50,7 +59,9 @@ export interface UseResponseParserReturn {
     genStartTime: number,
     currentModel: string,
     providerName: string,
-    chunkCount: number
+    chunkCount: number,
+    /** Format hint from streaming detection */
+    formatHint?: StreamingFormat
   ) => StandardParseResult;
 
   parseSearchReplaceResponse: (
@@ -68,6 +79,7 @@ export function useResponseParser(options: UseResponseParserOptions): UseRespons
 
   /**
    * Parse response in standard full-file mode
+   * Supports both JSON and marker formats via unified parser
    */
   const parseStandardResponse = useCallback(
     (
@@ -76,11 +88,58 @@ export function useResponseParser(options: UseResponseParserOptions): UseRespons
       genStartTime: number,
       currentModel: string,
       providerName: string,
-      chunkCount: number
+      chunkCount: number,
+      _formatHint?: StreamingFormat
     ): StandardParseResult => {
-      const parseResult = parseMultiFileResponse(fullText);
-      if (!parseResult) {
-        throw new Error('Could not parse response - no valid file content found');
+      // Try unified parser first (handles both JSON and marker formats)
+      const unifiedResult = parseUnifiedResponse(fullText);
+      let parseResult: ReturnType<typeof parseMultiFileResponse>;
+      let detectedFormat: 'json' | 'marker' = 'json';
+
+      let incompleteFiles: string[] | undefined;
+
+      if (unifiedResult) {
+        // Unified parser succeeded
+        detectedFormat = unifiedResult.format;
+        incompleteFiles = unifiedResult.incompleteFiles;
+        parseResult = {
+          files: unifiedResult.files,
+          explanation: unifiedResult.explanation,
+          truncated: unifiedResult.truncated,
+          deletedFiles: unifiedResult.deletedFiles,
+          generationMeta: unifiedResult.generationMeta,
+        };
+        console.log(`[ResponseParser] Using unified parser, format: ${detectedFormat}`);
+      } else {
+        // Fallback to direct JSON parser
+        parseResult = parseMultiFileResponse(fullText);
+        console.log('[ResponseParser] Unified parser failed, using JSON parser');
+      }
+
+      // Track if format fallback was used
+      let formatFallbackUsed = false;
+
+      // If both parsers failed, try emergency code block extraction
+      // This handles cases where AI returns conversational text with markdown code blocks
+      if (!parseResult || Object.keys(parseResult.files || {}).length === 0) {
+        console.log('[ResponseParser] Standard parsers failed, trying emergency code block extraction...');
+        const emergencyFiles = emergencyCodeBlockExtraction(fullText, true);
+
+        if (emergencyFiles && Object.keys(emergencyFiles).length > 0) {
+          console.log(`[ResponseParser] Emergency extraction recovered ${Object.keys(emergencyFiles).length} files:`, Object.keys(emergencyFiles));
+          setStreamingStatus(`⚠️ Format fallback: Recovered ${Object.keys(emergencyFiles).length} files from code blocks`);
+          formatFallbackUsed = true;
+          detectedFormat = 'json'; // Mark as recovered
+          parseResult = {
+            files: emergencyFiles,
+            explanation: 'Files recovered from code blocks (AI did not follow expected format)',
+            truncated: false,
+          };
+        }
+      }
+
+      if (!parseResult || Object.keys(parseResult.files || {}).length === 0) {
+        throw new Error('Could not parse response - no valid file content found. AI may not have followed the expected format.');
       }
 
       const explanation = parseResult.explanation || 'App generated successfully.';
@@ -90,10 +149,18 @@ export function useResponseParser(options: UseResponseParserOptions): UseRespons
       const generationMeta = parseResult.generationMeta;
       const continuation = parseResult.continuation;
 
+      // Warn about incomplete files (NOT included in merge)
+      if (incompleteFiles && incompleteFiles.length > 0) {
+        console.error('[Generation] ⚠️ INCOMPLETE FILES DETECTED - these will NOT be merged:', incompleteFiles);
+        setStreamingStatus(`⚠️ ${incompleteFiles.length} file(s) incomplete and excluded: ${incompleteFiles.join(', ')}`);
+      }
+
       // Warn if response was truncated but we recovered
       if (wasTruncated) {
         console.warn('[Generation] Response was truncated but partially recovered');
-        setStreamingStatus('⚠️ Response truncated - showing recovered files');
+        if (!incompleteFiles || incompleteFiles.length === 0) {
+          setStreamingStatus('⚠️ Response truncated - showing recovered files');
+        }
       }
 
       // Log the efficiency (token savings)
@@ -162,7 +229,10 @@ export function useResponseParser(options: UseResponseParserOptions): UseRespons
         mergedFiles,
         wasTruncated,
         generationMeta,
+        format: detectedFormat,
         continuation,
+        incompleteFiles,
+        formatFallbackUsed,
       };
     },
     [files, existingApp, setStreamingStatus]

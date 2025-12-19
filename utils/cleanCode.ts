@@ -2,6 +2,14 @@
 import { isIgnoredPath } from './filePathUtils';
 export { isIgnoredPath as isIgnoredFilePath };
 
+// Import marker format utilities (ES module - no require())
+import {
+  isMarkerFormat,
+  parseMarkerFormatResponse,
+  extractMarkerFileList,
+  getMarkerStreamingStatus,
+} from './markerFormat';
+
 // Local alias for internal use
 const isIgnoredFilePath = isIgnoredPath;
 
@@ -1068,3 +1076,163 @@ export {
   mergeSearchReplaceChanges,
   type SearchReplaceMergeResult,
 } from './searchReplace';
+
+// ============================================================================
+// MARKER FORMAT - Re-exported from markerFormat.ts
+// ============================================================================
+export {
+  isMarkerFormat,
+  parseMarkerFormatResponse,
+  parseMarkerPlan,
+  parseMarkerFiles,
+  parseStreamingMarkerFiles,
+  extractMarkerFileList,
+  getMarkerStreamingStatus,
+  stripMarkerMetadata,
+  type MarkerFilePlan,
+  type MarkerFormatResponse,
+} from './markerFormat';
+
+// ============================================================================
+// UNIFIED RESPONSE PARSER
+// ============================================================================
+
+/** Response format type */
+export type ResponseFormatType = 'json' | 'marker';
+
+/** Unified parsed response */
+export interface UnifiedParsedResponse {
+  format: ResponseFormatType;
+  files: Record<string, string>;
+  explanation?: string;
+  truncated?: boolean;
+  deletedFiles?: string[];
+  generationMeta?: GenerationMeta;
+  /** Files that were started but not completed (missing closing marker) */
+  incompleteFiles?: string[];
+}
+
+/**
+ * Detects the response format (JSON vs Marker)
+ */
+export function detectResponseFormat(response: string): ResponseFormatType {
+  if (isMarkerFormat(response)) {
+    return 'marker';
+  }
+  return 'json';
+}
+
+/**
+ * Unified parser that handles both JSON and Marker formats
+ * Automatically detects the format and calls the appropriate parser
+ */
+export function parseUnifiedResponse(response: string): UnifiedParsedResponse | null {
+  if (!response || !response.trim()) {
+    return null;
+  }
+
+  // Check for marker format first (it's more distinctive)
+  if (isMarkerFormat(response)) {
+    const markerResult = parseMarkerFormatResponse(response);
+    if (markerResult) {
+      // Log warning if there are incomplete files
+      if (markerResult.incompleteFiles && markerResult.incompleteFiles.length > 0) {
+        console.warn('[parseUnifiedResponse] Response has incomplete files that will NOT be included:', markerResult.incompleteFiles);
+      }
+
+      return {
+        format: 'marker',
+        files: markerResult.files,
+        explanation: markerResult.explanation,
+        truncated: markerResult.truncated,
+        deletedFiles: markerResult.plan?.delete,
+        generationMeta: markerResult.generationMeta,
+        incompleteFiles: markerResult.incompleteFiles,
+      };
+    }
+  }
+
+  // Try JSON format
+  const jsonResult = parseMultiFileResponse(response, true);
+  if (jsonResult) {
+    return {
+      format: 'json',
+      files: jsonResult.files,
+      explanation: jsonResult.explanation,
+      truncated: jsonResult.truncated,
+      deletedFiles: jsonResult.deletedFiles,
+      generationMeta: jsonResult.generationMeta,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Extract file list from response (works with both formats)
+ */
+export function extractFileListUnified(response: string): string[] {
+  if (isMarkerFormat(response)) {
+    return extractMarkerFileList(response);
+  }
+
+  // JSON format - use existing extraction
+  const files = new Set<string>();
+
+  // Try to parse PLAN comment
+  const planMatch = response.match(/\/\/\s*PLAN:\s*(\{[\s\S]*?\})/);
+  if (planMatch) {
+    try {
+      const plan = JSON.parse(planMatch[1]);
+      if (plan.create) plan.create.forEach((f: string) => files.add(f));
+      if (plan.update) plan.update.forEach((f: string) => files.add(f));
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  // Extract from JSON keys using matchAll
+  const pattern = /"([^"]+\.(tsx?|jsx?|css|json|md|sql|ts|js))"\s*:/g;
+  const matches = [...response.matchAll(pattern)];
+  for (const match of matches) {
+    files.add(match[1]);
+  }
+
+  return Array.from(files).sort();
+}
+
+/**
+ * Get streaming status from response (works with both formats)
+ */
+export function getStreamingStatusUnified(response: string, detectedFiles: Set<string>): {
+  pending: string[];
+  streaming: string[];
+  complete: string[];
+} {
+  if (isMarkerFormat(response)) {
+    return getMarkerStreamingStatus(response);
+  }
+
+  // JSON format - analyze based on detected files and content
+  const allFiles = extractFileListUnified(response);
+  const complete: string[] = [];
+  const streaming: string[] = [];
+
+  for (const file of allFiles) {
+    // Check if file content appears complete in JSON
+    // A file is complete if we see its closing quote followed by comma or brace
+    const escapedFile = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const filePattern = new RegExp(`"${escapedFile}"\\s*:\\s*"[^"]*(?:\\\\.[^"]*)*"\\s*[,}]`);
+    if (filePattern.test(response)) {
+      complete.push(file);
+    } else if (detectedFiles.has(file)) {
+      streaming.push(file);
+    }
+  }
+
+  const completeSet = new Set(complete);
+  const streamingSet = new Set(streaming);
+  const pending = allFiles.filter(f => !completeSet.has(f) && !streamingSet.has(f));
+
+  return { pending, streaming, complete };
+}

@@ -7,11 +7,12 @@
 
 import { useCallback } from 'react';
 import { FileSystem, ChatMessage } from '../types';
-import { parseMultiFileResponse, GenerationMeta } from '../utils/cleanCode';
+import { parseMultiFileResponse, parseUnifiedResponse, GenerationMeta } from '../utils/cleanCode';
 import { getProviderManager } from '../services/ai';
 import { FILE_GENERATION_SCHEMA, supportsAdditionalProperties } from '../services/ai/utils/schemas';
 import { FilePlan, ContinuationState, TruncatedContent } from './useGenerationState';
 import { calculateFileChanges, createTokenUsage } from '../utils/generationUtils';
+import { getFluidFlowConfig } from '../services/fluidflowConfig';
 
 // Types for the hook
 export interface ContinuationGenerationOptions {
@@ -110,15 +111,16 @@ Return ONLY a JSON object with the files:
 
       try {
         let fullText = '';
+        const currentFormat = getFluidFlowConfig().getResponseFormat();
         await manager.generateStream(
           {
             prompt: targetedPrompt,
             systemInstruction,
             maxTokens: 32768,
             temperature: 0.7,
-            responseFormat: 'json',
+            responseFormat: currentFormat === 'marker' ? undefined : 'json',
             responseSchema:
-              activeConfig?.type && supportsAdditionalProperties(activeConfig.type)
+              currentFormat !== 'marker' && activeConfig?.type && supportsAdditionalProperties(activeConfig.type)
                 ? FILE_GENERATION_SCHEMA
                 : undefined,
           },
@@ -201,6 +203,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
 
         let fullText = '';
         let chunkCount = 0;
+        const contFormat = getFluidFlowConfig().getResponseFormat();
 
         const response = await manager.generateStream(
           {
@@ -208,9 +211,9 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
             systemInstruction,
             maxTokens: 32768,
             temperature: 0.7,
-            responseFormat: 'json',
+            responseFormat: contFormat === 'marker' ? undefined : 'json',
             responseSchema:
-              activeConfig?.type && supportsAdditionalProperties(activeConfig.type)
+              contFormat !== 'marker' && activeConfig?.type && supportsAdditionalProperties(activeConfig.type)
                 ? FILE_GENERATION_SCHEMA
                 : undefined,
           },
@@ -232,11 +235,21 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
         setStreamingStatus('✨ Finalizing...');
         console.log('[Continuation] Raw response length:', fullText.length);
 
-        const parseResult = parseMultiFileResponse(fullText);
+        // Use unified parser to support both JSON and marker formats
+        const unifiedResult = parseUnifiedResponse(fullText);
+        const parseResult = unifiedResult ? {
+          files: unifiedResult.files,
+          explanation: unifiedResult.explanation,
+          truncated: unifiedResult.truncated,
+          generationMeta: unifiedResult.generationMeta,
+        } : parseMultiFileResponse(fullText); // Fallback to JSON-only parser
+
         console.log('[Continuation] Parse result:', {
           hasFiles: !!parseResult?.files,
           fileCount: parseResult ? Object.keys(parseResult.files).length : 0,
           fileNames: parseResult ? Object.keys(parseResult.files) : [],
+          format: unifiedResult?.format || 'json-fallback',
+          generationMeta: parseResult?.generationMeta,
         });
 
         if (!parseResult || !parseResult.files || Object.keys(parseResult.files).length === 0) {
@@ -286,28 +299,37 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           ...new Set([...completedFiles, ...Object.keys(parseResult.files)]),
         ];
 
-        // Update remaining files - check both exact match and filename match
-        const generatedFileNames = Object.keys(parseResult.files).map((f) => f.split('/').pop());
+        // Update remaining files - check against ALL accumulated files (not just current batch)
+        // This fixes the bug where continuation keeps running even when files were received in earlier batches
+        const allAccumulatedFileNames = Object.keys(newAccumulatedFiles).map((f) => f.split('/').pop());
         const newRemainingFiles = remainingFiles.filter((f) => {
           const fileName = f.split('/').pop();
-          const exactMatch = parseResult.files[f];
-          const nameMatch = generatedFileNames.includes(fileName);
+          // Check against ALL accumulated files, not just current batch
+          const exactMatch = newAccumulatedFiles[f];
+          const nameMatch = allAccumulatedFileNames.includes(fileName);
           return !exactMatch && !nameMatch;
         });
 
         // If we generated ANY new files, consider progress made
         const madeProgress = Object.keys(parseResult.files).length > 0;
 
-        // Check if generation is complete
-        const isComplete =
-          newRemainingFiles.length === 0 || parseResult.generationMeta?.isComplete === true;
+        // Check if generation is complete - multiple completion signals
+        const noRemainingFiles = newRemainingFiles.length === 0;
+        const aiMarkedComplete = parseResult.generationMeta?.isComplete === true;
+        const allPlannedFilesReceived = Object.keys(newAccumulatedFiles).length >= generationMeta.totalFilesPlanned;
+        // NEW: Also check if AI's GENERATION_META says remainingFiles is empty
+        const aiSaysNoRemaining = parseResult.generationMeta?.remainingFiles?.length === 0;
+        const isComplete = noRemainingFiles || aiMarkedComplete || allPlannedFilesReceived || aiSaysNoRemaining;
 
         console.log('[Continuation] Batch complete:', {
-          newFiles: Object.keys(parseResult.files).length,
+          newFilesThisBatch: Object.keys(parseResult.files).length,
           totalAccumulated: Object.keys(newAccumulatedFiles).length,
+          totalPlanned: generationMeta.totalFilesPlanned,
           totalCompleted: newCompletedFiles.length,
           remaining: newRemainingFiles.length,
           remainingFiles: newRemainingFiles,
+          aiGenerationMeta: parseResult.generationMeta,
+          completionSignals: { noRemainingFiles, aiMarkedComplete, allPlannedFilesReceived, aiSaysNoRemaining },
           isComplete,
           madeProgress,
         });

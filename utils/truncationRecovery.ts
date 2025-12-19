@@ -152,34 +152,157 @@ export function analyzeTruncatedResponse(
 
 /**
  * Emergency extraction from code blocks when JSON parsing fails
+ * Handles multiple patterns:
+ * 1. Standard markdown code blocks: ```tsx ... ```
+ * 2. File path comments followed by code without backticks: // src/path.tsx\nimport...
+ *
+ * @param fullText - The full AI response text
+ * @param forceExtract - If true, skip length check (used for format fallback)
  */
 export function emergencyCodeBlockExtraction(
-  fullText: string
+  fullText: string,
+  forceExtract: boolean = false
 ): Record<string, string> | null {
-  if (fullText.length < 5000) return null;
-
-  const codeMatches = fullText.match(
-    /```(?:tsx?|jsx?|typescript|javascript|js|ts)\s*\n([\s\S]*?)\n```/g
-  );
-
-  if (!codeMatches || codeMatches.length === 0) return null;
+  // Skip length check if forced (for format fallback scenarios)
+  if (!forceExtract && fullText.length < 5000) return null;
 
   const emergencyFiles: Record<string, string> = {};
   let fileIndex = 1;
 
-  for (const match of codeMatches) {
-    const codeContent = match
-      .replace(/```(?:tsx?|jsx?|typescript|javascript|js|ts)\s*\n?/, '')
-      .replace(/```$/, '')
-      .trim();
+  // PATTERN 1: Standard markdown code blocks with optional file path before
+  // Matches: `// src/path.tsx\n```tsx` or just ```tsx with path as first comment
+  const codeBlockRegex = /(?:\/\/\s*(src\/[\w./-]+\.[a-zA-Z]+)\s*\n)?```(?:tsx?|jsx?|typescript|javascript|js|ts)\s*\n([\s\S]*?)\n```/g;
 
-    if (codeContent.length > 200) {
-      emergencyFiles[`recovered${fileIndex}.tsx`] = codeContent;
-      fileIndex++;
+  const matches = [...fullText.matchAll(codeBlockRegex)];
+
+  for (const match of matches) {
+    const filePathBefore = match[1]; // Path from comment before code block
+    const codeContent = match[2]?.trim() || '';
+    const matchPosition = match.index || 0;
+
+    if (codeContent.length < 50) continue;
+
+    // Try to detect file path from multiple sources
+    let detectedPath: string | null = filePathBefore || null;
+
+    if (!detectedPath) {
+      // Check first line for file path comment: // src/components/Header.tsx
+      const firstLineMatch = codeContent.match(/^\/\/\s*(src\/[\w./-]+\.[a-zA-Z]+)/);
+      if (firstLineMatch) {
+        detectedPath = firstLineMatch[1];
+      }
+    }
+
+    if (!detectedPath) {
+      // Look for file path pattern in surrounding context (100 chars before code block)
+      const contextBefore = fullText.slice(Math.max(0, matchPosition - 100), matchPosition);
+      const contextMatch = contextBefore.match(/(src\/[\w./-]+\.[a-zA-Z]+)\s*$/);
+      if (contextMatch) {
+        detectedPath = contextMatch[1];
+      }
+    }
+
+    // Use detected path or generate one based on code content
+    const filePath = detectedPath || guessFilePathFromContent(codeContent, fileIndex);
+
+    // Remove file path comment from start of code if present
+    let cleanedContent = codeContent;
+    if (cleanedContent.match(/^\/\/\s*src\/[\w./-]+\.[a-zA-Z]+\s*\n/)) {
+      cleanedContent = cleanedContent.replace(/^\/\/\s*src\/[\w./-]+\.[a-zA-Z]+\s*\n/, '');
+    }
+
+    emergencyFiles[filePath] = cleanedContent.trim();
+    fileIndex++;
+  }
+
+  // PATTERN 2: File path comment followed directly by code (NO backticks)
+  // Example: "// src/components/Header.tsx\nimport { useState } from 'react'"
+  // This handles AI responses that don't use markdown code blocks
+  if (Object.keys(emergencyFiles).length === 0) {
+    console.log('[EmergencyExtraction] No code blocks found, trying file path comment extraction...');
+
+    // Find all file path comments and extract code until next file path or end
+    const filePathRegex = /\/\/\s*(src\/[\w./-]+\.(?:tsx?|jsx?|css))\s*\n/g;
+    const filePathMatches = [...fullText.matchAll(filePathRegex)];
+
+    for (let i = 0; i < filePathMatches.length; i++) {
+      const match = filePathMatches[i];
+      const filePath = match[1];
+      const startPos = (match.index || 0) + match[0].length;
+
+      // End position is either next file path or end of text
+      const nextMatch = filePathMatches[i + 1];
+      let endPos = nextMatch ? nextMatch.index! : fullText.length;
+
+      // Also check for end-of-code patterns (explanation text, etc.)
+      const codeSection = fullText.slice(startPos, endPos);
+      const endPatterns = [
+        /\n\n[A-Z][^{}\[\]()]*:\s*$/m,        // "Section Name:" at end of line
+        /\n\n[-*•]\s+[A-Z]/m,                  // "- Bullet point"
+        /\n\n\d+\.\s+[A-Z]/m,                  // "1. Numbered list"
+        /\n\n(?:Created|Updated|Added|Fixed|Implemented)\s/m,  // Common intro words
+      ];
+
+      let codeContent = codeSection;
+      for (const pattern of endPatterns) {
+        const endMatch = codeSection.match(pattern);
+        if (endMatch && endMatch.index !== undefined && endMatch.index > 50) {
+          codeContent = codeSection.slice(0, endMatch.index);
+          break;
+        }
+      }
+
+      codeContent = codeContent.trim();
+
+      // Validate it looks like actual code (has common code patterns)
+      const looksLikeCode = codeContent.length > 50 &&
+        /^(?:import|export|const|let|var|function|interface|type|class|\/\*|'use|"use)/m.test(codeContent);
+
+      if (looksLikeCode) {
+        emergencyFiles[filePath] = codeContent;
+        fileIndex++;
+        console.log(`[EmergencyExtraction] Extracted: ${filePath} (${codeContent.length} chars)`);
+      }
     }
   }
 
+  if (Object.keys(emergencyFiles).length > 0) {
+    console.log('[EmergencyExtraction] Total files recovered:', Object.keys(emergencyFiles));
+  }
+
   return Object.keys(emergencyFiles).length > 0 ? emergencyFiles : null;
+}
+
+/**
+ * Guess file path based on code content analysis
+ */
+function guessFilePathFromContent(code: string, index: number): string {
+  // Check for export default function ComponentName
+  const componentMatch = code.match(/export\s+(?:default\s+)?function\s+(\w+)/);
+  if (componentMatch) {
+    const name = componentMatch[1];
+    // PascalCase = component
+    if (/^[A-Z]/.test(name)) {
+      return `src/components/${name}.tsx`;
+    }
+    // camelCase = hook
+    if (/^use[A-Z]/.test(name)) {
+      return `src/hooks/${name}.ts`;
+    }
+  }
+
+  // Check for interface/type definitions
+  if (code.match(/^(?:export\s+)?(?:interface|type)\s+\w+/m)) {
+    return `src/types/index.ts`;
+  }
+
+  // Check for App component specifically
+  if (code.match(/function\s+App\s*\(/)) {
+    return 'src/App.tsx';
+  }
+
+  // Default fallback
+  return `src/recovered${index}.tsx`;
 }
 
 /**

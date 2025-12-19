@@ -35,6 +35,8 @@ export interface DiffModalProps {
   onConfirm: () => void;
   /** Callback when user cancels */
   onCancel: () => void;
+  /** Files that were started but not completed by AI (excluded from merge) */
+  incompleteFiles?: string[];
 }
 
 /**
@@ -61,7 +63,8 @@ export const DiffModal: React.FC<DiffModalProps> = ({
   newFiles,
   label,
   onConfirm,
-  onCancel
+  onCancel,
+  incompleteFiles
 }) => {
   // Calculate changed files (excluding ignored paths)
   const changedFiles = useMemo<FileChangeSummary[]>(() => {
@@ -157,6 +160,31 @@ export const DiffModal: React.FC<DiffModalProps> = ({
           </div>
         </div>
 
+        {/* Incomplete Files Warning */}
+        {incompleteFiles && incompleteFiles.length > 0 && (
+          <div className="px-6 py-3 bg-amber-500/10 border-b border-amber-500/20">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-300">
+                  {incompleteFiles.length} file{incompleteFiles.length > 1 ? 's were' : ' was'} incomplete and excluded
+                </p>
+                <p className="text-xs text-amber-400/70 mt-1">
+                  The following file{incompleteFiles.length > 1 ? 's' : ''} did not receive complete content and {incompleteFiles.length > 1 ? 'have' : 'has'} been excluded from this update:
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {incompleteFiles.map((file) => (
+                    <li key={file} className="text-xs text-amber-300/80 font-mono flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400/50"></span>
+                      {file}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 flex overflow-hidden min-h-0">
           {/* File List */}
           <div className="w-72 bg-slate-950/50 border-r border-white/5 flex flex-col">
@@ -174,9 +202,9 @@ export const DiffModal: React.FC<DiffModalProps> = ({
                       : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                   }`}
                 >
-                  <FileCode className="w-4 h-4 opacity-70 flex-shrink-0" />
+                  <FileCode className="w-4 h-4 opacity-70 shrink-0" />
                   <span className="truncate flex-1">{file}</span>
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono flex-shrink-0">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono shrink-0">
                     {added > 0 && <span className="text-green-400">+{added}</span>}
                     {removed > 0 && <span className="text-red-400">-{removed}</span>}
                   </div>
@@ -190,7 +218,7 @@ export const DiffModal: React.FC<DiffModalProps> = ({
             {selectedFile ? (
               <>
                 {/* File Header */}
-                <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-white/5">
+                <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-white/5">
                   <span className="text-xs font-mono text-slate-400">{selectedFile}</span>
                   <div className="flex items-center gap-3 text-xs font-mono">
                     {stats.added > 0 && (

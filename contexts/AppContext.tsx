@@ -93,8 +93,8 @@ export interface AppContextValue {
   setAutoCommitEnabled: (enabled: boolean) => void;
 
   // Diff/Review
-  pendingReview: { label: string; newFiles: FileSystem; skipHistory?: boolean } | null;
-  reviewChange: (label: string, newFiles: FileSystem, options?: { skipHistory?: boolean }) => void;
+  pendingReview: { label: string; newFiles: FileSystem; skipHistory?: boolean; incompleteFiles?: string[] } | null;
+  reviewChange: (label: string, newFiles: FileSystem, options?: { skipHistory?: boolean; incompleteFiles?: string[] }) => void;
   confirmChange: () => void;
   cancelReview: () => void;
 
@@ -168,6 +168,8 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
     label: string;
     newFiles: FileSystem;
     skipHistory?: boolean;
+    /** Files that were started but not completed by AI (excluded from merge) */
+    incompleteFiles?: string[];
   } | null>(null);
 
   // Calculate local changes for display
@@ -282,9 +284,13 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
   const reviewChange = useCallback((
     label: string,
     newFiles: FileSystem,
-    options?: { skipHistory?: boolean }
+    options?: { skipHistory?: boolean; incompleteFiles?: string[] }
   ) => {
     if (autoAcceptChanges) {
+      // Log warning if there are incomplete files
+      if (options?.incompleteFiles && options.incompleteFiles.length > 0) {
+        console.warn('[reviewChange] Auto-accepting changes with incomplete files:', options.incompleteFiles);
+      }
       // Pass skipHistory option to setFiles
       setFiles(newFiles, options?.skipHistory ? { skipHistory: true } : undefined);
       if (!newFiles[activeFile]) {
@@ -292,7 +298,12 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
         setActiveFile(firstSrc || 'package.json');
       }
     } else {
-      setPendingReview({ label, newFiles, skipHistory: options?.skipHistory });
+      setPendingReview({
+        label,
+        newFiles,
+        skipHistory: options?.skipHistory,
+        incompleteFiles: options?.incompleteFiles,
+      });
     }
   }, [autoAcceptChanges, activeFile, setFiles]);
 

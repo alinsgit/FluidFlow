@@ -1,6 +1,9 @@
 // FluidFlow Project Configuration
 // Manages .fluidflow folder structure and configuration files
 
+/** AI Response format type - json (default) or marker (experimental) */
+export type AIResponseFormat = 'json' | 'marker';
+
 export interface FluidFlowConfig {
   // Project-level AI instructions
   rules?: string;
@@ -8,6 +11,8 @@ export interface FluidFlowConfig {
   agents?: AgentConfig[];
   // Context management settings
   contextSettings?: ContextSettings;
+  // AI Response format (json or marker) - affects how AI returns code
+  responseFormat?: AIResponseFormat;
 }
 
 export interface AgentConfig {
@@ -206,6 +211,18 @@ class FluidFlowConfigManager {
       ...settings
     };
     this.saveConfig();
+  }
+
+  // Get response format
+  getResponseFormat(): AIResponseFormat {
+    return this.config.responseFormat || 'json';
+  }
+
+  // Set response format
+  setResponseFormat(format: AIResponseFormat): void {
+    this.config.responseFormat = format;
+    this.saveConfig();
+    console.log('[FluidFlow] Response format set to:', format);
   }
 
   // Add compaction log

@@ -290,6 +290,7 @@ export default function App() {
           label={ctx.pendingReview.label}
           onConfirm={ctx.confirmChange}
           onCancel={ctx.cancelReview}
+          incompleteFiles={ctx.pendingReview.incompleteFiles}
         />
       )}
 

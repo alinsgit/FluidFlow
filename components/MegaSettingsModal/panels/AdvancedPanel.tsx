@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings2, Check, Info, Loader2 } from 'lucide-react';
+import { Settings2, Check, Info, Loader2, FlaskConical } from 'lucide-react';
 import { SettingsSection } from '../shared';
 import { SettingsToggle } from '../shared/SettingsToggle';
-import { getFluidFlowConfig } from '../../../services/fluidflowConfig';
+import { SettingsSelect } from '../shared/SettingsSelect';
+import { getFluidFlowConfig, type AIResponseFormat } from '../../../services/fluidflowConfig';
 import { webContainerService } from '../../../services/webcontainer';
 import { DEFAULT_WEBCONTAINER_SETTINGS, type WebContainerSettings } from '../../../types';
 
@@ -16,6 +17,9 @@ export const AdvancedPanel: React.FC = () => {
   const [wcTesting, setWcTesting] = useState(false);
   const [wcTestResult, setWcTestResult] = useState<'success' | 'error' | null>(null);
 
+  // AI Response Format
+  const [responseFormat, setResponseFormat] = useState<AIResponseFormat>('json');
+
   useEffect(() => {
     const config = getFluidFlowConfig();
     const rules = config.getRules();
@@ -27,7 +31,16 @@ export const AdvancedPanel: React.FC = () => {
     if (savedWcSettings) {
       setWcSettings(savedWcSettings);
     }
+
+    // Load response format
+    setResponseFormat(config.getResponseFormat());
   }, []);
+
+  const handleResponseFormatChange = (format: string) => {
+    const config = getFluidFlowConfig();
+    config.setResponseFormat(format as AIResponseFormat);
+    setResponseFormat(format as AIResponseFormat);
+  };
 
   const handleWcSettingsChange = async (key: keyof WebContainerSettings, value: string | boolean) => {
     const newSettings = { ...wcSettings, [key]: value };
@@ -214,6 +227,75 @@ export const AdvancedPanel: React.FC = () => {
             {wcTestResult === 'error' && (
               <span className="text-sm text-red-400">Failed to boot. Use Chrome/Edge browser.</span>
             )}
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* AI Response Format */}
+      <SettingsSection
+        title="AI Response Format"
+        description="Experimental: Choose how AI returns generated code"
+      >
+        {/* Experimental Badge */}
+        <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg mb-4">
+          <FlaskConical className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-slate-400">
+            <span className="text-amber-400 font-medium">Experimental Feature:</span> The marker format
+            is an alternative to JSON that may improve streaming reliability. Both formats are
+            automatically detected and parsed. Use this to A/B test which works better for your use case.
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <SettingsSelect
+            label="Response Format"
+            description="How AI should structure code in responses"
+            value={responseFormat}
+            options={[
+              {
+                value: 'json',
+                label: 'JSON (Default)',
+                description: 'Standard JSON format with escaped content. Supports diff mode.'
+              },
+              {
+                value: 'marker',
+                label: 'Marker (Experimental)',
+                description: 'HTML-style markers, no escaping needed. Diff mode disabled.'
+              }
+            ]}
+            onChange={handleResponseFormatChange}
+          />
+
+          {/* Marker format note */}
+          {responseFormat === 'marker' && (
+            <div className="flex items-start gap-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded text-xs text-slate-400">
+              <Info className="w-3 h-3 text-blue-400 shrink-0 mt-0.5" />
+              <span>
+                <span className="text-blue-400">Note:</span> Diff mode (search/replace) is JSON-only.
+                With marker format, updates use full file content.
+              </span>
+            </div>
+          )}
+
+          {/* Format Details */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`p-3 rounded-lg border ${responseFormat === 'json' ? 'bg-blue-500/10 border-blue-500/30' : 'bg-slate-800/30 border-white/5'}`}>
+              <div className="text-xs font-medium text-white mb-1">JSON Format</div>
+              <pre className="text-[10px] text-slate-500 font-mono overflow-hidden">
+{`// PLAN: {"create":[...]}
+{"files":{"src/App.tsx":"..."}}`}
+              </pre>
+            </div>
+            <div className={`p-3 rounded-lg border ${responseFormat === 'marker' ? 'bg-blue-500/10 border-blue-500/30' : 'bg-slate-800/30 border-white/5'}`}>
+              <div className="text-xs font-medium text-white mb-1">Marker Format</div>
+              <pre className="text-[10px] text-slate-500 font-mono overflow-hidden">
+{`<!-- PLAN -->
+create: src/App.tsx
+<!-- FILE:src/App.tsx -->
+...code...
+<!-- /FILE:src/App.tsx -->`}
+              </pre>
+            </div>
           </div>
         </div>
       </SettingsSection>

@@ -7,6 +7,7 @@
 
 // Import prompts as raw text (Vite handles this with ?raw suffix)
 import generationPrompt from '../prompts/generation.md?raw';
+import generationMarkerPrompt from '../prompts/generation-marker.md?raw';
 import inspectEditPrompt from '../prompts/inspect-edit.md?raw';
 import autoFixPrompt from '../prompts/auto-fix.md?raw';
 import quickEditPrompt from '../prompts/quick-edit.md?raw';
@@ -14,6 +15,7 @@ import accessibilityPrompt from '../prompts/accessibility.md?raw';
 import promptImproverPrompt from '../prompts/prompt-improver.md?raw';
 import consultantPrompt from '../prompts/consultant.md?raw';
 import commitMessagePrompt from '../prompts/commit-message.md?raw';
+import { getFluidFlowConfig, type AIResponseFormat } from './fluidflowConfig';
 
 // Template types
 export type PromptTemplateId =
@@ -92,9 +94,26 @@ export function hasTemplate(id: string): id is PromptTemplateId {
   return id in templates;
 }
 
+/**
+ * Get the generation prompt based on the configured response format
+ * @param format - Optional override, otherwise uses config setting
+ */
+export function getGenerationPrompt(format?: AIResponseFormat): string {
+  const effectiveFormat = format ?? getFluidFlowConfig().getResponseFormat();
+
+  if (effectiveFormat === 'marker') {
+    console.log('[PromptTemplates] Using MARKER format generation prompt');
+    return generationMarkerPrompt;
+  }
+
+  console.log('[PromptTemplates] Using JSON format generation prompt');
+  return generationPrompt;
+}
+
 // Export individual templates for direct access
 export const PROMPTS = {
   generation: generationPrompt,
+  generationMarker: generationMarkerPrompt,
   inspectEdit: inspectEditPrompt,
   autoFix: autoFixPrompt,
   quickEdit: quickEditPrompt,

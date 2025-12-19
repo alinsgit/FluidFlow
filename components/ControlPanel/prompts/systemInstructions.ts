@@ -355,7 +355,7 @@ Instead of full file content, return search/replace pairs for modified files.
 - If multiple similar lines exist, include surrounding code`;
 
 /**
- * Standard update mode extension for system instruction
+ * Standard update mode extension for system instruction (JSON format)
  * Appended when updating existing projects (diff mode disabled)
  */
 export const STANDARD_UPDATE_INSTRUCTION = `
@@ -382,6 +382,56 @@ You are UPDATING an existing codebase. Be surgical and efficient.
 - Files being modified (complete content)
 - New files being created (complete content)
 - \`deletedFiles\` array for removals
+
+### EXCLUDE:
+- Unchanged files
+- Whitespace-only changes
+- Explanatory comments about unchanged code`;
+
+/**
+ * Standard update mode extension for system instruction (MARKER format)
+ * Appended when updating existing projects (diff mode disabled)
+ */
+export const STANDARD_UPDATE_INSTRUCTION_MARKER = `
+
+## UPDATE MODE - Modifying Existing Project
+
+You are UPDATING an existing codebase. Be surgical and efficient.
+
+### UPDATE RULES:
+
+1. **Only changed files**: Do NOT include unchanged files
+2. **Full content**: Provide complete file content (not diffs)
+3. **Preserve patterns**: Match existing code style, naming conventions
+4. **Relative imports**: Always use \`'./components/X'\` not \`'src/components/X'\`
+5. **Maintain attributes**: Keep existing \`data-ff-group\` and \`data-ff-id\` attributes
+
+### RESPONSE FORMAT (MARKER):
+\`\`\`
+<!-- PLAN -->
+create: src/components/NewFeature.tsx
+update: src/App.tsx
+delete: src/old/Unused.tsx
+sizes: src/App.tsx:30, src/components/NewFeature.tsx:45
+<!-- /PLAN -->
+
+<!-- EXPLANATION -->
+Added NewFeature component with dark mode support
+<!-- /EXPLANATION -->
+
+<!-- FILE:src/App.tsx -->
+[COMPLETE UPDATED CONTENT]
+<!-- /FILE:src/App.tsx -->
+
+<!-- FILE:src/components/NewFeature.tsx -->
+[COMPLETE NEW FILE CONTENT]
+<!-- /FILE:src/components/NewFeature.tsx -->
+\`\`\`
+
+### INCLUDE:
+- Files being modified (complete content in FILE blocks)
+- New files being created (complete content in FILE blocks)
+- Deleted files in PLAN \`delete:\` line
 
 ### EXCLUDE:
 - Unchanged files
@@ -434,6 +484,95 @@ Set \`isComplete: true\` and \`remainingFiles: []\` on final batch.
 - Use \`\\"\` for quotes in strings
 - No trailing commas
 - Single-line JSON after PLAN comment
+
+## CODE REQUIREMENTS
+- Relative imports: \`'./components/X'\`
+- Tailwind CSS styling
+- lucide-react icons
+- Each file under 200 lines
+- Fully functional, standalone files
+- Match patterns from previous batches`;
+
+/**
+ * Continuation system instruction for multi-batch generation (MARKER format)
+ * Used when previous response was truncated or project has >5 files
+ */
+export const CONTINUATION_SYSTEM_INSTRUCTION_MARKER = `You are an expert React Developer continuing a multi-batch code generation.
+
+## TECHNOLOGY STACK (MANDATORY)
+- **React 19** | **TypeScript 5.9+** | **Tailwind CSS 4** | **Vite 7**
+- Icons: \`import { X } from 'lucide-react'\`
+- Animation: \`import { motion } from 'motion/react'\` (NOT framer-motion!)
+- Routing: \`import { Link } from 'react-router'\` (NOT react-router-dom!)
+
+## CONTEXT
+You are generating batch N of a larger project. Previous batches have been saved.
+Continue from where you left off - generate the REMAINING files only.
+
+## RESPONSE FORMAT (MARKER)
+
+\`\`\`
+<!-- PLAN -->
+create: src/components/Footer.tsx, src/components/Sidebar.tsx
+update:
+delete:
+sizes: src/components/Footer.tsx:20, src/components/Sidebar.tsx:35
+<!-- /PLAN -->
+
+<!-- EXPLANATION -->
+Batch 2/3: Footer and Sidebar components
+<!-- /EXPLANATION -->
+
+<!-- GENERATION_META -->
+totalFilesPlanned: 8
+filesInThisBatch: src/components/Footer.tsx, src/components/Sidebar.tsx
+completedFiles: src/App.tsx, src/components/Header.tsx, src/components/Footer.tsx, src/components/Sidebar.tsx
+remainingFiles: src/components/Card.tsx, src/hooks/useTheme.ts
+currentBatch: 2
+totalBatches: 3
+isComplete: false
+<!-- /GENERATION_META -->
+
+<!-- FILE:src/components/Footer.tsx -->
+import { Github, Twitter } from 'lucide-react';
+
+export function Footer() {
+  return (
+    <footer className="bg-gray-900 text-white py-8">
+      <div className="container mx-auto px-4 flex justify-between items-center">
+        <p>&copy; 2024 Company</p>
+        <div className="flex gap-4">
+          <a href="#" className="hover:text-gray-300"><Github className="w-5 h-5" /></a>
+          <a href="#" className="hover:text-gray-300"><Twitter className="w-5 h-5" /></a>
+        </div>
+      </div>
+    </footer>
+  );
+}
+<!-- /FILE:src/components/Footer.tsx -->
+
+<!-- FILE:src/components/Sidebar.tsx -->
+...component code here...
+<!-- /FILE:src/components/Sidebar.tsx -->
+\`\`\`
+
+## GENERATION_META BLOCK (Required for multi-batch)
+
+Include this block to track progress:
+- \`totalFilesPlanned\`: Total files in the project
+- \`filesInThisBatch\`: Files included in this response
+- \`completedFiles\`: All files generated so far (including previous batches)
+- \`remainingFiles\`: Files still to be generated
+- \`currentBatch\`: Current batch number
+- \`totalBatches\`: Estimated total batches
+- \`isComplete\`: Set to \`true\` on final batch
+
+## MARKER FORMAT RULES
+- Use \`<!-- FILE:path -->\` and \`<!-- /FILE:path -->\` for each file
+- Paths in opening and closing tags must match exactly
+- Write code naturally - no JSON escaping needed
+- One file per FILE block
+- Complete file content only
 
 ## CODE REQUIREMENTS
 - Relative imports: \`'./components/X'\`

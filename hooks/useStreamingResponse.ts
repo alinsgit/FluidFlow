@@ -3,12 +3,21 @@
  *
  * Handles streaming AI responses and file detection during generation.
  * Extracted from useCodeGeneration to reduce complexity.
+ * Supports both JSON and Marker response formats.
  */
 
 import { useCallback } from 'react';
 import { debugLog } from './useDebugStore';
 import { getProviderManager, GenerationRequest, GenerationResponse } from '../services/ai';
 import { FilePlan, FileProgress } from './useGenerationState';
+import {
+  isMarkerFormat,
+  parseMarkerPlan,
+  type MarkerFilePlan,
+} from '../utils/markerFormat';
+
+/** Detected response format */
+export type StreamingFormat = 'json' | 'marker' | 'unknown';
 
 export interface StreamingCallbacks {
   setStreamingChars: (chars: number) => void;
@@ -25,6 +34,19 @@ export interface StreamingResult {
   detectedFiles: string[];
   streamResponse: GenerationResponse | null;
   currentFilePlan: FilePlan | null;
+  /** Detected response format (json or marker) */
+  format: StreamingFormat;
+}
+
+/** Error thrown when expected format doesn't match actual response */
+export class FormatMismatchError extends Error {
+  constructor(
+    public expectedFormat: StreamingFormat,
+    public actualContent: string
+  ) {
+    super(`Format mismatch: expected ${expectedFormat} format but response doesn't match`);
+    this.name = 'FormatMismatchError';
+  }
 }
 
 export interface UseStreamingResponseReturn {
@@ -32,12 +54,27 @@ export interface UseStreamingResponseReturn {
     request: GenerationRequest,
     currentModel: string,
     genRequestId: string,
-    genStartTime: number
+    genStartTime: number,
+    /** Expected format - if set, will validate early and throw FormatMismatchError if mismatch */
+    expectedFormat?: StreamingFormat
   ) => Promise<StreamingResult>;
 }
 
 /**
- * Parse file plan from streaming response
+ * Convert MarkerFilePlan to FilePlan format
+ */
+function markerPlanToFilePlan(markerPlan: MarkerFilePlan): FilePlan {
+  return {
+    create: [...markerPlan.create, ...markerPlan.update],
+    delete: markerPlan.delete,
+    total: markerPlan.total,
+    completed: [],
+    sizes: markerPlan.sizes,
+  };
+}
+
+/**
+ * Parse file plan from streaming response (JSON format)
  * Extracts planned files from the // PLAN: comment at the start of AI response
  * Now also extracts sizes for progress tracking
  */
@@ -116,14 +153,14 @@ export function parseFilePlanFromStream(
 }
 
 /**
- * Calculate file progress based on streamed content
+ * Calculate file progress based on streamed content (JSON format)
  * Estimates progress by measuring received chars vs expected line count
  * @param fullText - Full streamed text so far
  * @param filePath - File path to check
  * @param expectedLines - Expected line count from PLAN sizes
  * @returns Progress object with receivedChars and progress percentage
  */
-function calculateFileProgress(
+function calculateFileProgressJson(
   fullText: string,
   filePath: string,
   expectedLines: number
@@ -179,6 +216,72 @@ function calculateFileProgress(
   };
 }
 
+/**
+ * Calculate file progress based on streamed content (Marker format)
+ * Looks for <!-- FILE:path --> content <!-- /FILE:path --> markers
+ */
+function calculateFileProgressMarker(
+  fullText: string,
+  filePath: string,
+  expectedLines: number
+): { receivedChars: number; progress: number; status: 'pending' | 'streaming' | 'complete' } {
+  const CHARS_PER_LINE = 40;
+  const expectedChars = expectedLines * CHARS_PER_LINE;
+
+  // Escape special regex characters in file path
+  const escapedPath = filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Check for opening marker
+  const openPattern = new RegExp(`<!--\\s*FILE:${escapedPath}\\s*-->`);
+  const openMatch = fullText.match(openPattern);
+
+  if (!openMatch || openMatch.index === undefined) {
+    return { receivedChars: 0, progress: 0, status: 'pending' };
+  }
+
+  const contentStart = openMatch.index + openMatch[0].length;
+
+  // Check for closing marker
+  const closePattern = new RegExp(`<!--\\s*/FILE:${escapedPath}\\s*-->`);
+  const closeMatch = fullText.slice(contentStart).match(closePattern);
+
+  if (closeMatch && closeMatch.index !== undefined) {
+    // File is complete
+    const contentEnd = contentStart + closeMatch.index;
+    const receivedChars = contentEnd - contentStart;
+    return {
+      receivedChars,
+      progress: 100,
+      status: 'complete',
+    };
+  }
+
+  // Still streaming - measure content so far
+  const receivedChars = fullText.length - contentStart;
+  const progress = Math.min(99, Math.round((receivedChars / expectedChars) * 100));
+
+  return {
+    receivedChars,
+    progress,
+    status: 'streaming',
+  };
+}
+
+/**
+ * Unified file progress calculator that handles both formats
+ */
+function calculateFileProgress(
+  fullText: string,
+  filePath: string,
+  expectedLines: number,
+  format: StreamingFormat
+): { receivedChars: number; progress: number; status: 'pending' | 'streaming' | 'complete' } {
+  if (format === 'marker') {
+    return calculateFileProgressMarker(fullText, filePath, expectedLines);
+  }
+  return calculateFileProgressJson(fullText, filePath, expectedLines);
+}
+
 export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamingResponseReturn {
   const {
     setStreamingChars,
@@ -197,7 +300,8 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
       request: GenerationRequest,
       currentModel: string,
       genRequestId: string,
-      _genStartTime: number
+      _genStartTime: number,
+      expectedFormat?: StreamingFormat
     ): Promise<StreamingResult> => {
       const manager = getProviderManager();
       let fullText = '';
@@ -206,6 +310,8 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
       let streamResponse: GenerationResponse | null = null;
       let currentFilePlan: FilePlan | null = null;
       let planParsed = false;
+      let detectedFormat: StreamingFormat = 'unknown';
+      let formatValidated = false;
 
       // Progress tracking state
       let lastProgressUpdate = 0;
@@ -234,14 +340,43 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
           chunkCount++;
           setStreamingChars(fullText.length);
 
-          // Try to parse file plan from the start of response
+          // Try to detect format and parse file plan from the start of response
           if (!planParsed && fullText.length > 50) {
-            const parsedPlan = parseFilePlanFromStream(fullText);
+            // Detect format first (only once)
+            if (detectedFormat === 'unknown') {
+              if (isMarkerFormat(fullText)) {
+                detectedFormat = 'marker';
+                console.log('[Stream] Detected MARKER format');
+              } else if (fullText.includes('// PLAN:') || fullText.includes('{"')) {
+                detectedFormat = 'json';
+                console.log('[Stream] Detected JSON format');
+              }
+            }
+
+            // Format validation disabled - parser handles both formats automatically
+            // The early abort feature caused too many false positives
+            if (expectedFormat === 'marker' && !formatValidated && fullText.length > 200) {
+              formatValidated = true;
+              console.log('[Stream] Marker format expected, parser will auto-detect');
+            }
+
+            // Parse plan based on detected format
+            let parsedPlan: FilePlan | null = null;
+
+            if (detectedFormat === 'marker') {
+              const markerPlan = parseMarkerPlan(fullText);
+              if (markerPlan) {
+                parsedPlan = markerPlanToFilePlan(markerPlan);
+              }
+            } else {
+              parsedPlan = parseFilePlanFromStream(fullText);
+            }
+
             if (parsedPlan) {
               currentFilePlan = parsedPlan;
               setFilePlan(currentFilePlan);
               planParsed = true;
-              console.log('[Stream] File plan detected:', currentFilePlan);
+              console.log(`[Stream] File plan detected (${detectedFormat}):`, currentFilePlan);
               const createCount = parsedPlan.create.length;
               setStreamingStatus(`📋 Plan: ${parsedPlan.total} files (${createCount} to generate)`);
 
@@ -276,35 +411,52 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
             }
           }
 
-          // Try to detect file paths as they appear
-          const fileMatches = fullText.match(/"([^"]+\.(tsx?|jsx?|css|json|md|sql))"\s*:/g);
-          if (fileMatches) {
-            const newMatchedFiles = fileMatches
-              .map((m) => m.replace(/[":\s]/g, ''))
-              .filter((f) => !detectedFiles.includes(f) && !f.includes('\\'));
-            if (newMatchedFiles.length > 0) {
-              detectedFiles = [...detectedFiles, ...newMatchedFiles];
-              setStreamingFiles([...detectedFiles]);
+          // Try to detect file paths as they appear (format-aware)
+          let newMatchedFiles: string[] = [];
 
-              // Update status - show detected vs completed
-              // Note: detectedFiles = files we've started receiving (path found)
-              // completedFiles = files whose content is fully received
-              if (currentFilePlan) {
-                const completedCount = completedFiles.size;
-                const streamingCount = detectedFiles.length - completedCount;
+          if (detectedFormat === 'marker') {
+            // Marker format: look for <!-- FILE:path --> markers
+            const markerFileMatches = fullText.match(/<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g);
+            if (markerFileMatches) {
+              newMatchedFiles = markerFileMatches
+                .map((m) => {
+                  const pathMatch = m.match(/FILE:([\w./-]+\.[a-zA-Z]+)/);
+                  return pathMatch ? pathMatch[1] : '';
+                })
+                .filter((f) => f && !detectedFiles.includes(f));
+            }
+          } else {
+            // JSON format: look for "path": patterns
+            const jsonFileMatches = fullText.match(/"([^"]+\.(tsx?|jsx?|css|json|md|sql))"\s*:/g);
+            if (jsonFileMatches) {
+              newMatchedFiles = jsonFileMatches
+                .map((m) => m.replace(/[":\s]/g, ''))
+                .filter((f) => !detectedFiles.includes(f) && !f.includes('\\'));
+            }
+          }
 
-                if (completedCount >= currentFilePlan.total) {
-                  setStreamingStatus(`✅ ${currentFilePlan.total} files complete`);
-                } else if (streamingCount > 0) {
-                  setStreamingStatus(
-                    `📁 ${completedCount}/${currentFilePlan.total} complete, ${streamingCount} streaming...`
-                  );
-                } else {
-                  setStreamingStatus(`📁 ${detectedFiles.length}/${currentFilePlan.total} files detected`);
-                }
+          if (newMatchedFiles.length > 0) {
+            detectedFiles = [...detectedFiles, ...newMatchedFiles];
+            setStreamingFiles([...detectedFiles]);
+
+            // Update status - show detected vs completed
+            // Note: detectedFiles = files we've started receiving (path found)
+            // completedFiles = files whose content is fully received
+            if (currentFilePlan) {
+              const completedCount = completedFiles.size;
+              const streamingCount = detectedFiles.length - completedCount;
+
+              if (completedCount >= currentFilePlan.total) {
+                setStreamingStatus(`✅ ${currentFilePlan.total} files complete`);
+              } else if (streamingCount > 0) {
+                setStreamingStatus(
+                  `📁 ${completedCount}/${currentFilePlan.total} complete, ${streamingCount} streaming...`
+                );
               } else {
-                setStreamingStatus(`📁 ${detectedFiles.length} files detected`);
+                setStreamingStatus(`📁 ${detectedFiles.length}/${currentFilePlan.total} files detected`);
               }
+            } else {
+              setStreamingStatus(`📁 ${detectedFiles.length} files detected`);
             }
           }
 
@@ -322,7 +474,7 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
               if (completedFiles.has(filePath)) continue;
 
               const expectedLines = currentFilePlan.sizes[filePath] || 100;
-              const progress = calculateFileProgress(fullText, filePath, expectedLines);
+              const progress = calculateFileProgress(fullText, filePath, expectedLines, detectedFormat);
 
               // Only update if not pending (content has started)
               if (progress.status !== 'pending') {
@@ -419,6 +571,7 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
         const remainingFiles = currentFilePlan.create.filter((f) => !completedFiles.has(f));
         const totalFiles = currentFilePlan.total;
         const planRef = currentFilePlan; // Capture reference for closures
+        const finalFormat = detectedFormat; // Capture for closures
 
         // Mark remaining files complete with stagger delay
         remainingFiles.forEach((filePath, index) => {
@@ -426,7 +579,7 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
 
           setTimeout(() => {
             const expectedLines = planRef?.sizes?.[filePath] ?? 100;
-            const progress = calculateFileProgress(fullText, filePath, expectedLines);
+            const progress = calculateFileProgress(fullText, filePath, expectedLines, finalFormat);
 
             if (progress.status === 'complete' || progress.progress > 0) {
               // Add to completedFiles and update progress
@@ -483,13 +636,14 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
           timestamp: Date.now(),
           chars: fullText.length,
           filesDetected: detectedFiles,
+          format: detectedFormat,
         };
-        console.log('[Debug] Raw response saved to window.__lastAIResponse (' + fullText.length + ' chars)');
+        console.log(`[Debug] Raw response saved to window.__lastAIResponse (${fullText.length} chars, format: ${detectedFormat})`);
       } catch (e) {
         console.debug('[Debug] Could not save raw response:', e);
       }
 
-      return { fullText, chunkCount, detectedFiles, streamResponse, currentFilePlan };
+      return { fullText, chunkCount, detectedFiles, streamResponse, currentFilePlan, format: detectedFormat };
     },
     [setStreamingChars, setStreamingFiles, setFilePlan, setStreamingStatus, updateFileProgress, initFileProgressFromPlan]
   );

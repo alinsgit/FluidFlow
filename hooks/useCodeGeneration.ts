@@ -14,7 +14,10 @@ import {
   FILE_GENERATION_SCHEMA,
   supportsAdditionalProperties,
 } from '../services/ai/utils/schemas';
-import { CONTINUATION_SYSTEM_INSTRUCTION } from '../components/ControlPanel/prompts';
+import {
+  CONTINUATION_SYSTEM_INSTRUCTION,
+  CONTINUATION_SYSTEM_INSTRUCTION_MARKER,
+} from '../components/ControlPanel/prompts';
 import { FilePlan, TruncatedContent, ContinuationState, FileProgress } from './useGenerationState';
 import { useStreamingResponse } from './useStreamingResponse';
 import { useResponseParser } from './useResponseParser';
@@ -28,6 +31,7 @@ import {
   analyzeTruncatedResponse,
   emergencyCodeBlockExtraction,
 } from '../utils/truncationRecovery';
+import { getFluidFlowConfig } from '../services/fluidflowConfig';
 
 export interface CodeGenerationOptions {
   prompt: string;
@@ -74,7 +78,7 @@ export interface UseCodeGenerationOptions {
   setTruncatedContent: (content: TruncatedContent | null) => void;
   setIsGenerating: (value: boolean) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  reviewChange: (label: string, newFiles: FileSystem) => void;
+  reviewChange: (label: string, newFiles: FileSystem, options?: { skipHistory?: boolean; incompleteFiles?: string[] }) => void;
   handleContinueGeneration: (
     state?: ContinuationState,
     originalFiles?: FileSystem
@@ -142,7 +146,8 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
       providerName: string,
       streamResponse: GenerationResponse | null,
       fullText: string,
-      continuation?: { prompt: string; remainingFiles: string[]; currentBatch: number; totalBatches: number }
+      continuation?: { prompt: string; remainingFiles: string[]; currentBatch: number; totalBatches: number },
+      incompleteFiles?: string[]
     ) => {
       const fileChanges = calculateFileChanges(files, mergedFiles);
       const generatedFileList = Object.keys(newFiles);
@@ -163,16 +168,27 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      setStreamingStatus(`✅ Generated ${generatedFileList.length} files!`);
+
+      // Show warning if there are incomplete files
+      if (incompleteFiles && incompleteFiles.length > 0) {
+        setStreamingStatus(`⚠️ Generated ${generatedFileList.length} files (${incompleteFiles.length} incomplete, excluded)`);
+      } else {
+        setStreamingStatus(`✅ Generated ${generatedFileList.length} files!`);
+      }
 
       console.log('[Generation] Success - adding message and showing diff modal:', {
         fileCount: generatedFileList.length,
         files: generatedFileList,
+        incompleteFiles,
       });
 
       setTimeout(() => {
         setFilePlan(null);
-        reviewChange(existingApp ? 'Updated App' : 'Generated Initial App', mergedFiles);
+        reviewChange(
+          existingApp ? 'Updated App' : 'Generated Initial App',
+          mergedFiles,
+          { incompleteFiles }
+        );
       }, 150);
     },
     [files, existingApp, setMessages, setStreamingStatus, setFilePlan, reviewChange]
@@ -349,10 +365,16 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
           });
         }
 
+        // Use format-aware continuation instruction
+        const currentResponseFormat = getFluidFlowConfig().getResponseFormat();
+        const continuationInstruction = currentResponseFormat === 'marker'
+          ? CONTINUATION_SYSTEM_INSTRUCTION_MARKER
+          : CONTINUATION_SYSTEM_INSTRUCTION;
+
         const contState: ContinuationState = {
           isActive: true,
           originalPrompt: prompt || 'Generate app',
-          systemInstruction: CONTINUATION_SYSTEM_INSTRUCTION,
+          systemInstruction: continuationInstruction,
           generationMeta: result.generationMeta,
           accumulatedFiles: result.recoveredFiles || {},
           currentBatch: 1,
@@ -417,13 +439,17 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
       const currentModel = activeProvider?.defaultModel || selectedModel;
       const providerName = activeProvider?.name || 'AI';
 
-      // Build system instruction
+      // Build system instruction with configured response format
+      const responseFormat = getFluidFlowConfig().getResponseFormat();
+      console.log(`[CodeGeneration] Using response format: ${responseFormat}`);
+
       const systemInstruction = buildSystemInstruction(
         !!existingApp,
         !!brandAtt,
         isEducationMode,
         !!diffModeEnabled,
-        generateSystemInstruction()
+        generateSystemInstruction(),
+        responseFormat
       );
 
       // Build prompt parts
@@ -433,9 +459,9 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
         prompt: promptParts.join('\n\n'),
         systemInstruction,
         images,
-        responseFormat: 'json',
+        responseFormat: responseFormat === 'marker' ? undefined : 'json',
         responseSchema:
-          activeProvider?.type && supportsAdditionalProperties(activeProvider.type)
+          responseFormat !== 'marker' && activeProvider?.type && supportsAdditionalProperties(activeProvider.type)
             ? FILE_GENERATION_SCHEMA
             : undefined,
         conversationHistory:
@@ -467,8 +493,10 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
 
       try {
         // Process streaming response
+        // Pass expected format for early validation (abort if mismatch)
+        const expectedFormat = responseFormat === 'marker' ? 'marker' : undefined;
         const { fullText, chunkCount, detectedFiles, streamResponse, currentFilePlan } =
-          await processStreamingResponse(request, currentModel, genRequestId, genStartTime);
+          await processStreamingResponse(request, currentModel, genRequestId, genStartTime, expectedFormat);
 
         // Show parsing status
         setStreamingStatus(`✨ Processing ${detectedFiles.length} files...`);
@@ -479,6 +507,7 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
         let newFiles: Record<string, string>;
         let wasTruncated = false;
         let generationMeta: GenerationMeta | undefined;
+        let incompleteFiles: string[] | undefined;
         let continuation:
           | {
               prompt: string;
@@ -519,6 +548,7 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
             wasTruncated = stdResult.wasTruncated;
             generationMeta = stdResult.generationMeta;
             continuation = stdResult.continuation;
+            incompleteFiles = stdResult.incompleteFiles;
           }
         } else {
           // Standard full-file mode
@@ -536,6 +566,7 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
           wasTruncated = stdResult.wasTruncated;
           generationMeta = stdResult.generationMeta;
           continuation = stdResult.continuation;
+          incompleteFiles = stdResult.incompleteFiles;
         }
 
         // Check for missing files based on filePlan
@@ -581,7 +612,8 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
           providerName,
           streamResponse,
           fullText,
-          continuation
+          continuation,
+          incompleteFiles
         );
 
         return { success: true, continuationStarted: false };
