@@ -217,17 +217,25 @@ export function emergencyCodeBlockExtraction(
 
   // PATTERN 2: File path comment followed directly by code (NO backticks)
   // Example: "// src/components/Header.tsx\nimport { useState } from 'react'"
+  // Also handles: "// App.tsx", "// components/Header.tsx"
   // This handles AI responses that don't use markdown code blocks
   if (Object.keys(emergencyFiles).length === 0) {
     console.log('[EmergencyExtraction] No code blocks found, trying file path comment extraction...');
 
     // Find all file path comments and extract code until next file path or end
-    const filePathRegex = /\/\/\s*(src\/[\w./-]+\.(?:tsx?|jsx?|css))\s*\n/g;
+    // More flexible regex: // path.ext or // folder/path.ext (optionally with src/)
+    const filePathRegex = /\/\/\s*((?:src\/)?[\w./-]+\.(?:tsx?|jsx?|css|json|md))\s*\n/g;
     const filePathMatches = [...fullText.matchAll(filePathRegex)];
 
     for (let i = 0; i < filePathMatches.length; i++) {
       const match = filePathMatches[i];
-      const filePath = match[1];
+      let filePath = match[1];
+
+      // Normalize path - add src/ prefix if not present
+      if (!filePath.startsWith('src/')) {
+        filePath = 'src/' + filePath;
+      }
+
       const startPos = (match.index || 0) + match[0].length;
 
       // End position is either next file path or end of text

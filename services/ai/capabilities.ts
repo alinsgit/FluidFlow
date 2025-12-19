@@ -88,6 +88,7 @@ const MODEL_CAPABILITIES: Record<string, Partial<ModelCapabilities>> = {
   'claude-3-haiku': { supportsVision: true, supportsStreaming: true, supportsJsonMode: true, contextWindow: 200000, maxOutputTokens: 4096 },
 
   // Zai/GLM models
+  'glm-4.6': { supportsVision: true, supportsStreaming: true, supportsJsonMode: true, contextWindow: 200000, maxOutputTokens: 131072 },
   'GLM-4': { supportsVision: true, supportsStreaming: true, supportsJsonMode: true, contextWindow: 128000, maxOutputTokens: 8192 },
 
   // Local models (Ollama/LMStudio)
@@ -141,7 +142,7 @@ const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
     supportsCustomBaseUrl: true,
   },
   zai: {
-    defaultCapabilities: { ...DEFAULT_CAPABILITIES, supportsVision: true, supportsJsonMode: true, contextWindow: 128000 },
+    defaultCapabilities: { ...DEFAULT_CAPABILITIES, supportsVision: true, supportsJsonMode: true, contextWindow: 200000, maxOutputTokens: 131072 },
     supportsModelList: false,
     requiresApiKey: true,
     supportsCustomBaseUrl: true,

@@ -781,6 +781,18 @@ export function cleanGeneratedCode(code: string, filePath?: string): string {
   cleaned = cleaned.replace(/<!--\s*EXPLANATION\s*-->[\s\S]*?<!--\s*\/EXPLANATION\s*-->/g, '');
   // Remove standalone EXPLANATION markers
   cleaned = cleaned.replace(/<!--\s*\/?EXPLANATION\s*-->/g, '');
+  // Remove: <!-- META --> blocks (v2 format)
+  cleaned = cleaned.replace(/<!--\s*META\s*-->[\s\S]*?<!--\s*\/META\s*-->/g, '');
+  // Remove standalone META markers
+  cleaned = cleaned.replace(/<!--\s*\/?META\s*-->/g, '');
+  // Remove: <!-- MANIFEST --> blocks (v2 format)
+  cleaned = cleaned.replace(/<!--\s*MANIFEST\s*-->[\s\S]*?<!--\s*\/MANIFEST\s*-->/g, '');
+  // Remove standalone MANIFEST markers
+  cleaned = cleaned.replace(/<!--\s*\/?MANIFEST\s*-->/g, '');
+  // Remove: <!-- BATCH --> blocks (v2 format)
+  cleaned = cleaned.replace(/<!--\s*BATCH\s*-->[\s\S]*?<!--\s*\/BATCH\s*-->/g, '');
+  // Remove standalone BATCH markers
+  cleaned = cleaned.replace(/<!--\s*\/?BATCH\s*-->/g, '');
 
   // Check if this is a JS/TS file
   const isJsFile = filePath
@@ -835,6 +847,20 @@ export function cleanGeneratedCode(code: string, filePath?: string): string {
     cleaned = cleaned.replace(/=\{\s*\(([^)]*)\)\s*\{(?!\s*=>)/g, (match, params) => {
       if (match.includes('=>')) return match;
       return '={(' + params + ') => {';
+    });
+
+    // ─────────────────────────────────────────────────────────────────
+    // FIX 4: Object property arrow syntax - "render: (value) {" → "render: (value) => {"
+    // AI sometimes forgets the => in object method shorthand
+    // ─────────────────────────────────────────────────────────────────
+    // Pattern: propertyName: (params) { without =>
+    // Handles: render: (value: string) {}, onClick: (e) {}, getValue: () {}
+    // Must not match function declarations or already correct arrows
+    cleaned = cleaned.replace(/(\w+)\s*:\s*\(([^)]*)\)\s*\{(?!\s*=>)/g, (match, prop, params) => {
+      if (match.includes('=>')) return match;
+      // Skip if it looks like a destructuring pattern
+      if (/^\s*\{/.test(params)) return match;
+      return prop + ': (' + params + ') => {';
     });
 
     // Pattern: return () { (useEffect cleanup)
@@ -1606,9 +1632,34 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
         return null;
       }
 
-      // Extract generationMeta if present (new smart continuation format)
+      // Extract generationMeta - supports multiple formats
       let generationMeta: GenerationMeta | undefined;
-      if (parsed.generationMeta) {
+
+      // Format 1: JSON v2 with batch object
+      if (parsed.batch) {
+        const batch = parsed.batch;
+        const plan = parsed.plan || {};
+        generationMeta = {
+          totalFilesPlanned: (plan.create?.length || 0) + (plan.update?.length || 0),
+          filesInThisBatch: Object.keys(cleaned),
+          completedFiles: batch.completed || Object.keys(cleaned),
+          remainingFiles: batch.remaining || [],
+          currentBatch: batch.current || 1,
+          totalBatches: batch.total || 1,
+          isComplete: batch.isComplete ?? true
+        };
+        console.log('[parseMultiFileResponse] JSON v2 batch detected:', {
+          format: parsed.meta?.format || 'json',
+          version: parsed.meta?.version || '1.0',
+          batch: `${generationMeta.currentBatch}/${generationMeta.totalBatches}`,
+          completed: generationMeta.completedFiles.length,
+          remaining: generationMeta.remainingFiles.length,
+          isComplete: generationMeta.isComplete
+        });
+      }
+
+      // Format 2: Legacy generationMeta object
+      if (!generationMeta && parsed.generationMeta) {
         generationMeta = {
           totalFilesPlanned: parsed.generationMeta.totalFilesPlanned || 0,
           filesInThisBatch: parsed.generationMeta.filesInThisBatch || [],
@@ -1618,7 +1669,7 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
           totalBatches: parsed.generationMeta.totalBatches || 1,
           isComplete: parsed.generationMeta.isComplete ?? true
         };
-        console.log('[parseMultiFileResponse] GenerationMeta detected:', {
+        console.log('[parseMultiFileResponse] Legacy generationMeta detected:', {
           batch: `${generationMeta.currentBatch}/${generationMeta.totalBatches}`,
           completed: generationMeta.completedFiles.length,
           remaining: generationMeta.remainingFiles.length,
@@ -1626,7 +1677,7 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
         });
       }
 
-      // Convert old continuation format to generationMeta if present
+      // Format 3: Old continuation format
       if (!generationMeta && parsed.continuation) {
         generationMeta = {
           totalFilesPlanned: (parsed.continuation.remainingFiles?.length || 0) + Object.keys(cleaned).length,
@@ -1640,11 +1691,14 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
         console.log('[parseMultiFileResponse] Converted old continuation to generationMeta');
       }
 
+      // Extract deleted files from plan (v2) or deletedFiles (legacy)
+      const deletedFiles = parsed.plan?.delete || parsed.deletedFiles;
+
       return {
         files: cleaned,
         explanation: typeof explanation === 'string' ? explanation : undefined,
         truncated: wasTruncated,
-        deletedFiles: parsed.deletedFiles,
+        deletedFiles,
         fileChanges: parsed.fileChanges,
         generationMeta,
         continuation: parsed.continuation

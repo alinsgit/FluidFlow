@@ -29,6 +29,60 @@
 import { cleanGeneratedCode } from './cleanCode';
 import type { GenerationMeta } from './cleanCode';
 
+// ============================================================================
+// MARKER FORMAT V2 - Enhanced structured format
+// ============================================================================
+
+/**
+ * META block - Format metadata
+ *
+ * <!-- META -->
+ * format: marker
+ * version: 2.0
+ * timestamp: 2025-01-15T10:30:00Z
+ * <!-- /META -->
+ */
+export interface MarkerMeta {
+  format: string;
+  version: string;
+  timestamp?: string;
+}
+
+/**
+ * MANIFEST entry - File details from table
+ *
+ * | File | Action | Lines | Tokens | Status |
+ * | src/App.tsx | create | 45 | ~320 | included |
+ */
+export interface MarkerManifestEntry {
+  file: string;
+  action: 'create' | 'update' | 'delete';
+  lines: number;
+  tokens: number;
+  status: 'included' | 'marked' | 'pending' | 'skipped';
+}
+
+/**
+ * BATCH block - Multi-batch generation info
+ *
+ * <!-- BATCH -->
+ * current: 1
+ * total: 3
+ * isComplete: false
+ * completed: src/App.tsx, src/components/Header.tsx
+ * remaining: src/utils/helpers.ts, src/hooks/useAuth.ts
+ * nextBatchHint: Utility functions and type definitions
+ * <!-- /BATCH -->
+ */
+export interface MarkerBatch {
+  current: number;
+  total: number;
+  isComplete: boolean;
+  completed: string[];
+  remaining: string[];
+  nextBatchHint?: string;
+}
+
 // File plan structure from marker format
 export interface MarkerFilePlan {
   create: string[];
@@ -38,7 +92,7 @@ export interface MarkerFilePlan {
   sizes?: Record<string, number>;
 }
 
-// Parsed marker format response
+// Parsed marker format response (v2 enhanced)
 export interface MarkerFormatResponse {
   files: Record<string, string>;
   explanation?: string;
@@ -47,6 +101,18 @@ export interface MarkerFormatResponse {
   truncated?: boolean;
   /** Files that were started but not completed (missing closing marker) */
   incompleteFiles?: string[];
+  // V2 additions
+  meta?: MarkerMeta;
+  manifest?: MarkerManifestEntry[];
+  batch?: MarkerBatch;
+  /** Validation result: files in manifest vs files actually included */
+  validation?: {
+    expected: string[];
+    received: string[];
+    missing: string[];
+    extra: string[];
+    isValid: boolean;
+  };
 }
 
 /**
@@ -197,6 +263,219 @@ export function parseMarkerGenerationMeta(response: string): GenerationMeta | un
   }
 
   return meta;
+}
+
+// ============================================================================
+// MARKER FORMAT V2 PARSERS
+// ============================================================================
+
+/**
+ * Parse META block (v2)
+ *
+ * <!-- META -->
+ * format: marker
+ * version: 2.0
+ * timestamp: 2025-01-15T10:30:00Z
+ * <!-- /META -->
+ */
+export function parseMarkerMeta(response: string): MarkerMeta | undefined {
+  const match = response.match(/<!--\s*META\s*-->([\s\S]*?)<!--\s*\/META\s*-->/);
+  if (!match) return undefined;
+
+  const content = match[1].trim();
+  const lines = content.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  const meta: MarkerMeta = {
+    format: 'marker',
+    version: '1.0',
+  };
+
+  for (const line of lines) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) continue;
+
+    const key = line.slice(0, colonIdx).trim().toLowerCase();
+    const value = line.slice(colonIdx + 1).trim();
+
+    switch (key) {
+      case 'format':
+        meta.format = value;
+        break;
+      case 'version':
+        meta.version = value;
+        break;
+      case 'timestamp':
+        meta.timestamp = value;
+        break;
+    }
+  }
+
+  return meta;
+}
+
+/**
+ * Parse MANIFEST block (v2)
+ *
+ * <!-- MANIFEST -->
+ * | File | Action | Lines | Tokens | Status |
+ * |------|--------|-------|--------|--------|
+ * | src/App.tsx | create | 45 | ~320 | included |
+ * | src/components/Header.tsx | create | 62 | ~450 | included |
+ * <!-- /MANIFEST -->
+ */
+export function parseMarkerManifest(response: string): MarkerManifestEntry[] | undefined {
+  const match = response.match(/<!--\s*MANIFEST\s*-->([\s\S]*?)<!--\s*\/MANIFEST\s*-->/);
+  if (!match) return undefined;
+
+  const content = match[1].trim();
+  const lines = content.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  const entries: MarkerManifestEntry[] = [];
+
+  for (const line of lines) {
+    // Skip header row and separator
+    if (line.startsWith('| File') || line.startsWith('|--') || line.startsWith('|-')) {
+      continue;
+    }
+
+    // Parse table row: | src/App.tsx | create | 45 | ~320 | included |
+    if (line.startsWith('|')) {
+      const cells = line
+        .split('|')
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      if (cells.length >= 5) {
+        const [file, action, linesStr, tokensStr, status] = cells;
+
+        // Parse tokens (handle ~320 format)
+        const tokens = parseInt(tokensStr.replace(/[~,]/g, ''), 10) || 0;
+        const lineCount = parseInt(linesStr, 10) || 0;
+
+        // Validate action
+        const validAction = ['create', 'update', 'delete'].includes(action.toLowerCase())
+          ? (action.toLowerCase() as 'create' | 'update' | 'delete')
+          : 'create';
+
+        // Validate status
+        const validStatus = ['included', 'marked', 'pending', 'skipped'].includes(status.toLowerCase())
+          ? (status.toLowerCase() as 'included' | 'marked' | 'pending' | 'skipped')
+          : 'included';
+
+        entries.push({
+          file,
+          action: validAction,
+          lines: lineCount,
+          tokens,
+          status: validStatus,
+        });
+      }
+    }
+  }
+
+  return entries.length > 0 ? entries : undefined;
+}
+
+/**
+ * Parse BATCH block (v2)
+ *
+ * <!-- BATCH -->
+ * current: 1
+ * total: 3
+ * isComplete: false
+ * completed: src/App.tsx, src/components/Header.tsx
+ * remaining: src/utils/helpers.ts, src/hooks/useAuth.ts
+ * nextBatchHint: Utility functions and type definitions
+ * <!-- /BATCH -->
+ */
+export function parseMarkerBatch(response: string): MarkerBatch | undefined {
+  const match = response.match(/<!--\s*BATCH\s*-->([\s\S]*?)<!--\s*\/BATCH\s*-->/);
+  if (!match) return undefined;
+
+  const content = match[1].trim();
+  const lines = content.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  const batch: MarkerBatch = {
+    current: 1,
+    total: 1,
+    isComplete: true,
+    completed: [],
+    remaining: [],
+  };
+
+  for (const line of lines) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) continue;
+
+    const key = line.slice(0, colonIdx).trim().toLowerCase();
+    const value = line.slice(colonIdx + 1).trim();
+
+    switch (key) {
+      case 'current':
+        batch.current = parseInt(value, 10) || 1;
+        break;
+      case 'total':
+        batch.total = parseInt(value, 10) || 1;
+        break;
+      case 'iscomplete':
+        batch.isComplete = value.toLowerCase() === 'true';
+        break;
+      case 'completed':
+        batch.completed = value.split(',').map((f) => f.trim()).filter(Boolean);
+        break;
+      case 'remaining':
+        batch.remaining = value.split(',').map((f) => f.trim()).filter(Boolean);
+        break;
+      case 'nextbatchhint':
+        batch.nextBatchHint = value;
+        break;
+    }
+  }
+
+  return batch;
+}
+
+/**
+ * Validate files against manifest
+ * Returns validation result showing expected vs received files
+ */
+export function validateManifest(
+  manifest: MarkerManifestEntry[] | undefined,
+  files: Record<string, string>
+): MarkerFormatResponse['validation'] {
+  if (!manifest) {
+    return {
+      expected: [],
+      received: Object.keys(files),
+      missing: [],
+      extra: Object.keys(files),
+      isValid: true, // No manifest = no validation
+    };
+  }
+
+  // Files expected to be included (status = 'included')
+  const expected = manifest
+    .filter((e) => e.status === 'included' && e.action !== 'delete')
+    .map((e) => e.file);
+
+  const received = Object.keys(files);
+  const missing = expected.filter((f) => !received.includes(f));
+  const extra = received.filter((f) => !expected.includes(f));
+
+  return {
+    expected,
+    received,
+    missing,
+    extra,
+    isValid: missing.length === 0,
+  };
+}
+
+/**
+ * Check if response uses marker format v2 (has META block)
+ */
+export function isMarkerFormatV2(response: string): boolean {
+  return /<!--\s*META\s*-->/.test(response);
 }
 
 /**
@@ -400,11 +679,21 @@ export function parseMarkerFormatResponse(response: string): MarkerFormatRespons
   }
 
   try {
-    // Parse all components
+    // Parse all components (v1 + v2)
     const plan = parseMarkerPlan(response);
     const explanation = parseMarkerExplanation(response);
     const generationMeta = parseMarkerGenerationMeta(response);
     const files = parseMarkerFiles(response);
+
+    // Parse v2 blocks (optional - backwards compatible)
+    const meta = parseMarkerMeta(response);
+    const manifest = parseMarkerManifest(response);
+    const batch = parseMarkerBatch(response);
+
+    // Log v2 format detection
+    if (meta) {
+      console.log(`[parseMarkerFormatResponse] Marker format v${meta.version} detected`);
+    }
 
     // Check if we have any files
     if (Object.keys(files).length === 0) {
@@ -430,7 +719,18 @@ export function parseMarkerFormatResponse(response: string): MarkerFormatRespons
           generationMeta,
           truncated: true,
           incompleteFiles: Object.keys(streaming), // Track which files are incomplete
+          // V2 additions
+          meta,
+          manifest,
+          batch,
+          validation: validateManifest(manifest, complete),
         };
+      }
+
+      // Validate against manifest
+      const validation = validateManifest(manifest, complete);
+      if (manifest && !validation.isValid) {
+        console.warn('[parseMarkerFormatResponse] MANIFEST VALIDATION FAILED - missing files:', validation.missing);
       }
 
       // Return ONLY complete files - do NOT include streaming/incomplete files
@@ -441,6 +741,11 @@ export function parseMarkerFormatResponse(response: string): MarkerFormatRespons
         generationMeta,
         truncated: Object.keys(streaming).length > 0,
         incompleteFiles: Object.keys(streaming).length > 0 ? Object.keys(streaming) : undefined,
+        // V2 additions
+        meta,
+        manifest,
+        batch,
+        validation,
       };
     }
 
@@ -452,6 +757,17 @@ export function parseMarkerFormatResponse(response: string): MarkerFormatRespons
       console.warn('[parseMarkerFormatResponse] Some files are incomplete:', incompleteFiles);
     }
 
+    // Validate against manifest
+    const validation = validateManifest(manifest, files);
+    if (manifest && !validation.isValid) {
+      console.warn('[parseMarkerFormatResponse] MANIFEST VALIDATION FAILED - missing files:', validation.missing);
+    }
+
+    // Log batch info if present
+    if (batch && !batch.isComplete) {
+      console.log(`[parseMarkerFormatResponse] Batch ${batch.current}/${batch.total} - remaining: ${batch.remaining.length} files`);
+    }
+
     return {
       files,
       explanation,
@@ -459,6 +775,11 @@ export function parseMarkerFormatResponse(response: string): MarkerFormatRespons
       generationMeta,
       truncated: incompleteFiles.length > 0,
       incompleteFiles: incompleteFiles.length > 0 ? incompleteFiles : undefined,
+      // V2 additions
+      meta,
+      manifest,
+      batch,
+      validation,
     };
   } catch (error) {
     console.error('[parseMarkerFormatResponse] Parse error:', error);

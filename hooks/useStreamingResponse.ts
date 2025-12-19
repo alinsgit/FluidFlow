@@ -75,13 +75,20 @@ function markerPlanToFilePlan(markerPlan: MarkerFilePlan): FilePlan {
 
 /**
  * Parse file plan from streaming response (JSON format)
- * Extracts planned files from the // PLAN: comment at the start of AI response
- * Now also extracts sizes for progress tracking
+ * Supports both:
+ * - Legacy format: // PLAN: {"create":[...],"update":[...],...}
+ * - JSON v2 format: {"meta":...,"plan":{"create":[...],...},"manifest":[...],...}
  */
 export function parseFilePlanFromStream(
   fullText: string
 ): { create: string[]; delete: string[]; total: number; completed: string[]; sizes?: Record<string, number> } | null {
-  // More robust regex to capture JSON with nested arrays
+  // Try JSON v2 format first (has "plan": object at root level)
+  const jsonV2Result = parseJsonV2Plan(fullText);
+  if (jsonV2Result) {
+    return jsonV2Result;
+  }
+
+  // Try legacy // PLAN: comment format
   const planLineMatch = fullText.match(/\/\/\s*PLAN:\s*(\{.+)/);
   if (!planLineMatch) return null;
 
@@ -150,6 +157,120 @@ export function parseFilePlanFromStream(
   }
 
   return null;
+}
+
+/**
+ * Parse file plan from JSON v2 format
+ * JSON v2 has: { "meta": {...}, "plan": {"create":[], "update":[], "delete":[]}, "manifest": [...] }
+ */
+function parseJsonV2Plan(
+  fullText: string
+): { create: string[]; delete: string[]; total: number; completed: string[]; sizes?: Record<string, number> } | null {
+  // Check if this looks like JSON v2 (starts with { and has "plan": key)
+  const trimmed = fullText.trim();
+  if (!trimmed.startsWith('{')) return null;
+
+  // Try to extract plan object using regex (more robust during streaming)
+  const planMatch = fullText.match(/"plan"\s*:\s*\{([^}]*)\}/);
+  if (!planMatch) return null;
+
+  try {
+    // Extract create/update/delete arrays from plan
+    const planContent = planMatch[1];
+
+    const extractArray = (key: string): string[] => {
+      const match = planContent.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]`));
+      if (!match) return [];
+      const items = match[1].match(/"([^"]+)"/g);
+      return items ? items.map(s => s.replace(/"/g, '')) : [];
+    };
+
+    const createFiles = extractArray('create');
+    const updateFiles = extractArray('update');
+    const deleteFiles = extractArray('delete');
+    const allFiles = [...createFiles, ...updateFiles];
+
+    if (allFiles.length === 0) return null;
+
+    // Try to extract sizes from manifest using matchAll
+    const sizes: Record<string, number> = {};
+    const manifestMatch = fullText.match(/"manifest"\s*:\s*\[([\s\S]*?)\]/);
+    if (manifestMatch) {
+      // Extract each manifest entry using matchAll
+      const entryPattern = /\{\s*"path"\s*:\s*"([^"]+)"[^}]*"lines"\s*:\s*(\d+)/g;
+      const entries = [...manifestMatch[1].matchAll(entryPattern)];
+      for (const entry of entries) {
+        sizes[entry[1]] = parseInt(entry[2], 10);
+      }
+    }
+
+    // Try to extract batch info for completed files
+    let completed: string[] = [];
+    const batchMatch = fullText.match(/"batch"\s*:\s*\{([^}]*)\}/);
+    if (batchMatch) {
+      const completedMatch = batchMatch[1].match(/"completed"\s*:\s*\[([^\]]*)\]/);
+      if (completedMatch) {
+        const items = completedMatch[1].match(/"([^"]+)"/g);
+        completed = items ? items.map(s => s.replace(/"/g, '')) : [];
+      }
+    }
+
+    console.log('[parseJsonV2Plan] Detected JSON v2 plan:', {
+      create: createFiles.length,
+      update: updateFiles.length,
+      delete: deleteFiles.length,
+      hasSizes: Object.keys(sizes).length > 0,
+    });
+
+    return {
+      create: allFiles,
+      delete: deleteFiles,
+      total: allFiles.length,
+      completed,
+      sizes: Object.keys(sizes).length > 0 ? sizes : undefined,
+    };
+  } catch (e) {
+    console.debug('[parseJsonV2Plan] Parse error:', e);
+    return null;
+  }
+}
+
+/**
+ * Parse file plan from simple comment format
+ * Format: // filename.tsx followed by code, then // another-file.tsx, etc.
+ */
+function parseSimpleCommentPlan(
+  fullText: string
+): { create: string[]; delete: string[]; total: number; completed: string[]; sizes?: Record<string, number> } | null {
+  // Match all file path comments
+  const filePathRegex = /\/\/\s*((?:src\/)?[\w./-]+\.(?:tsx?|jsx?|css|json|md))\s*\n/g;
+  const matches = [...fullText.matchAll(filePathRegex)];
+
+  if (matches.length === 0) return null;
+
+  const files: string[] = [];
+  for (const match of matches) {
+    let filePath = match[1];
+    // Normalize path - add src/ prefix if not present
+    if (!filePath.startsWith('src/')) {
+      filePath = 'src/' + filePath;
+    }
+    if (!files.includes(filePath)) {
+      files.push(filePath);
+    }
+  }
+
+  if (files.length === 0) return null;
+
+  console.log('[parseSimpleCommentPlan] Detected files from comments:', files);
+
+  return {
+    create: files,
+    delete: [],
+    total: files.length,
+    completed: [],
+    sizes: undefined, // No size info in this format
+  };
 }
 
 /**
@@ -347,9 +468,19 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
               if (isMarkerFormat(fullText)) {
                 detectedFormat = 'marker';
                 console.log('[Stream] Detected MARKER format');
-              } else if (fullText.includes('// PLAN:') || fullText.includes('{"')) {
+              } else if (fullText.includes('// PLAN:')) {
+                detectedFormat = 'json';
+                console.log('[Stream] Detected JSON format (legacy with PLAN comment)');
+              } else if (fullText.trim().startsWith('{') && (fullText.includes('"meta"') || fullText.includes('"plan"'))) {
+                detectedFormat = 'json';
+                console.log('[Stream] Detected JSON v2 format');
+              } else if (fullText.includes('{"')) {
                 detectedFormat = 'json';
                 console.log('[Stream] Detected JSON format');
+              } else if (/\/\/\s*(?:src\/)?[\w./-]+\.(?:tsx?|jsx?|css)\s*\n/.test(fullText)) {
+                // Simple comment format: // filename.tsx followed by code
+                detectedFormat = 'json'; // Will be handled by emergencyCodeBlockExtraction
+                console.log('[Stream] Detected simple comment format (// filename.ext)');
               }
             }
 
@@ -369,7 +500,11 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
                 parsedPlan = markerPlanToFilePlan(markerPlan);
               }
             } else {
+              // Try JSON format first, then simple comment format
               parsedPlan = parseFilePlanFromStream(fullText);
+              if (!parsedPlan) {
+                parsedPlan = parseSimpleCommentPlan(fullText);
+              }
             }
 
             if (parsedPlan) {

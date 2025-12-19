@@ -206,6 +206,25 @@ describe('cleanCode', () => {
       expect(cleanGeneratedCode(input3)).toBe('const x = 1;');
     });
 
+    it('should remove v2 format markers (META, MANIFEST, BATCH)', () => {
+      // Test <!-- META --> block
+      const input1 = '<!-- META -->\nformat: marker\nversion: 2.0\n<!-- /META -->\nconst x = 1;';
+      expect(cleanGeneratedCode(input1)).toBe('const x = 1;');
+
+      // Test <!-- MANIFEST --> block
+      const input2 = 'const x = 1;\n<!-- MANIFEST -->\n| File | Action |\n<!-- /MANIFEST -->';
+      expect(cleanGeneratedCode(input2)).toBe('const x = 1;');
+
+      // Test <!-- BATCH --> block
+      const input3 = 'const x = 1;\n}\n\n<!-- BATCH -->\ncurrent: 1\ntotal: 1\nisComplete: true\n<!-- /BATCH -->';
+      expect(cleanGeneratedCode(input3)).toBe('const x = 1;\n}');
+
+      // Test standalone BATCH markers (single marker removal)
+      const input4 = 'const x = 1;\n<!-- /BATCH -->';
+      const result4 = cleanGeneratedCode(input4);
+      expect(result4).toBe('const x = 1;');
+    });
+
     it('should fix JSX event handler missing arrow: onClick={() {}}', () => {
       // onClick={() {}} → onClick={() => {}}
       const input1 = '<button onClick={() {}}>Click</button>';
@@ -221,6 +240,28 @@ describe('cleanCode', () => {
       const input3 = '<button onClick={() => {}}>Click</button>';
       const result3 = cleanGeneratedCode(input3, 'test.tsx');
       expect(result3).toBe(input3);
+    });
+
+    it('should fix object property missing arrow: render: (value) {}', () => {
+      // render: (value: string) {} → render: (value: string) => {}
+      const input1 = `const columns = [{ render: (value: string) { return value; } }];`;
+      const result1 = cleanGeneratedCode(input1, 'test.tsx');
+      expect(result1).toContain('render: (value: string) => {');
+
+      // onClick: (e) {} → onClick: (e) => {}
+      const input2 = `const handlers = { onClick: (e) { console.log(e); } };`;
+      const result2 = cleanGeneratedCode(input2, 'test.tsx');
+      expect(result2).toContain('onClick: (e) => {');
+
+      // getValue: () {} → getValue: () => {}
+      const input3 = `const obj = { getValue: () { return 42; } };`;
+      const result3 = cleanGeneratedCode(input3, 'test.tsx');
+      expect(result3).toContain('getValue: () => {');
+
+      // Don't modify valid arrow functions
+      const input4 = `const obj = { getValue: () => { return 42; } };`;
+      const result4 = cleanGeneratedCode(input4, 'test.tsx');
+      expect(result4).toContain('getValue: () => {');
     });
   });
 
@@ -275,6 +316,38 @@ describe('cleanCode', () => {
       expect(result?.generationMeta?.currentBatch).toBe(1);
       expect(result?.generationMeta?.totalBatches).toBe(3);
       expect(result?.generationMeta?.isComplete).toBe(false);
+    });
+
+    it('should handle JSON v2 format with batch object', () => {
+      const validCode = 'const App = () => null;';
+      const input = JSON.stringify({
+        meta: { format: 'json', version: '2.0' },
+        plan: { create: ['src/App.tsx', 'src/Header.tsx'], update: [], delete: ['src/old.tsx'] },
+        manifest: [
+          { path: 'src/App.tsx', action: 'create', lines: 10, tokens: 100, status: 'included' },
+          { path: 'src/Header.tsx', action: 'create', lines: 20, tokens: 200, status: 'pending' }
+        ],
+        explanation: 'Created components',
+        files: { 'src/App.tsx': validCode },
+        batch: {
+          current: 1,
+          total: 2,
+          isComplete: false,
+          completed: ['src/App.tsx'],
+          remaining: ['src/Header.tsx']
+        }
+      });
+      const result = parseMultiFileResponse(input);
+      expect(result).not.toBeNull();
+      expect(result?.files['src/App.tsx']).toBeDefined();
+      expect(result?.explanation).toBe('Created components');
+      expect(result?.generationMeta).toBeDefined();
+      expect(result?.generationMeta?.currentBatch).toBe(1);
+      expect(result?.generationMeta?.totalBatches).toBe(2);
+      expect(result?.generationMeta?.isComplete).toBe(false);
+      expect(result?.generationMeta?.completedFiles).toEqual(['src/App.tsx']);
+      expect(result?.generationMeta?.remainingFiles).toEqual(['src/Header.tsx']);
+      expect(result?.deletedFiles).toEqual(['src/old.tsx']);
     });
 
     it('should use cleanGeneratedCode on file content', () => {

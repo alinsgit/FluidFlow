@@ -1,55 +1,51 @@
+import OpenAI from 'openai';
 import { AIProvider, ProviderConfig, GenerationRequest, GenerationResponse, StreamChunk } from '../types';
-import { fetchWithTimeout, TIMEOUT_TEST_CONNECTION, TIMEOUT_GENERATE } from '../utils/fetchWithTimeout';
 import { prepareJsonRequest } from '../utils/jsonOutput';
-import { throwIfNotOk } from '../utils/errorHandling';
-import { processSSEStream } from '../utils/streamParser';
 
-// OpenAI-compatible API interfaces
-interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+// Z.AI Coding API endpoint (for GLM-4.6 coding plan)
+const ZAI_CODING_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
 
-interface ChatCompletionRequest {
-  model: string;
-  messages: ChatMessage[];
-  max_tokens: number;
-  temperature: number;
-  stream?: boolean;
-  response_format?: { type: 'json_object' };
-}
+// Default model
+const DEFAULT_MODEL = 'glm-4.6';
+
+// Max output tokens (128K supported)
+const DEFAULT_MAX_TOKENS = 65536; // Use 64K as safe default, can go up to 128K
 
 export class ZAIProvider implements AIProvider {
   readonly config: ProviderConfig;
+  private client: OpenAI;
 
   constructor(config: ProviderConfig) {
     this.config = config;
+
+    // Use coding endpoint for GLM-4.6
+    const baseURL = config.baseUrl || ZAI_CODING_BASE_URL;
+
+    this.client = new OpenAI({
+      apiKey: config.apiKey,
+      baseURL,
+      dangerouslyAllowBrowser: true, // Required for browser environment
+    });
   }
 
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      // BUG-010 fix: Add timeout to prevent indefinite hanging
-      const response = await fetchWithTimeout(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.config.defaultModel || 'GLM-4.6',
-          messages: [{ role: 'user', content: 'Test' }],
-          max_tokens: 10,
-        }),
-        timeout: TIMEOUT_TEST_CONNECTION,
+      const completion = await this.client.chat.completions.create({
+        model: this.config.defaultModel || DEFAULT_MODEL,
+        messages: [{ role: 'user', content: 'Test' }],
+        max_tokens: 10,
       });
-      return response.ok ? { success: true } : { success: false, error: 'Failed to connect' };
+
+      return completion.choices[0] ? { success: true } : { success: false, error: 'No response' };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ZAI] Connection test failed:', message);
+      return { success: false, error: message };
     }
   }
 
   async generate(request: GenerationRequest, model: string): Promise<GenerationResponse> {
-    const messages: ChatMessage[] = [];
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
     // Use unified JSON output handling
     const jsonRequest = request.responseFormat === 'json'
@@ -74,42 +70,34 @@ export class ZAIProvider implements AIProvider {
 
     messages.push({ role: 'user', content: request.prompt });
 
-    const body: ChatCompletionRequest = {
-      model: model || this.config.defaultModel || 'GLM-4.6',
+    const requestParams: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+      model: model || this.config.defaultModel || DEFAULT_MODEL,
       messages,
-      max_tokens: request.maxTokens || 16384, // Reduced to 16K to prevent truncation
+      max_tokens: request.maxTokens || DEFAULT_MAX_TOKENS,
       temperature: request.temperature ?? 0.7,
     };
 
-    // Z.AI supports json_object mode but not strict schema enforcement
+    // Z.AI supports json_object mode
     if (request.responseFormat === 'json' && jsonRequest?.useJsonObject) {
-      body.response_format = { type: 'json_object' };
+      requestParams.response_format = { type: 'json_object' };
     }
 
-    // BUG-010 fix: Add timeout to prevent indefinite hanging
-    const response = await fetchWithTimeout(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      timeout: TIMEOUT_GENERATE,
-    });
+    try {
+      const completion = await this.client.chat.completions.create(requestParams);
 
-    // Use centralized error handling
-    await throwIfNotOk(response, 'zai');
-
-    const data = await response.json();
-
-    return {
-      text: data.choices[0]?.message?.content || '',
-      finishReason: data.choices[0]?.finish_reason,
-      usage: {
-        inputTokens: data.usage?.prompt_tokens,
-        outputTokens: data.usage?.completion_tokens,
-      }
-    };
+      return {
+        text: completion.choices[0]?.message?.content || '',
+        finishReason: completion.choices[0]?.finish_reason || undefined,
+        usage: {
+          inputTokens: completion.usage?.prompt_tokens,
+          outputTokens: completion.usage?.completion_tokens,
+        }
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ZAI] Generate failed:', message);
+      throw new Error(`ZAI API error: ${message}`);
+    }
   }
 
   async generateStream(
@@ -117,7 +105,7 @@ export class ZAIProvider implements AIProvider {
     model: string,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<GenerationResponse> {
-    const messages: ChatMessage[] = [];
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
     // Use unified JSON output handling
     const jsonRequest = request.responseFormat === 'json'
@@ -142,52 +130,69 @@ export class ZAIProvider implements AIProvider {
 
     messages.push({ role: 'user', content: request.prompt });
 
-    const body: ChatCompletionRequest = {
-      model: model || this.config.defaultModel || 'GLM-4.6',
+    const requestParams: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
+      model: model || this.config.defaultModel || DEFAULT_MODEL,
       messages,
-      max_tokens: request.maxTokens || 16384, // Reduced to 16K to prevent truncation
+      max_tokens: request.maxTokens || DEFAULT_MAX_TOKENS,
       temperature: request.temperature ?? 0.7,
       stream: true,
     };
 
-    // Z.AI supports json_object mode but not strict schema enforcement
+    // Z.AI supports json_object mode
     if (request.responseFormat === 'json' && jsonRequest?.useJsonObject) {
-      body.response_format = { type: 'json_object' };
+      requestParams.response_format = { type: 'json_object' };
     }
 
-    // BUG-010 fix: Add timeout to prevent indefinite hanging
-    const response = await fetchWithTimeout(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      timeout: TIMEOUT_GENERATE,
-    });
+    try {
+      const stream = await this.client.chat.completions.create(requestParams);
 
-    // Use centralized error handling
-    await throwIfNotOk(response, 'zai');
+      let fullText = '';
+      let finishReason: string | undefined;
+      let usage: GenerationResponse['usage'];
 
-    // Use unified SSE stream parser (OpenAI-compatible format)
-    const { fullText, usage } = await processSSEStream(response, {
-      format: 'openai',
-      onChunk,
-    });
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        const content = delta?.content || '';
 
-    // Check if response appears to be incomplete (ZAI truncation detection)
-    const trimmed = fullText.trim();
-    const isIncomplete =
-      (trimmed.endsWith('```') && !trimmed.includes('```tsx') && !trimmed.includes('```jsx')) ||
-      (trimmed.endsWith('"') && !trimmed.endsWith('"}') && !trimmed.endsWith('"}\n')) ||
-      (trimmed.includes('className=\\') && !trimmed.endsWith('}')) ||
-      (trimmed.includes('{') && !trimmed.endsWith('}')) ||
-      (trimmed.startsWith('{') && trimmed.split('{').length > trimmed.split('}').length);
+        if (content) {
+          fullText += content;
+          onChunk({ text: content, done: false });
+        }
 
-    if (isIncomplete) {
-      console.warn('[ZAI] Response appears to be truncated');
+        // Capture finish reason
+        if (chunk.choices[0]?.finish_reason) {
+          finishReason = chunk.choices[0].finish_reason;
+        }
+
+        // Capture usage if available (some providers include it in the last chunk)
+        if (chunk.usage) {
+          usage = {
+            inputTokens: chunk.usage.prompt_tokens,
+            outputTokens: chunk.usage.completion_tokens,
+          };
+        }
+      }
+
+      // Check if response appears to be incomplete (ZAI truncation detection)
+      const trimmed = fullText.trim();
+      const isIncomplete =
+        (trimmed.endsWith('```') && !trimmed.includes('```tsx') && !trimmed.includes('```jsx')) ||
+        (trimmed.endsWith('"') && !trimmed.endsWith('"}') && !trimmed.endsWith('"}\n')) ||
+        (trimmed.includes('className=\\') && !trimmed.endsWith('}')) ||
+        (trimmed.startsWith('{') && trimmed.split('{').length > trimmed.split('}').length);
+
+      if (isIncomplete) {
+        console.warn('[ZAI] Response appears to be truncated');
+      }
+
+      // Send final chunk with done: true
+      onChunk({ text: '', done: true });
+
+      return { text: fullText, finishReason, usage };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ZAI] Stream failed:', message);
+      throw new Error(`ZAI API error: ${message}`);
     }
-
-    return { text: fullText, usage };
   }
 }

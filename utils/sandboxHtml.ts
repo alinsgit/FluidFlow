@@ -1273,6 +1273,24 @@ function getBootstrapScript(files: FileSystem): string {
           return 'return (' + params + ') => {';
         });
 
+        // Fix: onClick={() { → onClick={() => { (JSX event handlers)
+        // Pattern: ={ followed by (params) and { without =>
+        fixed = fixed.replace(/=\\{\\s*\\(([^)]*)\\)\\s*\\{(?!\\s*=>)/g, function(match, params) {
+          if (match.includes('=>')) return match;
+          console.log('[AutoFix] Fixed missing arrow in JSX event handler');
+          return '={(' + params + ') => {';
+        });
+
+        // Fix: render: (value) { → render: (value) => { (object property arrow)
+        // Pattern: propertyName: (params) { without =>
+        fixed = fixed.replace(/(\\w+)\\s*:\\s*\\(([^)]*)\\)\\s*\\{(?!\\s*=>)/g, function(match, prop, params) {
+          if (match.includes('=>')) return match;
+          // Skip if it looks like a destructuring pattern
+          if (/^\\s*\\{/.test(params)) return match;
+          console.log('[AutoFix] Fixed missing arrow in object property: ' + prop);
+          return prop + ': (' + params + ') => {';
+        });
+
         // ═══════════════════════════════════════════════════════════
         // PHASE 2: JSX attribute fixes
         // ═══════════════════════════════════════════════════════════
