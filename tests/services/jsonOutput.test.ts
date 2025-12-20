@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   getJsonCapability,
   buildJsonSystemInstruction,
@@ -93,6 +93,75 @@ describe('JSON Output Utilities', () => {
       expect(capability.supportsJsonObject).toBe(false);
       expect(capability.needsPromptGuidance).toBe(true);
     });
+
+    it('should return native schema support for Gemini with static schema (lines 62-66)', () => {
+      const schema = {
+        type: 'object',
+        properties: { name: { type: 'string' } },
+        additionalProperties: false,
+      };
+      const capability = getJsonCapability('gemini', schema);
+      expect(capability.supportsNativeSchema).toBe(true);
+      expect(capability.supportsJsonObject).toBe(true);
+      expect(capability.needsPromptGuidance).toBe(false);
+    });
+
+    it('should return fallback for Gemini with dynamic schema', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+          },
+        },
+      };
+      const capability = getJsonCapability('gemini', schema);
+      expect(capability.supportsNativeSchema).toBe(false);
+      expect(capability.supportsJsonObject).toBe(true);
+      expect(capability.needsPromptGuidance).toBe(true);
+    });
+
+    it('should return JSON object support for ollama (lines 88-92)', () => {
+      const schema = {
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      };
+      const capability = getJsonCapability('ollama', schema);
+      expect(capability.supportsNativeSchema).toBe(false);
+      expect(capability.supportsJsonObject).toBe(true);
+      expect(capability.needsPromptGuidance).toBe(true);
+    });
+
+    it('should return JSON object support for lmstudio (lines 88-92)', () => {
+      const schema = {
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      };
+      const capability = getJsonCapability('lmstudio', schema);
+      expect(capability.supportsNativeSchema).toBe(false);
+      expect(capability.supportsJsonObject).toBe(true);
+      expect(capability.needsPromptGuidance).toBe(true);
+    });
+
+    it('should return fallback for unknown provider (lines 113-117)', () => {
+      const schema = {
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      };
+      // Use an unknown provider name to trigger default case
+      const capability = getJsonCapability('unknown-provider' as any, schema);
+      expect(capability.supportsNativeSchema).toBe(false);
+      expect(capability.supportsJsonObject).toBe(false);
+      expect(capability.needsPromptGuidance).toBe(true);
+    });
+
+    it('should not require prompt guidance when no schema provided for ollama', () => {
+      const capability = getJsonCapability('ollama', undefined);
+      expect(capability.supportsNativeSchema).toBe(false);
+      expect(capability.supportsJsonObject).toBe(true);
+      expect(capability.needsPromptGuidance).toBe(false);
+    });
   });
 
   describe('buildJsonSystemInstruction', () => {
@@ -161,6 +230,33 @@ describe('JSON Output Utilities', () => {
       const invalid = 'not json at all';
       expect(() => parseJsonResponse(invalid, false)).toThrow();
     });
+
+    it('should extract JSON array from surrounding text', () => {
+      const text = 'Here is the array:\n[1, 2, 3, 4]\nDone!';
+      const result = parseJsonResponse<number[]>(text, false);
+      expect(result.data).toEqual([1, 2, 3, 4]);
+      expect(result.neededCleanup).toBe(true);
+    });
+
+    it('should repair truncated JSON object', () => {
+      // Warning will be logged for truncated JSON
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const truncated = '{"name": "test", "nested": {"value": 123';
+      const result = parseJsonResponse(truncated, false);
+      expect(result.data).toHaveProperty('name', 'test');
+      expect(result.neededCleanup).toBe(true);
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should handle simple JSON array extraction', () => {
+      // Simple array without objects (objects take precedence in regex)
+      const text = '[1, 2, 3, 4, 5]';
+      const result = parseJsonResponse<number[]>(text, false);
+      expect(result.data).toHaveLength(5);
+      expect(result.data[0]).toBe(1);
+    });
   });
 
   describe('prepareJsonRequest', () => {
@@ -188,6 +284,56 @@ describe('JSON Output Utilities', () => {
       const req = prepareJsonRequest('zai', '', schema);
       const result = req.parse<{ result: string }>('{"result": "success"}');
       expect(result.data.result).toBe('success');
+    });
+  });
+
+  describe('parseJsonResponse - additional coverage', () => {
+    it('should warn and fallback when native schema response is invalid JSON (line 184)', () => {
+      // This triggers line 183-184: native schema response that fails to parse
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Pass usedNativeSchema=true but with invalid JSON that needs cleanup
+      const invalidNative = '{"name": "test" invalid}';
+      // This will fail the native parse and fall through to cleanup
+      expect(() => parseJsonResponse(invalidNative, true)).toThrow();
+
+      // Verify warning was logged
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Native schema response failed')
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should handle partial markdown code blocks (lines 197-199)', () => {
+      // Partial markdown block that doesn't match the full regex
+      // Starts with ``` but doesn't end properly
+      const partialMarkdown = '```json\n{"test": true}';
+      const result = parseJsonResponse(partialMarkdown, false);
+      expect(result.data).toEqual({ test: true });
+      expect(result.neededCleanup).toBe(true);
+    });
+
+    it('should handle code block with only opening backticks', () => {
+      // Another partial case - code block that starts but doesn't close
+      const partial = '```json\n{"key": "value"}  ';
+      const result = parseJsonResponse(partial, false);
+      expect(result.data).toEqual({ key: 'value' });
+      expect(result.neededCleanup).toBe(true);
+    });
+
+    it('should preserve escaped quotes without modification (line 239)', () => {
+      // Test with properly escaped quotes - the code path does nothing (no-op)
+      const jsonWithEscapes = '{"message": "He said \\"hello\\""}';
+      const result = parseJsonResponse(jsonWithEscapes, false);
+      expect(result.data.message).toBe('He said "hello"');
+    });
+
+    it('should handle JSON with backslash but no double escape', () => {
+      // Test for the escape handling branch
+      const jsonWithBackslash = '{"path": "C:\\\\Users\\\\test"}';
+      const result = parseJsonResponse(jsonWithBackslash, false);
+      expect(result.data.path).toBe('C:\\Users\\test');
     });
   });
 });
