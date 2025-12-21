@@ -28,7 +28,7 @@ Transform wireframes and sketches into functional React applications using AI.
 
 | Provider | Models |
 |----------|--------|
-| **Google Gemini** | Gemini 3 Pro Preview, Gemini 2.5 Flash, Gemini 2.5 Pro |
+| **Google Gemini** | Gemini 3 Flash, Gemini 3 Pro Preview, Gemini 2.5 Flash, Gemini 2.5 Pro |
 | **OpenAI** | GPT-5.1 Codex, GPT-5.1, GPT-4o, GPT-4o Mini |
 | **Anthropic** | Claude 4.5 Sonnet, Claude 4.5 Opus |
 | **ZAI (GLM)** | GLM-4.6, GLM-4.5, GLM-4.5-air [Coding Plans](https://z.ai/subscribe?ic=JQZ7TPPRA6) |
