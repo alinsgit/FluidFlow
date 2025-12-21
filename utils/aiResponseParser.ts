@@ -18,6 +18,8 @@
 
 import { cleanGeneratedCode } from './cleanCode';
 import { isIgnoredPath } from './filePathUtils';
+import { repairJson as repairJsonUtil } from './jsonRepair';
+import { parserLogger } from './logger';
 
 // ============================================================================
 // TYPES
@@ -144,6 +146,46 @@ function findFirstMatch(pattern: RegExp, text: string): RegExpMatchArray | null 
 }
 
 // ============================================================================
+// PRE-COMPILED REGEX PATTERNS
+// ============================================================================
+
+// Format detection patterns
+const RE_BOM_CHARS = /^[\uFEFF\u200B-\u200D\u00A0]+/;
+const RE_META_MARKER = /<!--\s*META\s*-->/;
+const RE_FILE_MARKER = /<!--\s*FILE:/;
+const RE_PLAN_MARKER = /<!--\s*PLAN\s*-->/;
+const RE_EXPLANATION_MARKER = /<!--\s*EXPLANATION\s*-->/;
+const RE_PLAN_COMMENT = /^\/\/\s*PLAN:\s*\{[^}]+\}\s*\n?/;
+const RE_CODE_BLOCK = /^```(?:json)?\s*\n?([\s\S]*?)\n?```/;
+const RE_JSON_FORMAT = /"format"\s*:\s*"json"/i;
+const RE_JSON_VERSION = /"version"\s*:\s*"2\.0"/i;
+const RE_BATCH_OBJECT = /"batch"\s*:\s*\{/;
+const RE_MANIFEST_ARRAY = /"manifest"\s*:\s*\[/;
+const RE_FILES_OBJECT = /"files"\s*:\s*\{/;
+const RE_FILE_CHANGES = /"fileChanges"\s*:\s*\{/;
+const RE_EXPLANATION = /"explanation"\s*:/;
+const RE_JSON_OBJECT = /\{[\s\S]*\}/;
+const RE_CODE_BLOCK_TYPE = /```(?:tsx?|jsx?|typescript|javascript)/;
+
+// JSON parsing patterns
+const RE_TRAILING_COMMA = /,\s*$/;
+const RE_INCOMPLETE_KEY = /,?\s*"[^"]*"\s*:\s*$/;
+const RE_PARTIAL_STRING = /,?\s*"[^"]*"\s*:\s*"[^"]*$/;
+
+// Marker parsing patterns
+const RE_MARKER_FILE_WELL_FORMED = /<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->([\s\S]*?)<!--\s*\/FILE:\1\s*-->/g;
+const RE_MARKER_FILE_OPENING = /<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g;
+const RE_MARKER_FILE_CLOSING = /<!--\s*\/FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g;
+const RE_MARKER_META_BLOCK = /<!--\s*META\s*-->([\s\S]*?)<!--\s*\/META\s*-->/;
+const RE_MARKER_PLAN_BLOCK = /<!--\s*PLAN\s*-->([\s\S]*?)<!--\s*\/PLAN\s*-->/;
+const RE_MARKER_BATCH_BLOCK = /<!--\s*BATCH\s*-->([\s\S]*?)<!--\s*\/BATCH\s*-->/;
+const RE_MARKER_EXPLANATION_BLOCK = /<!--\s*EXPLANATION\s*-->([\s\S]*?)<!--\s*\/EXPLANATION\s*-->/;
+
+// Fallback patterns
+const RE_FALLBACK_CODE_BLOCK = /```(?:tsx?|jsx?|ts|js|typescript|javascript)?\n([\s\S]*?)```/g;
+const RE_FALLBACK_FILE_PATH = /((?:src\/)?[\w/-]+\.(?:tsx?|jsx?|css|json|html|md))\s*$/;
+
+// ============================================================================
 // FORMAT DETECTION
 // ============================================================================
 
@@ -157,12 +199,12 @@ export function detectFormat(response: string): ResponseFormat {
 
   // Clean BOM and invisible characters for detection
   let trimmed = response.trim();
-  trimmed = trimmed.replace(/^[\uFEFF\u200B-\u200D\u00A0]+/, '');
+  trimmed = trimmed.replace(RE_BOM_CHARS, '');
 
   // Check for marker format indicators (most distinctive)
-  const hasMetaMarker = /<!--\s*META\s*-->/.test(trimmed);
-  const hasFileMarker = /<!--\s*FILE:/.test(trimmed);
-  const hasPlanMarker = /<!--\s*PLAN\s*-->/.test(trimmed);
+  const hasMetaMarker = RE_META_MARKER.test(trimmed);
+  const hasFileMarker = RE_FILE_MARKER.test(trimmed);
+  const hasPlanMarker = RE_PLAN_MARKER.test(trimmed);
 
   // Marker v2: has META block
   if (hasMetaMarker && hasFileMarker) {
@@ -175,7 +217,7 @@ export function detectFormat(response: string): ResponseFormat {
   }
 
   // Legacy marker: has PLAN and EXPLANATION markers
-  if (hasPlanMarker && /<!--\s*EXPLANATION\s*-->/.test(trimmed)) {
+  if (hasPlanMarker && RE_EXPLANATION_MARKER.test(trimmed)) {
     return 'marker-v1';
   }
 
@@ -184,13 +226,13 @@ export function detectFormat(response: string): ResponseFormat {
   let jsonStart = trimmed;
 
   // Remove PLAN comment if at start
-  const planMatch = findFirstMatch(/^\/\/\s*PLAN:\s*\{[^}]+\}\s*\n?/, jsonStart);
+  const planMatch = findFirstMatch(RE_PLAN_COMMENT, jsonStart);
   if (planMatch) {
     jsonStart = jsonStart.slice(planMatch[0].length).trim();
   }
 
   // Remove markdown code blocks
-  const codeBlockMatch = findFirstMatch(/^```(?:json)?\s*\n?([\s\S]*?)\n?```/, jsonStart);
+  const codeBlockMatch = findFirstMatch(RE_CODE_BLOCK, jsonStart);
   if (codeBlockMatch) {
     jsonStart = codeBlockMatch[1].trim();
   }
@@ -201,19 +243,19 @@ export function detectFormat(response: string): ResponseFormat {
   // Check for JSON v2 indicators in content
   if (startsWithBrace || trimmed.includes('"meta"') || trimmed.includes('"files"') || trimmed.includes('"fileChanges"')) {
     // Look for v2 structure
-    const hasMetaFormat = /"format"\s*:\s*"json"/i.test(trimmed);
-    const hasMetaVersion = /"version"\s*:\s*"2\.0"/i.test(trimmed);
-    const hasBatchObject = /"batch"\s*:\s*\{/.test(trimmed);
-    const hasManifestArray = /"manifest"\s*:\s*\[/.test(trimmed);
+    const hasMetaFormat = RE_JSON_FORMAT.test(trimmed);
+    const hasMetaVersion = RE_JSON_VERSION.test(trimmed);
+    const hasBatchObject = RE_BATCH_OBJECT.test(trimmed);
+    const hasManifestArray = RE_MANIFEST_ARRAY.test(trimmed);
 
     if (hasMetaFormat || hasMetaVersion || (hasBatchObject && hasManifestArray)) {
       return 'json-v2';
     }
 
     // Check for v1 structure
-    const hasFiles = /"files"\s*:\s*\{/.test(trimmed);
-    const hasFileChanges = /"fileChanges"\s*:\s*\{/.test(trimmed);
-    const hasExplanation = /"explanation"\s*:/.test(trimmed);
+    const hasFiles = RE_FILES_OBJECT.test(trimmed);
+    const hasFileChanges = RE_FILE_CHANGES.test(trimmed);
+    const hasExplanation = RE_EXPLANATION.test(trimmed);
 
     if (hasFiles || hasFileChanges || hasExplanation) {
       return 'json-v1';
@@ -221,7 +263,7 @@ export function detectFormat(response: string): ResponseFormat {
 
     // Might still be JSON, check if parseable
     try {
-      const jsonMatch = findFirstMatch(/\{[\s\S]*\}/, jsonStart);
+      const jsonMatch = findFirstMatch(RE_JSON_OBJECT, jsonStart);
       const parsed = JSON.parse(jsonMatch?.[0] || '{}');
       if (parsed.files || parsed.fileChanges || parsed.meta || parsed.batch) {
         return parsed.meta?.version === '2.0' ? 'json-v2' : 'json-v1';
@@ -232,7 +274,7 @@ export function detectFormat(response: string): ResponseFormat {
   }
 
   // Check for code blocks with file paths (fallback format)
-  if (/```(?:tsx?|jsx?|typescript|javascript)/.test(trimmed)) {
+  if (RE_CODE_BLOCK_TYPE.test(trimmed)) {
     return 'fallback';
   }
 
@@ -285,67 +327,10 @@ function prepareJsonString(response: string): string {
 
 /**
  * Attempt to repair truncated JSON
+ * Uses shared jsonRepair utility
  */
 function repairJson(json: string): string {
-  // Count unbalanced brackets
-  let inString = false;
-  let escapeNext = false;
-
-  for (let i = 0; i < json.length; i++) {
-    const char = json[i];
-
-    if (escapeNext) {
-      escapeNext = false;
-      continue;
-    }
-
-    if (char === '\\' && inString) {
-      escapeNext = true;
-      continue;
-    }
-
-    if (char === '"' && !escapeNext) {
-      inString = !inString;
-      continue;
-    }
-  }
-
-  // If we're in a string, close it
-  if (inString) {
-    json += '"';
-  }
-
-  // Remove trailing incomplete content
-  json = json.replace(/,\s*$/, ''); // Trailing comma
-  json = json.replace(/,?\s*"[^"]*"\s*:\s*$/, ''); // Incomplete key-value
-  json = json.replace(/,?\s*"[^"]*"\s*:\s*"[^"]*$/, ''); // Partial string value
-
-  // Add missing closing brackets in correct order
-  // Track opening order with stack
-  const stack: string[] = [];
-  inString = false;
-  escapeNext = false;
-
-  for (let i = 0; i < json.length; i++) {
-    const char = json[i];
-    if (escapeNext) { escapeNext = false; continue; }
-    if (char === '\\' && inString) { escapeNext = true; continue; }
-    if (char === '"' && !escapeNext) { inString = !inString; continue; }
-    if (!inString) {
-      if (char === '{') stack.push('{');
-      else if (char === '[') stack.push('[');
-      else if (char === '}' && stack.length > 0 && stack[stack.length - 1] === '{') stack.pop();
-      else if (char === ']' && stack.length > 0 && stack[stack.length - 1] === '[') stack.pop();
-    }
-  }
-
-  // Close in reverse order
-  while (stack.length > 0) {
-    const open = stack.pop();
-    json += open === '{' ? '}' : ']';
-  }
-
-  return json;
+  return repairJsonUtil(json).json;
 }
 
 /**
@@ -944,14 +929,14 @@ export function parseAIResponse(response: string, options: ParserOptions = {}): 
 
   // Log summary
   const fileCount = Object.keys(result.files).length;
-  console.log(`[parseAIResponse] Format: ${result.format}, Files: ${fileCount}, Truncated: ${result.truncated}`);
+  parserLogger.debug(`Format: ${result.format}, Files: ${fileCount}, Truncated: ${result.truncated}`);
 
   if (result.warnings.length > 0) {
-    console.warn('[parseAIResponse] Warnings:', result.warnings);
+    parserLogger.warn('Warnings:', result.warnings);
   }
 
   if (result.errors.length > 0) {
-    console.error('[parseAIResponse] Errors:', result.errors);
+    parserLogger.error('Errors:', result.errors);
   }
 
   return result;

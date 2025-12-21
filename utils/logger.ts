@@ -1,197 +1,127 @@
 /**
- Centralized logging utility
- Replaces console.log with environment-aware logging
+ * Simple Log Level System
+ *
+ * Provides level-aware logging to reduce noise in production
+ * while keeping debug information available during development.
+ *
+ * Usage:
+ *   import { parserLogger } from './logger';
+ *   parserLogger.debug('Parsing response...');
+ *   parserLogger.info('File processed');
+ *   parserLogger.warn('Missing closing marker');
+ *   parserLogger.error('Parse failed', error);
  */
 
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-}
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
 
-interface LogEntry {
-  timestamp: string;
-  level: LogLevel;
-  message: string;
-  data?: unknown;
-  source?: string;
-}
-
-class Logger {
-  private isProduction: boolean;
-  private logLevel: LogLevel;
-  private logBuffer: LogEntry[] = [];
-  private maxBufferSize: number = 1000;
-  // BUG-043 FIX: Pre-compute lowercase sensitive keys for efficient matching
-  private readonly sensitiveKeys = ['apikey', 'password', 'token', 'secret', 'key', 'auth', 'bearer', 'credential'];
-
-  constructor() {
-    this.isProduction = process.env.NODE_ENV === 'production';
-    this.logLevel = this.isProduction ? LogLevel.WARN : LogLevel.DEBUG;
-  }
-
-  private shouldLog(level: LogLevel): boolean {
-    return level >= this.logLevel;
-  }
-
-  private createLogEntry(level: LogLevel, message: string, data?: unknown, source?: string): LogEntry {
-    return {
-      timestamp: new Date().toISOString(),
-      level,
-      message,
-      data: this.isProduction && data ? this.sanitizeData(data) : data,
-      source: source || 'FluidFlow',
-    };
-  }
-
-  private sanitizeData(data: unknown, depth: number = 0, maxDepth: number = 10): unknown {
-    // Prevent stack overflow from deep recursion
-    if (depth >= maxDepth) {
-      return '[MAX_DEPTH_REACHED]';
-    }
-
-    if (typeof data !== 'object' || data === null) {
-      return data;
-    }
-
-    // Remove sensitive fields
-    const sanitized: Record<string, unknown> = Array.isArray(data)
-      ? [...data] as unknown as Record<string, unknown>
-      : { ...(data as Record<string, unknown>) };
-
-    for (const key in sanitized) {
-      // BUG-043 FIX: Use pre-computed lowercase keys, only lowercase the key once
-      const lowerKey = key.toLowerCase();
-      if (this.sensitiveKeys.some(sk => lowerKey.includes(sk))) {
-        sanitized[key] = '[REDACTED]';
-      } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
-        sanitized[key] = this.sanitizeData(sanitized[key], depth + 1, maxDepth);
-      }
-    }
-
-    return sanitized;
-  }
-
-  private log(level: LogLevel, message: string, data?: unknown, source?: string): void {
-    if (!this.shouldLog(level)) return;
-
-    const entry = this.createLogEntry(level, message, data, source);
-
-    // Buffer logs for potential error reporting
-    this.logBuffer.push(entry);
-    if (this.logBuffer.length > this.maxBufferSize) {
-      this.logBuffer.shift();
-    }
-
-    // Console output based on environment
-    if (!this.isProduction) {
-      const prefix = `[${entry.timestamp}] [${LogLevel[level]}] [${entry.source || ''}]`;
-      switch (level) {
-        case LogLevel.DEBUG:
-          console.debug(prefix, message, data);
-          break;
-        case LogLevel.INFO:
-          // eslint-disable-next-line no-console -- Logger utility intentionally uses console.info for structured logging
-          console.info(prefix, message, data);
-          break;
-        case LogLevel.WARN:
-          console.warn(prefix, message, data);
-          break;
-        case LogLevel.ERROR:
-          console.error(prefix, message, data);
-          // In production, you might want to send errors to a service
-          if (this.isProduction) {
-            // TODO: Implement error reporting service integration
-          }
-          break;
-      }
-    }
-  }
-
-  debug(message: string, data?: unknown, source?: string): void {
-    this.log(LogLevel.DEBUG, message, data, source);
-  }
-
-  info(message: string, data?: unknown, source?: string): void {
-    this.log(LogLevel.INFO, message, data, source);
-  }
-
-  warn(message: string, data?: unknown, source?: string): void {
-    this.log(LogLevel.WARN, message, data, source);
-  }
-
-  error(message: string, data?: unknown, source?: string): void {
-    this.log(LogLevel.ERROR, message, data, source);
-  }
-
-  // Specialized logging methods
-  aiRequest(provider: string, model: string, prompt: string, responseTime?: number): void {
-    this.debug('AI Request', {
-      provider,
-      model,
-      promptLength: prompt.length,
-      responseTime,
-    }, 'AI');
-  }
-
-  apiRequest(method: string, endpoint: string, statusCode: number, responseTime?: number): void {
-    this.debug('API Request', {
-      method,
-      endpoint,
-      statusCode,
-      responseTime,
-    }, 'API');
-  }
-
-  gitOperation(operation: string, success: boolean, error?: string): void {
-    this.info('Git Operation', {
-      operation,
-      success,
-      error,
-    }, 'Git');
-  }
-
-  fileOperation(operation: string, path: string, success: boolean, error?: string): void {
-    this.debug('File Operation', {
-      operation,
-      path,
-      success,
-      error,
-    }, 'FileSystem');
-  }
-
-  // Get buffered logs (useful for error reporting)
-  getRecentLogs(count: number = 100): LogEntry[] {
-    return this.logBuffer.slice(-count);
-  }
-
-  // Clear log buffer
-  clearBuffer(): void {
-    this.logBuffer = [];
-  }
-
-  // Export logs (for debugging)
-  exportLogs(): string {
-    return JSON.stringify(this.logBuffer, null, 2);
-  }
-}
-
-// Create singleton logger instance
-export const logger = new Logger();
-
-// Export convenience functions
-export const log = {
-  debug: (message: string, data?: unknown, source?: string) => logger.debug(message, data, source),
-  info: (message: string, data?: unknown, source?: string) => logger.info(message, data, source),
-  warn: (message: string, data?: unknown, source?: string) => logger.warn(message, data, source),
-  error: (message: string, data?: unknown, source?: string) => logger.error(message, data, source),
-  aiRequest: (provider: string, model: string, prompt: string, responseTime?: number) =>
-    logger.aiRequest(provider, model, prompt, responseTime),
-  apiRequest: (method: string, endpoint: string, statusCode: number, responseTime?: number) =>
-    logger.apiRequest(method, endpoint, statusCode, responseTime),
-  gitOperation: (operation: string, success: boolean, error?: string) =>
-    logger.gitOperation(operation, success, error),
-  fileOperation: (operation: string, path: string, success: boolean, error?: string) =>
-    logger.fileOperation(operation, path, success, error),
+const LOG_LEVELS: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  none: 4,
 };
+
+// Default to 'warn' in production, 'debug' in development
+const DEFAULT_LEVEL: LogLevel = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production'
+  ? 'warn'
+  : 'debug';
+
+let currentLevel: LogLevel = DEFAULT_LEVEL;
+
+/**
+ * Set the minimum log level
+ */
+export function setLogLevel(level: LogLevel): void {
+  currentLevel = level;
+}
+
+/**
+ * Get the current log level
+ */
+export function getLogLevel(): LogLevel {
+  return currentLevel;
+}
+
+/**
+ * Check if a log level is enabled
+ */
+function isEnabled(level: LogLevel): boolean {
+  return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
+}
+
+/**
+ * Format log message with prefix
+ */
+function formatMessage(prefix: string, args: unknown[]): unknown[] {
+  if (args.length === 0) return [prefix];
+  if (typeof args[0] === 'string') {
+    return [`${prefix} ${args[0]}`, ...args.slice(1)];
+  }
+  return [prefix, ...args];
+}
+
+/**
+ * Create a prefixed logger for a specific module
+ */
+export function createLogger(moduleName: string) {
+  const prefix = `[${moduleName}]`;
+
+  return {
+    debug(...args: unknown[]) {
+      if (isEnabled('debug')) {
+        console.debug(...formatMessage(prefix, args));
+      }
+    },
+
+    info(...args: unknown[]) {
+      if (isEnabled('info')) {
+        console.info(...formatMessage(prefix, args));
+      }
+    },
+
+    warn(...args: unknown[]) {
+      if (isEnabled('warn')) {
+        console.warn(...formatMessage(prefix, args));
+      }
+    },
+
+    error(...args: unknown[]) {
+      if (isEnabled('error')) {
+        console.error(...formatMessage(prefix, args));
+      }
+    },
+
+    /** Log only in debug mode - for verbose output */
+    verbose(...args: unknown[]) {
+      if (isEnabled('debug')) {
+        console.debug(...formatMessage(`${prefix}[v]`, args));
+      }
+    },
+  };
+}
+
+/**
+ * Default logger instance
+ */
+export const logger = createLogger('FluidFlow');
+
+/**
+ * Parser-specific logger
+ */
+export const parserLogger = createLogger('Parser');
+
+/**
+ * JSON repair logger
+ */
+export const jsonRepairLogger = createLogger('JsonRepair');
+
+/**
+ * Batch generation logger
+ */
+export const batchLogger = createLogger('BatchGen');
+
+/**
+ * AI provider logger
+ */
+export const aiLogger = createLogger('AI');

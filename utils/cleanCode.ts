@@ -13,6 +13,19 @@ import {
 // Import unified AI response parser
 import { parseAIResponse as parseAIResponseUnified } from './aiResponseParser';
 
+// Import shared JSON repair utility
+import { repairJson as repairJsonShared } from './jsonRepair';
+
+// Import validation functions from codeValidator (re-exported below for backwards compatibility)
+import {
+  validateJsxSyntax as validateJsxSyntaxImpl,
+  validateAndFixCode as validateAndFixCodeImpl,
+  getErrorContext as getErrorContextImpl,
+  parseBabelError as parseBabelErrorImpl,
+  isValidCode as isValidCodeImpl,
+  type SyntaxIssue,
+} from './codeValidator';
+
 // Note: syntaxFixer.ts exports are available but we intentionally don't use them here.
 // Aggressive syntax "fixes" were causing more harm than good.
 // The functions are still exported from syntaxFixer.ts for optional/explicit use.
@@ -487,196 +500,15 @@ function fixBracketBalance(code: string): string {
   return code;
 }
 
-/**
- * Validate JSX syntax and return issues found
- * This is a quick pre-check before transpilation
- */
-export interface SyntaxIssue {
-  type: 'error' | 'warning';
-  message: string;
-  line?: number;
-  column?: number;
-  fix?: string;
-}
+// Re-export validation functions for backwards compatibility
+// Actual implementations are in codeValidator.ts
+export { SyntaxIssue };
+export const validateJsxSyntax = validateJsxSyntaxImpl;
 
-export function validateJsxSyntax(code: string): SyntaxIssue[] {
-  const issues: SyntaxIssue[] = [];
-  const lines = code.split('\n');
+export const validateAndFixCode = validateAndFixCodeImpl;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const lineNum = i + 1;
-
-    // Check for `: condition && (` pattern
-    if (/\)\s*:\s*[\w!.]+\s*&&\s*\(/.test(line)) {
-      issues.push({
-        type: 'error',
-        message: 'Malformed ternary: using && instead of ? after :',
-        line: lineNum,
-        fix: 'Replace && with ? for chained ternary'
-      });
-    }
-
-    // Check for unclosed JSX tags on single line
-    const jsxTagMatch = line.match(/<([A-Z]\w*)(?:\s[^>]*)?>(?!.*<\/\1>)(?!.*\/>)/);
-    if (jsxTagMatch && !line.includes('return') && !lines.slice(i + 1, i + 10).some(l => l.includes(`</${jsxTagMatch[1]}>`))) {
-      // Don't warn if closing tag is on a nearby line
-      const hasClosingNearby = lines.slice(i, i + 20).some(l => l.includes(`</${jsxTagMatch[1]}>`));
-      if (!hasClosingNearby) {
-        issues.push({
-          type: 'warning',
-          message: `Potentially unclosed JSX tag: <${jsxTagMatch[1]}>`,
-          line: lineNum
-        });
-      }
-    }
-
-    // Check for = > instead of =>
-    if (/=\s+>/.test(line) && !/[<>]=/.test(line)) {
-      issues.push({
-        type: 'error',
-        message: 'Malformed arrow function: space between = and >',
-        line: lineNum,
-        fix: 'Remove space: = > should be =>'
-      });
-    }
-
-    // Check for className"value" without =
-    if (/className"[^"]+"|onClick"[^"]+"/.test(line)) {
-      issues.push({
-        type: 'error',
-        message: 'Missing = in JSX attribute',
-        line: lineNum,
-        fix: 'Add = before the value'
-      });
-    }
-
-    // Check for incomplete ternary at end of expression
-    if (/\?\s*<[A-Z]\w*[^:]*\s*\}$/.test(line.trim())) {
-      const hasColonAfter = lines.slice(i + 1, i + 3).some(l => /^\s*:/.test(l));
-      if (!hasColonAfter) {
-        issues.push({
-          type: 'error',
-          message: 'Incomplete ternary: missing else branch (: null)',
-          line: lineNum,
-          fix: 'Add : null before the closing }'
-        });
-      }
-    }
-  }
-
-  // Check overall bracket balance
-  let braceCount = 0;
-  let parenCount = 0;
-  let bracketCount = 0;
-
-  for (const char of code) {
-    if (char === '{') braceCount++;
-    if (char === '}') braceCount--;
-    if (char === '(') parenCount++;
-    if (char === ')') parenCount--;
-    if (char === '[') bracketCount++;
-    if (char === ']') bracketCount--;
-  }
-
-  if (braceCount !== 0) {
-    issues.push({
-      type: 'error',
-      message: `Unbalanced braces: ${braceCount > 0 ? 'missing ' + braceCount + ' closing }' : 'extra ' + Math.abs(braceCount) + ' closing }'}`,
-    });
-  }
-  if (parenCount !== 0) {
-    issues.push({
-      type: 'error',
-      message: `Unbalanced parentheses: ${parenCount > 0 ? 'missing ' + parenCount + ' closing )' : 'extra ' + Math.abs(parenCount) + ' closing )'}`,
-    });
-  }
-  if (bracketCount !== 0) {
-    issues.push({
-      type: 'error',
-      message: `Unbalanced brackets: ${bracketCount > 0 ? 'missing ' + bracketCount + ' closing ]' : 'extra ' + Math.abs(bracketCount) + ' closing ]'}`,
-    });
-  }
-
-  return issues;
-}
-
-/**
- * Validates code and returns issues found.
- *
- * IMPORTANT: This function no longer attempts to "fix" code.
- * Previous "fix" attempts were causing more harm than good by transforming
- * valid LLM-generated code into broken code.
- *
- * Now it only validates and reports issues - the caller can decide what to do.
- */
-export function validateAndFixCode(code: string, filePath?: string): {
-  code: string;
-  fixed: boolean;
-  issues: SyntaxIssue[];
-} {
-  if (!code) return { code: '', fixed: false, issues: [] };
-
-  // Only validate - do NOT attempt to fix
-  // Aggressive fixes were causing issues like:
-  // - "function Name() => {" hybrid syntax errors
-  // - "const x = (param: Type) {" missing arrow errors
-  const issues = validateJsxSyntax(code);
-
-  if (issues.length > 0 && filePath) {
-    console.warn(`[validateAndFixCode] ${filePath}: ${issues.length} syntax issues detected`);
-  }
-
-  return {
-    code: code, // Return original code unchanged
-    fixed: false,
-    issues
-  };
-}
-
-/**
- * Extract line context around an error for better debugging
- */
-export function getErrorContext(code: string, line: number, contextLines = 2): string {
-  const lines = code.split('\n');
-  const start = Math.max(0, line - 1 - contextLines);
-  const end = Math.min(lines.length, line + contextLines);
-
-  return lines
-    .slice(start, end)
-    .map((l, i) => {
-      const lineNum = start + i + 1;
-      const marker = lineNum === line ? '>>> ' : '    ';
-      return `${marker}${lineNum.toString().padStart(4)}: ${l}`;
-    })
-    .join('\n');
-}
-
-/**
- * Parse Babel error message to extract line/column info
- */
-export function parseBabelError(error: string): { line?: number; column?: number; message: string } {
-  // Pattern: "file.tsx: Unexpected token (15:23)"
-  const lineColMatch = error.match(/\((\d+):(\d+)\)/);
-  if (lineColMatch) {
-    return {
-      line: parseInt(lineColMatch[1], 10),
-      column: parseInt(lineColMatch[2], 10),
-      message: error.replace(/\(\d+:\d+\)/, '').trim()
-    };
-  }
-
-  // Pattern: "Line 15: ..."
-  const lineMatch = error.match(/Line (\d+):/i);
-  if (lineMatch) {
-    return {
-      line: parseInt(lineMatch[1], 10),
-      message: error
-    };
-  }
-
-  return { message: error };
-}
+export const getErrorContext = getErrorContextImpl;
+export const parseBabelError = parseBabelErrorImpl;
 
 /**
  * Build an import statement from components
@@ -1069,127 +901,12 @@ export function safeParseAIResponse<T = unknown>(response: string): T | null {
 /**
  * Attempts to repair truncated JSON from AI responses
  * Returns the repaired JSON string or throws a descriptive error
+ *
+ * Uses shared jsonRepair utility for consistent behavior across the codebase.
  */
-// Maximum JSON size for repair operations (configurable via constant)
-const MAX_JSON_REPAIR_SIZE = 500000; // 500KB - increased from 50KB to handle larger AI responses
-
 export function repairTruncatedJson(jsonStr: string): string {
-  const json = jsonStr.trim();
-
-  // Prevent recursion by limiting input size
-  if (json.length > MAX_JSON_REPAIR_SIZE) {
-    throw new Error(`JSON too large to repair safely (${Math.round(json.length / 1000)}KB exceeds ${Math.round(MAX_JSON_REPAIR_SIZE / 1000)}KB limit)`);
-  }
-
-  // Count open/close braces and brackets
-  let braceCount = 0;
-  let bracketCount = 0;
-  let inString = false;
-  let escapeNext = false;
-
-  for (let i = 0; i < json.length; i++) {
-    const char = json[i];
-
-    if (escapeNext) {
-      escapeNext = false;
-      continue;
-    }
-
-    if (char === '\\' && inString) {
-      escapeNext = true;
-      continue;
-    }
-
-    if (char === '"' && !escapeNext) {
-      inString = !inString;
-      continue;
-    }
-
-    if (!inString) {
-      if (char === '{') braceCount++;
-      else if (char === '}') braceCount--;
-      else if (char === '[') bracketCount++;
-      else if (char === ']') bracketCount--;
-    }
-  }
-
-  // If balanced, return as-is
-  if (braceCount === 0 && bracketCount === 0 && !inString) {
-    return json;
-  }
-
-  console.log(`[JSON Repair] Unbalanced: braces=${braceCount}, brackets=${bracketCount}, inString=${inString}`);
-
-  // Try to repair truncated JSON
-  let repaired = json;
-
-  // If we're in the middle of a string, try to close it
-  if (inString) {
-    // Find the last quote and truncate any partial content after it
-    // Or close the string if it seems to be the value
-    repaired += '"';
-    inString = false;
-  }
-
-  // Remove trailing partial content (incomplete key or value)
-  // Look for the last complete value
-  const patterns = [
-    // Remove trailing comma and whitespace
-    /,\s*$/,
-    // Remove incomplete key (": after key name without value)
-    /,?\s*"[^"]*"\s*:\s*$/,
-    // Remove partial string value
-    /,?\s*"[^"]*"\s*:\s*"[^"]*$/,
-  ];
-
-  for (const pattern of patterns) {
-    if (pattern.test(repaired)) {
-      repaired = repaired.replace(pattern, '');
-      break;
-    }
-  }
-
-  // Close remaining brackets and braces in correct order (JSON-001 fix)
-  // Track opening order with a stack to close in reverse order
-  const openStack: string[] = [];
-  inString = false;
-  escapeNext = false;
-
-  for (let i = 0; i < repaired.length; i++) {
-    const char = repaired[i];
-    if (escapeNext) { escapeNext = false; continue; }
-    if (char === '\\' && inString) { escapeNext = true; continue; }
-    if (char === '"' && !escapeNext) { inString = !inString; continue; }
-    if (!inString) {
-      if (char === '{') openStack.push('{');
-      else if (char === '[') openStack.push('[');
-      else if (char === '}') {
-        // Pop matching brace, or ignore if mismatched
-        if (openStack.length > 0 && openStack[openStack.length - 1] === '{') {
-          openStack.pop();
-        }
-      } else if (char === ']') {
-        // Pop matching bracket, or ignore if mismatched
-        if (openStack.length > 0 && openStack[openStack.length - 1] === '[') {
-          openStack.pop();
-        }
-      }
-    }
-  }
-
-  // Close remaining open containers in reverse order (LIFO)
-  // BUG-004 fix: Add explicit undefined check for type safety
-  while (openStack.length > 0) {
-    const open = openStack.pop();
-    if (open === '{') {
-      repaired += '}';
-    } else if (open === '[') {
-      repaired += ']';
-    }
-    // Skip if undefined (shouldn't happen but defensive)
-  }
-
-  return repaired;
+  const result = repairJsonShared(jsonStr, { verbose: true });
+  return result.json;
 }
 
 /**
@@ -1719,21 +1436,7 @@ export function parseMultiFileResponse(response: string, noThrow: boolean = fals
   }
 }
 
-/**
- * Validates that the cleaned code looks like valid code
- */
-export function isValidCode(code: string): boolean {
-  if (!code || code.length < 10) return false;
-
-  // Check for common code patterns
-  const hasImport = /import\s+/.test(code);
-  const hasExport = /export\s+/.test(code);
-  const hasFunction = /function\s+|const\s+\w+\s*=|=>\s*{/.test(code);
-  const hasJSX = /<\w+/.test(code);
-  const hasClass = /class\s+\w+/.test(code);
-
-  return hasImport || hasExport || hasFunction || hasJSX || hasClass;
-}
+export const isValidCode = isValidCodeImpl;
 
 // ============================================================================
 // SEARCH/REPLACE MODE - Re-exported from searchReplace.ts for backwards compatibility
