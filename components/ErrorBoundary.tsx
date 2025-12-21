@@ -1,5 +1,5 @@
 import React, { ErrorInfo, ReactNode } from 'react';
-import { log } from '../utils/logger';
+import { logger } from '../utils/logger';
 
 interface Props {
   children: ReactNode;
@@ -28,7 +28,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
         ? event.reason
         : new Error(String(event.reason || 'Unhandled promise rejection'));
 
-      log.error('Unhandled promise rejection', {
+      logger.error('Unhandled promise rejection', {
         error: error.message,
         stack: error.stack,
         reason: String(event.reason),
@@ -59,7 +59,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log the error to our logging service
-    log.error('React Error Boundary caught an error', {
+    logger.error('React Error Boundary caught an error', {
       error: error.message,
       stack: error.stack,
       componentStack: errorInfo.componentStack,
@@ -158,7 +158,7 @@ export function withErrorBoundary<T extends object>(
 // Hook for functional components to handle errors
 export function useErrorHandler() {
   return (error: Error, errorInfo?: ErrorInfo) => {
-    log.error('Error caught by error handler', {
+    logger.error('Error caught by error handler', {
       error: error.message,
       stack: error.stack,
       errorInfo,
