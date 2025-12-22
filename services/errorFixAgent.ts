@@ -691,7 +691,7 @@ class ErrorFixAgent {
       /could you (please )?provide/i,
       /can you (please )?share/i,
       /please provide/i,
-      /I don't have (access|information|the file)/i,
+      /I do not have (access|information|the file)/i,
       /which file (is|contains|has)/i,
       /I need more (information|context|details)/i,
       /without seeing the/i,

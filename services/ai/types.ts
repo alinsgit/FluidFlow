@@ -29,7 +29,7 @@ export async function withRetry<T>(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Don't retry if error is not retryable or we've exhausted retries
+      // do not retry if error is not retryable or we've exhausted retries
       if (attempt >= maxRetries || !retryableErrors(lastError)) {
         throw lastError;
       }

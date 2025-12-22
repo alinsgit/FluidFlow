@@ -64,7 +64,7 @@ This document outlines a comprehensive analysis of the FluidFlow codebase, ident
 *   **Analysis:** Dependencies like `@monaco-editor/react` and `shiki` (if used for syntax highlighting outside Monaco) are large.
 *   **Recommendation:**
     *   Lazy load the `MonacoEditor` component (`React.lazy`).
-    *   Lazy load heavy modals (`SettingsModal`, `HistoryModal`) so they don't impact the initial load time.
+    *   Lazy load heavy modals (`SettingsModal`, `HistoryModal`) so they do not impact the initial load time.
 
 ## 5. Security Enhancements
 
@@ -132,7 +132,7 @@ This document outlines a comprehensive analysis of the FluidFlow codebase, ident
 ### 8.7. Context Splitting (Phase 1 Complete)
 - **Created UIContext** for high-frequency UI state (isGenerating, activeTab, selectedModel, etc.)
 - AppContext now consumes UIContext for backwards compatibility
-- Components can now use `useUI()` for isolated UI state updates that don't trigger file/project re-renders
+- Components can now use `useUI()` for isolated UI state updates that do not trigger file/project re-renders
 - New hooks exported: `useUI`, `useGenerationState`, `useTabState`, `useModelState`, `usePreferences`
 - **Zero breaking changes** - existing `useAppContext()` API unchanged
 

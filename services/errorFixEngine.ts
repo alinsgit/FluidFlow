@@ -199,7 +199,7 @@ export class ErrorFixEngine {
           };
         }
 
-        // If strategy says don't continue, stop
+        // If strategy says do not continue, stop
         if (!result.shouldContinue) {
           console.log('[ErrorFixEngine] Strategy indicated to stop pipeline');
           break;

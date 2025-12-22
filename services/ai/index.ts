@@ -242,7 +242,7 @@ export class ProviderManager {
   }
 
   private save(): void {
-    // Save to localStorage (async encryption, but don't await)
+    // Save to localStorage (async encryption, but do not await)
     saveProvidersToLocalStorage(Array.from(this.providers.values()))
       .catch(e => console.warn('[AI] Failed to save to localStorage:', e));
     setActiveProviderIdInLocalStorage(this.activeProviderId);

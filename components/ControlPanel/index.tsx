@@ -371,7 +371,7 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   const handleRevert = (messageId: string) => {
     const message = messages.find(m => m.id === messageId);
     if (message?.snapshotFiles) {
-      // Skip history for revert - don't create undo entry
+      // Skip history for revert - do not create undo entry
       reviewChange(`Revert to earlier state`, message.snapshotFiles, { skipHistory: true });
     }
   };

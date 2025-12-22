@@ -130,7 +130,7 @@ remaining:
    - ✓ `<!-- FILE:src/App.tsx -->` ... `<!-- /FILE:src/App.tsx -->`
    - ✗ `<!-- FILE:src/App.tsx -->` ... `<!-- /FILE:App.tsx -->`
 
-2. **No nesting**: Don't nest FILE blocks inside each other
+2. **No nesting**: do not nest FILE blocks inside each other
    - ✗ `<!-- FILE:A.tsx --> ... <!-- FILE:B.tsx --> ... <!-- /FILE:B.tsx --> <!-- /FILE:A.tsx -->`
 
 3. **Complete files**: Each FILE block must contain the COMPLETE file content

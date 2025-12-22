@@ -90,7 +90,7 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
-      // Note: We intentionally don't commit pending changes on unmount
+      // Note: We intentionally do not commit pending changes on unmount
       // because setState won't work after unmount. Callers should use
       // exportHistory() before unmounting if they need to persist changes.
     };
@@ -98,7 +98,7 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
 
   // Commit pending changes to history
   const commitPendingChanges = useCallback(() => {
-    // Don't commit if unmounted - prevents React state update warnings
+    // do not commit if unmounted - prevents React state update warnings
     if (!isMountedRef.current) return;
 
     if (pendingFilesRef.current) {
@@ -106,7 +106,7 @@ export function useVersionHistory(initialFiles: FileSystem): UseVersionHistoryRe
       pendingFilesRef.current = null;
 
       setState(prevState => {
-        // Don't add to history if nothing changed
+        // do not add to history if nothing changed
         if (JSON.stringify(prevState.present.files) === JSON.stringify(pendingFiles)) {
           return prevState;
         }

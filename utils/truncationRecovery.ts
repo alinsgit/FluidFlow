@@ -218,7 +218,7 @@ export function emergencyCodeBlockExtraction(
   // PATTERN 2: File path comment followed directly by code (NO backticks)
   // Example: "// src/components/Header.tsx\nimport { useState } from 'react'"
   // Also handles: "// App.tsx", "// components/Header.tsx"
-  // This handles AI responses that don't use markdown code blocks
+  // This handles AI responses that do not use markdown code blocks
   if (Object.keys(emergencyFiles).length === 0) {
     console.log('[EmergencyExtraction] No code blocks found, trying file path comment extraction...');
 

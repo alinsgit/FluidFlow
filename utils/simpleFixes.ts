@@ -770,9 +770,9 @@ function tryFixRuntimeError(errorMessage: string, code: string): SimpleFixResult
 
     for (const pattern of accessPatterns) {
       newCode = newCode.replace(pattern, (match, prefix) => {
-        // Don't add ?. if already has it
+        // do not add ?. if already has it
         if (match.includes('?.')) return match;
-        // Don't modify if it's a function definition
+        // do not modify if it's a function definition
         if (/^(const|let|var|function)\s/.test(prefix)) return match;
         fixed = true;
         return `${prefix}?.${propName}`;

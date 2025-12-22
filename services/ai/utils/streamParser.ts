@@ -206,7 +206,7 @@ export function createSSEProcessor(options: SSEParserOptions) {
               usage = result.usage;
             }
           } catch (e) {
-            // Log but don't fail on parse errors - might be partial data
+            // Log but do not fail on parse errors - might be partial data
             console.debug(`[SSEParser:${format}] Parse error, skipping chunk:`, parsed.data?.slice(0, 100));
             if (onError) {
               onError(e instanceof Error ? e : new Error(String(e)));

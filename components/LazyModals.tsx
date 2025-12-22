@@ -42,7 +42,7 @@ function withLazyModal<P extends { isOpen: boolean }>(
   displayName: string
 ): React.FC<P> {
   const WrappedComponent: React.FC<P> = (props) => {
-    // Don't render anything if not open - prevents unnecessary loading
+    // do not render anything if not open - prevents unnecessary loading
     if (!props.isOpen) return null;
 
     return (

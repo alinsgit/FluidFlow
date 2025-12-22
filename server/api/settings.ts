@@ -206,7 +206,7 @@ async function initializeDefaultProvider(): Promise<void> {
     if (existsSync(SETTINGS_FILE)) {
       const data = await fs.readFile(SETTINGS_FILE, 'utf-8');
       const settings = safeJsonParse(data, {}) as GlobalSettings;
-      // If providers already configured, don't overwrite
+      // If providers already configured, do not overwrite
       if (settings.aiProviders && settings.aiProviders.length > 0) {
         return;
       }

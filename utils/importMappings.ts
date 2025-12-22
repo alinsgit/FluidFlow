@@ -905,7 +905,7 @@ export const PROP_TYPOS: Record<string, string> = {
   'enterkeyhint': 'enterKeyHint',
 };
 
-// Self-closing HTML tags that don't need closing tags in JSX
+// Self-closing HTML tags that do not need closing tags in JSX
 export const SELF_CLOSING_TAGS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
   'link', 'meta', 'param', 'source', 'track', 'wbr'

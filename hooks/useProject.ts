@@ -289,7 +289,7 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
       // Fetch project and context in parallel
       const [project, savedContext] = await Promise.all([
         projectApi.get(id),
-        projectApi.getContext(id).catch(() => null) // Don't fail if context doesn't exist
+        projectApi.getContext(id).catch(() => null) // do not fail if context doesn't exist
       ]);
 
       // Check if a newer openProject call was made while we were fetching
@@ -449,7 +449,7 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
       return false;
     }
 
-    // CRITICAL: Don't sync until initialized
+    // CRITICAL: do not sync until initialized
     if (!isInitializedRef.current) {
       console.warn('[Project] Ignoring syncFiles - not initialized yet');
       setState(prev => ({ ...prev, error: 'Cannot sync: project still initializing' }));
@@ -637,7 +637,7 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
       }));
     } catch (_err) {
       console.error('[Project] Failed to refresh git status:', _err);
-      // On error, keep current gitStatus - don't reset to null
+      // On error, keep current gitStatus - do not reset to null
     }
   }, [state.currentProject]);
 

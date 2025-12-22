@@ -108,7 +108,7 @@ export async function encrypt(plaintext: string): Promise<string> {
     return plaintext;
   }
 
-  // Don't double-encrypt
+  // do not double-encrypt
   if (plaintext.startsWith(ENCRYPTED_PREFIX)) {
     return plaintext;
   }

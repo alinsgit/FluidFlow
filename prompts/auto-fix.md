@@ -46,7 +46,7 @@ Raw Code (cleaned with `cleanGeneratedCode`, no JSON wrapper needed)
 5. Add null checks with optional chaining (`?.`) where needed
 6. Escape special characters properly (apostrophes, quotes)
 
-### DON'T:
+### do not:
 1. Refactor or "improve" unrelated code
 2. Change import styles (named ↔ default) unless necessary
 3. Add unnecessary type annotations

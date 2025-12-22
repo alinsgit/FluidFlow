@@ -22,9 +22,9 @@ Raw Code (cleaned with `cleanGeneratedCode`, no JSON wrapper needed)
 ### RULES:
 1. **Minimal changes**: Only modify what's necessary for the request
 2. **Preserve style**: Match existing code formatting and patterns
-3. **Keep structure**: Don't reorganize imports or component structure
+3. **Keep structure**: do not reorganize imports or component structure
 4. **Maintain attributes**: Preserve all `data-ff-group` and `data-ff-id` attributes
-5. **No side effects**: Don't fix unrelated issues or add improvements
+5. **No side effects**: do not fix unrelated issues or add improvements
 
 ### PRESERVE:
 - Import order and grouping

@@ -105,7 +105,7 @@ export function errorHandler(
   // Log the error
   console.error(`[ERROR] ${req.method} ${req.path}:`, err);
 
-  // Don't leak error details in production
+  // do not leak error details in production
   const isDevelopment = process.env.NODE_ENV !== 'production';
 
   // Handle specific error types

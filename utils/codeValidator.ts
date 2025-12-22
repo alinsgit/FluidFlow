@@ -49,7 +49,7 @@ export function validateJsxSyntax(code: string): SyntaxIssue[] {
     // Check for unclosed JSX tags on single line
     const jsxTagMatch = line.match(/<([A-Z]\w*)(?:\s[^>]*)?>(?!.*<\/\1>)(?!.*\/>)/);
     if (jsxTagMatch && !line.includes('return') && !lines.slice(i + 1, i + 10).some(l => l.includes(`</${jsxTagMatch[1]}>`))) {
-      // Don't warn if closing tag is on a nearby line
+      // do not warn if closing tag is on a nearby line
       const hasClosingNearby = lines.slice(i, i + 20).some(l => l.includes(`</${jsxTagMatch[1]}>`));
       if (!hasClosingNearby) {
         issues.push({

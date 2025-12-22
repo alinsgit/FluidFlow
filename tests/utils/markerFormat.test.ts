@@ -192,7 +192,7 @@ total: 1
       };
 
       const validation = validateManifest(manifest, files);
-      expect(validation.isValid).toBe(true); // Extra files don't invalidate
+      expect(validation.isValid).toBe(true); // Extra files do not invalidate
       expect(validation.extra).toEqual(['src/Extra.tsx']);
     });
 

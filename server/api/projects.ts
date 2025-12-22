@@ -432,7 +432,7 @@ router.put('/:id', async (req, res) => {
       // This prevents accidental data loss from race conditions or bugs
       if (fileCount === 0) {
         console.warn(`[Projects API] BLOCKED empty files update for project ${id} - would delete ${existingFileCount} files!`);
-        // Don't update files at all if empty - return warning but success
+        // do not update files at all if empty - return warning but success
         return {
           meta,
           message: 'Empty update blocked',
@@ -459,7 +459,7 @@ router.put('/:id', async (req, res) => {
           console.log(`[Projects API] FORCE update for project ${id} - reducing files from ${existingFileCount} to ${fileCount} (user confirmed)`);
         }
 
-        // IMPORTANT: Don't delete entire directory - preserve .git!
+        // IMPORTANT: do not delete entire directory - preserve .git!
         // Instead: delete old files, write new files, keep .git intact
 
         if (existsSync(filesDir)) {

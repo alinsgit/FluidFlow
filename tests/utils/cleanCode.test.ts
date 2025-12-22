@@ -236,7 +236,7 @@ describe('cleanCode', () => {
       const result2 = cleanGeneratedCode(input2, 'test.tsx');
       expect(result2).toContain('onChange={(e) => {');
 
-      // Don't modify valid arrow functions
+      // do not modify valid arrow functions
       const input3 = '<button onClick={() => {}}>Click</button>';
       const result3 = cleanGeneratedCode(input3, 'test.tsx');
       expect(result3).toBe(input3);
@@ -258,7 +258,7 @@ describe('cleanCode', () => {
       const result3 = cleanGeneratedCode(input3, 'test.tsx');
       expect(result3).toContain('getValue: () => {');
 
-      // Don't modify valid arrow functions
+      // do not modify valid arrow functions
       const input4 = `const obj = { getValue: () => { return 42; } };`;
       const result4 = cleanGeneratedCode(input4, 'test.tsx');
       expect(result4).toContain('getValue: () => {');

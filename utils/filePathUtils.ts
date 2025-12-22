@@ -30,7 +30,7 @@ export const IGNORED_PATHS = [
   // IDE directories
   '.idea',
   '.vscode',
-  // Lock files (optional - keep for reference but don't modify)
+  // Lock files (optional - keep for reference but do not modify)
   // 'package-lock.json',
   // 'yarn.lock',
   // 'pnpm-lock.yaml',

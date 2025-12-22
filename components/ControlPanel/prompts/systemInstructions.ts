@@ -740,7 +740,7 @@ Return ONLY valid JSON - no markdown, no text before/after:
 
 ## FIX GUIDELINES
 
-1. **Minimal changes**: Fix ONLY the error, don't refactor
+1. **Minimal changes**: Fix ONLY the error, do not refactor
 2. **Preserve style**: Match existing code patterns
 3. **Keep attributes**: Preserve \`data-ff-group\` and \`data-ff-id\`
 4. **Relative imports**: Always use \`'./path'\` not \`'src/path'\`

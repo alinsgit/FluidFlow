@@ -449,7 +449,7 @@ Return ONLY valid JSON in this exact format:
 
 Use appropriate SQL types: INT, BIGINT, SERIAL, VARCHAR(255), TEXT, BOOLEAN, DATE, DATETIME, TIMESTAMP, DECIMAL(10,2), FLOAT, JSON, UUID`;
 
-      // Don't pass selectedModel - use provider's default model from settings
+      // do not pass selectedModel - use provider's default model from settings
       const response = await providerManager.generate({
         prompt: fullPrompt,
         responseFormat: 'json',

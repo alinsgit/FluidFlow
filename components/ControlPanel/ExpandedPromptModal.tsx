@@ -108,7 +108,7 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
       // Move cursor to end
       textareaRef.current.setSelectionRange(prompt.length, prompt.length);
     }
-    // Note: prompt.length is used to position cursor, but we don't want to re-run on prompt changes
+    // Note: prompt.length is used to position cursor, but we do not want to re-run on prompt changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 

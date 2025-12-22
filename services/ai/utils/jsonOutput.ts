@@ -131,7 +131,7 @@ export function buildJsonSystemInstruction(
   schema: Record<string, unknown> | undefined,
   capability: JsonCapability
 ): string {
-  // If native schema is supported, don't bloat the system prompt
+  // If native schema is supported, do not bloat the system prompt
   if (capability.supportsNativeSchema || !schema) {
     return baseInstruction;
   }

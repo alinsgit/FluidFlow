@@ -510,7 +510,7 @@ export const autoSave = {
     lastSavedFiles = null;
     lastSavedProjectId = null;
     pendingSave = null;
-    // Note: We don't reset isSaving here as an in-flight save should complete
+    // Note: We do not reset isSaving here as an in-flight save should complete
   },
 
   /**

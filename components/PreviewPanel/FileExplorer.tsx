@@ -382,7 +382,7 @@ export const FileExplorer = memo(function FileExplorer({
       }
     });
 
-    // Merge with existing expanded folders (don't collapse manually expanded ones)
+    // Merge with existing expanded folders (do not collapse manually expanded ones)
     setExpandedFolders(prev => {
       const merged = new Set([...prev, ...newExpanded]);
       // Only update if there are new folders to expand

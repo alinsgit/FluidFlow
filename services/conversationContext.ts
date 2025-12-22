@@ -170,7 +170,7 @@ class ConversationContextManager {
     // Check if compaction needed
     if (context.estimatedTokens > this.config.maxTokensPerContext) {
       console.log(`[ContextManager] Context "${contextId}" exceeds token limit, needs compaction`);
-      // Don't auto-compact - let the caller decide
+      // do not auto-compact - let the caller decide
     }
 
     this.saveToStorage();
@@ -251,7 +251,7 @@ class ConversationContextManager {
     }));
   }
 
-  // Get conversation as text (for providers that don't support message arrays)
+  // Get conversation as text (for providers that do not support message arrays)
   getConversationAsText(contextId: string, maxMessages?: number): string {
     const messages = this.getMessagesForAI(contextId, maxMessages);
     return messages

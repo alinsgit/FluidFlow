@@ -26,7 +26,7 @@ import {
   type SyntaxIssue,
 } from './codeValidator';
 
-// Note: syntaxFixer.ts exports are available but we intentionally don't use them here.
+// Note: syntaxFixer.ts exports are available but we intentionally do not use them here.
 // Aggressive syntax "fixes" were causing more harm than good.
 // The functions are still exported from syntaxFixer.ts for optional/explicit use.
 
@@ -106,7 +106,7 @@ export function fixJsxTextContent(code: string): string {
       // Skip over JSX expressions {..} as they contain JavaScript code, not text
       let textContent = '';
       while (i < len && !isJsxTagStart(code, i)) {
-        // If we hit a JSX expression, copy it verbatim (don't escape inside)
+        // If we hit a JSX expression, copy it verbatim (do not escape inside)
         if (code[i] === '{') {
           let braceDepth = 1;
           textContent += code[i];
@@ -458,7 +458,7 @@ function fixBracketBalance(code: string): string {
     }
     if (inJsx && char === '>') {
       inJsx = false;
-      continue; // Don't track JSX angle brackets
+      continue; // do not track JSX angle brackets
     }
     if (inJsx) continue;
 

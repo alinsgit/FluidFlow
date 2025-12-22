@@ -393,7 +393,7 @@ export function fixJsxTagBalance(code: string): string {
         break;
       }
 
-      // Don't go past the function/component end
+      // do not go past the function/component end
       if (i > insertLine + 20) {
         insertLine = Math.min(insertLine + 5, lines.length - 1);
         break;

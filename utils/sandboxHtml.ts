@@ -703,7 +703,7 @@ function getBootstrapScript(files: FileSystem): string {
         console.log('[RouterShim] === ROUTER SHIM MODULE LOADED ===');
         console.log('[RouterShim] ReactRouterDom keys:', Object.keys(ReactRouterDom));
 
-        // Re-export utility functions that don't need Router context
+        // Re-export utility functions that do not need Router context
         export {
           generatePath, matchPath, matchRoutes, resolvePath,
           createRoutesFromElements, createRoutesFromChildren,
@@ -1555,7 +1555,7 @@ function getBootstrapScript(files: FileSystem): string {
 
           root.appendChild(errorContainer);
         }
-        return; // Don't try to mount app if compilation failed
+        return; // do not try to mount app if compilation failed
       }
 
       console.log('[Sandbox] Creating import map with react-router-dom:', importMap.imports['react-router-dom']);
