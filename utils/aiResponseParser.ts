@@ -168,22 +168,22 @@ const RE_JSON_OBJECT = /\{[\s\S]*\}/;
 const RE_CODE_BLOCK_TYPE = /```(?:tsx?|jsx?|typescript|javascript)/;
 
 // JSON parsing patterns
-const RE_TRAILING_COMMA = /,\s*$/;
-const RE_INCOMPLETE_KEY = /,?\s*"[^"]*"\s*:\s*$/;
-const RE_PARTIAL_STRING = /,?\s*"[^"]*"\s*:\s*"[^"]*$/;
+const _RE_TRAILING_COMMA = /,\s*$/;
+const _RE_INCOMPLETE_KEY = /,?\s*"[^"]*"\s*:\s*$/;
+const _RE_PARTIAL_STRING = /,?\s*"[^"]*"\s*:\s*"[^"]*$/;
 
 // Marker parsing patterns
-const RE_MARKER_FILE_WELL_FORMED = /<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->([\s\S]*?)<!--\s*\/FILE:\1\s*-->/g;
-const RE_MARKER_FILE_OPENING = /<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g;
-const RE_MARKER_FILE_CLOSING = /<!--\s*\/FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g;
-const RE_MARKER_META_BLOCK = /<!--\s*META\s*-->([\s\S]*?)<!--\s*\/META\s*-->/;
-const RE_MARKER_PLAN_BLOCK = /<!--\s*PLAN\s*-->([\s\S]*?)<!--\s*\/PLAN\s*-->/;
-const RE_MARKER_BATCH_BLOCK = /<!--\s*BATCH\s*-->([\s\S]*?)<!--\s*\/BATCH\s*-->/;
-const RE_MARKER_EXPLANATION_BLOCK = /<!--\s*EXPLANATION\s*-->([\s\S]*?)<!--\s*\/EXPLANATION\s*-->/;
+const _RE_MARKER_FILE_WELL_FORMED = /<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->([\s\S]*?)<!--\s*\/FILE:\1\s*-->/g;
+const _RE_MARKER_FILE_OPENING = /<!--\s*FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g;
+const _RE_MARKER_FILE_CLOSING = /<!--\s*\/FILE:([\w./-]+\.[a-zA-Z]+)\s*-->/g;
+const _RE_MARKER_META_BLOCK = /<!--\s*META\s*-->([\s\S]*?)<!--\s*\/META\s*-->/;
+const _RE_MARKER_PLAN_BLOCK = /<!--\s*PLAN\s*-->([\s\S]*?)<!--\s*\/PLAN\s*-->/;
+const _RE_MARKER_BATCH_BLOCK = /<!--\s*BATCH\s*-->([\s\S]*?)<!--\s*\/BATCH\s*-->/;
+const _RE_MARKER_EXPLANATION_BLOCK = /<!--\s*EXPLANATION\s*-->([\s\S]*?)<!--\s*\/EXPLANATION\s*-->/;
 
 // Fallback patterns
-const RE_FALLBACK_CODE_BLOCK = /```(?:tsx?|jsx?|ts|js|typescript|javascript)?\n([\s\S]*?)```/g;
-const RE_FALLBACK_FILE_PATH = /((?:src\/)?[\w/-]+\.(?:tsx?|jsx?|css|json|html|md))\s*$/;
+const _RE_FALLBACK_CODE_BLOCK = /```(?:tsx?|jsx?|ts|js|typescript|javascript)?\n([\s\S]*?)```/g;
+const _RE_FALLBACK_FILE_PATH = /((?:src\/)?[\w/-]+\.(?:tsx?|jsx?|css|json|html|md))\s*$/;
 
 // ============================================================================
 // FORMAT DETECTION

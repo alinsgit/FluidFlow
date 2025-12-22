@@ -19,7 +19,6 @@ import { PromptEngineerModal } from './PromptEngineerModal';
 import { BatchGenerationModal } from './BatchGenerationModal';
 import { ContextIndicator } from '../ContextIndicator';
 import { getFluidFlowConfig } from '../../services/fluidflowConfig';
-import { checkAndAutoCompact } from '../../services/contextCompaction';
 
 // Sub-components
 import { ChatPanel } from './ChatPanel';

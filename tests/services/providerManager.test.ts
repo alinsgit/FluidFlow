@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ProviderManager, loadProvidersFromLocalStorage, saveProvidersToLocalStorage, getActiveProviderIdFromLocalStorage, setActiveProviderIdInLocalStorage, getProviderManager } from '../../services/ai';
 import type { ProviderConfig } from '../../services/ai';
 

@@ -149,7 +149,7 @@ describe('ConversationContextManager', () => {
         smallManager.addMessage('test', 'assistant', 'Response ' + i);
       }
 
-      const beforeCount = smallManager.getContext('test').messages.length;
+      const _beforeCount = smallManager.getContext('test').messages.length;
       smallManager.clearContext('test');
       // After clear, messages should be 0
       const afterCount = smallManager.getContext('test').messages.length;

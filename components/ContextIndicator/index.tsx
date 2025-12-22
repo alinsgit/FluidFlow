@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { getContextManager } from '@/services/conversationContext';
 import { ContextIndicatorProps } from './types';
-import { getModelContextSize } from './utils';
+import { getCompactionThreshold, getModelContextSize } from './utils';
 import { ContextManagerModal } from './ContextManagerModal';
 
 export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
@@ -20,7 +20,8 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
   const [stats, setStats] = useState<{ messages: number; tokens: number } | null>(null);
 
   const contextManager = getContextManager();
-  const maxTokens = getModelContextSize();
+  const compactThreshold = getCompactionThreshold();
+  const modelContextSize = getModelContextSize();
 
   useEffect(() => {
     const updateStats = () => {
@@ -67,7 +68,11 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
     );
   }
 
-  const usagePercent = Math.min(100, (stats.tokens / maxTokens) * 100);
+  // Calculate percentage based on actual model context size, not compaction threshold
+  const usagePercent = Math.min(100, (stats.tokens / modelContextSize) * 100);
+  // Compaction warning/critical based on threshold percentage
+  const thresholdPercent = (stats.tokens / compactThreshold) * 100;
+  // Color based on actual model context usage, not compaction threshold
   const isWarning = usagePercent > 60;
   const isCritical = usagePercent > 80;
 
@@ -88,7 +93,7 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
       {/* Compact Indicator */}
       <div
         className={`flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors ${className}`}
-        title="Context usage - Click for details"
+        title={`${stats.tokens.toLocaleString()} tokens / ${modelContextSize.toLocaleString()} context (${Math.round(usagePercent)}%) - Compaction at ${compactThreshold.toLocaleString()} (${Math.round(thresholdPercent)}%) - Click for details`}
       >
         {/* Mini progress bar */}
         <button
@@ -107,7 +112,7 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
           </span>
 
           {isCritical && (
-            <AlertTriangle className="w-4 h-4 text-red-400 animate-pulse flex-shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-red-400 animate-pulse shrink-0" />
           )}
         </button>
 
@@ -125,17 +130,34 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
           </span>
         </div>
 
-        {/* Clear Messages Button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            contextManager.clearContext(contextId);
-          }}
-          className="p-1.5 hover:bg-slate-700/50 rounded text-slate-500 hover:text-red-400 transition-colors"
-          title="Clear messages"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1">
+          {/* Quick Compact Button - show when near or over compaction threshold */}
+          {thresholdPercent > 70 && onCompact && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCompact();
+              }}
+              className="p-1.5 hover:bg-blue-500/20 rounded text-blue-400 hover:text-blue-300 transition-colors"
+              title="Compact context"
+            >
+              <Zap className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Clear Messages Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              contextManager.clearContext(contextId);
+            }}
+            className="p-1.5 hover:bg-slate-700/50 rounded text-slate-500 hover:text-red-400 transition-colors"
+            title="Clear messages"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Detail Modal */}

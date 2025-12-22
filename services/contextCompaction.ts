@@ -194,8 +194,6 @@ export async function ensureTokenSpace(
   }
 
   // Not enough space - need to compact
-  const overBy = totalEstimatedTokens - maxTokens;
-
   if (settings.autoCompact) {
     // Auto-compact and proceed
     try {

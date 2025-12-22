@@ -26,7 +26,7 @@ export interface JsonRepairOptions {
 /**
  * Track string state while iterating through JSON
  */
-interface StringState {
+interface _StringState {
   inString: boolean;
   escapeNext: boolean;
 }
@@ -34,7 +34,7 @@ interface StringState {
 /**
  * Iterate through JSON respecting string boundaries
  */
-function* iterateJsonChars(json: string): Generator<{ char: string; index: number; inString: boolean }> {
+function* _iterateJsonChars(json: string): Generator<{ char: string; index: number; inString: boolean }> {
   let inString = false;
   let escapeNext = false;
 
