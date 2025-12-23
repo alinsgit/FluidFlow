@@ -52,11 +52,22 @@ interface CodeQualityPanelProps {
 
 // Simple complexity calculator (cyclomatic complexity approximation)
 function calculateComplexity(code: string): number {
-  const keywords = ['if', 'else', 'for', 'while', 'case', 'catch', 'switch', '&&', '||', '?'];
+  // Use word boundary patterns for keywords, literal patterns for operators
+  const patterns = [
+    /\bif\b/g,
+    /\belse\b/g,
+    /\bfor\b/g,
+    /\bwhile\b/g,
+    /\bcase\b/g,
+    /\bcatch\b/g,
+    /\bswitch\b/g,
+    /&&/g,
+    /\|\|/g,
+    /\?(?![:.])/g, // Ternary operator, not optional chaining
+  ];
   let complexity = 1; // Base complexity
 
-  for (const keyword of keywords) {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'g');
+  for (const regex of patterns) {
     const matches = code.match(regex);
     if (matches) {
       complexity += matches.length;
@@ -163,7 +174,9 @@ function generateQualityIssues(metrics: FileMetrics, content: string): QualityIs
   // Check for unused imports (basic check)
   metrics.imports.forEach((imp) => {
     const importName = imp.split('/').pop() || imp;
-    const regex = new RegExp(`\\b${importName}\\b`, 'g');
+    // Escape special regex characters in import name
+    const escapedName = importName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escapedName}\\b`, 'g');
     const matches = content.match(regex);
     // Subtract 1 for the import statement itself
     if (!matches || matches.length <= 1) {

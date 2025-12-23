@@ -41,6 +41,9 @@ export {
   API_BASE,
   apiCall,
   checkServerHealth,
+  isBackendOnline,
+  startHealthMonitor,
+  stopHealthMonitor,
   // API clients
   projectApi,
   gitApi,

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Send, Loader2, MousePointer2, Sparkles, Layers, Target } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Send, Loader2, MousePointer2, Sparkles, Layers, Target, GripVertical, Minimize2, Maximize2 } from 'lucide-react';
 
 export interface InspectedElement {
   tagName: string;
@@ -32,6 +32,82 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
 }) => {
   const [prompt, setPrompt] = useState('');
   const [scope, setScope] = useState<EditScope>('element');
+  const [isMinimized, setIsMinimized] = useState(false);
+
+  // Drag state for modal - floating mode
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasBeenDragged, setHasBeenDragged] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Reset position when element changes
+  useEffect(() => {
+    setPosition({ x: 0, y: 0 });
+    setHasBeenDragged(false);
+  }, [element?.ffId]);
+
+  // Drag handlers - improved for smoother movement
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    setHasBeenDragged(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      posX: position.x,
+      posY: position.y,
+    };
+    // Add cursor style to body during drag
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+
+      // Get viewport bounds for constraining
+      const modal = modalRef.current;
+      if (modal) {
+        const rect = modal.getBoundingClientRect();
+        const maxX = window.innerWidth - rect.width / 2;
+        const minX = -window.innerWidth + rect.width / 2;
+        const maxY = window.innerHeight - rect.height - 20;
+        const minY = -window.innerHeight + 100;
+
+        setPosition({
+          x: Math.max(minX, Math.min(maxX, dragStartRef.current.posX + dx)),
+          y: Math.max(minY, Math.min(maxY, dragStartRef.current.posY + dy)),
+        });
+      } else {
+        setPosition({
+          x: dragStartRef.current.posX + dx,
+          y: dragStartRef.current.posY + dy,
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging]);
 
   if (!element) return null;
 
@@ -62,21 +138,101 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
     { label: 'Fix Accessibility', prompt: 'Improve accessibility with proper ARIA labels and keyboard support' },
   ];
 
+  // Minimized view
+  if (isMinimized) {
+    return (
+      <div
+        ref={modalRef}
+        className="absolute z-[200] animate-in fade-in duration-200"
+        style={{
+          bottom: `calc(16px - ${position.y}px)`,
+          left: '50%',
+          transform: `translateX(calc(-50% + ${position.x}px))`,
+        }}
+      >
+        <div
+          className={`flex items-center gap-2 px-3 py-2 bg-purple-600/90 backdrop-blur-xl rounded-full shadow-2xl cursor-move select-none transition-all ${
+            isDragging ? 'ring-2 ring-white/30 scale-105' : 'hover:bg-purple-500/90'
+          }`}
+          onMouseDown={handleDragStart}
+        >
+          <GripVertical className="w-4 h-4 text-white/60" />
+          <MousePointer2 className="w-4 h-4 text-white" />
+          <span className="text-sm font-medium text-white">
+            {element.componentName || element.tagName.toLowerCase()}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+            title="Expand"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 rounded-full hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+            title="Close"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-[520px] animate-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-slate-900/95 backdrop-blur-xl border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-purple-500/10">
+    <div
+      ref={modalRef}
+      className={`absolute z-[200] w-[90%] max-w-[520px] ${
+        !hasBeenDragged ? 'animate-in slide-in-from-bottom-4 duration-300' : ''
+      }`}
+      style={{
+        bottom: `calc(16px - ${position.y}px)`,
+        left: '50%',
+        transform: `translateX(calc(-50% + ${position.x}px))`,
+      }}
+    >
+      <div className={`bg-slate-900/95 backdrop-blur-xl border rounded-2xl shadow-2xl overflow-hidden transition-all ${
+        isDragging ? 'border-purple-400 ring-2 ring-purple-500/40 shadow-purple-500/20' : 'border-purple-500/30'
+      }`}>
+        {/* Header - Full Draggable Area with prominent grip */}
+        <div
+          className={`flex items-center justify-between px-3 py-2.5 border-b border-white/10 cursor-grab active:cursor-grabbing select-none transition-all ${
+            isDragging ? 'bg-purple-500/30' : 'bg-purple-500/10 hover:bg-purple-500/15'
+          }`}
+          onMouseDown={handleDragStart}
+        >
           <div className="flex items-center gap-2">
+            {/* Large drag grip indicator */}
+            <div className={`p-1.5 rounded-lg transition-colors ${isDragging ? 'bg-purple-500/30' : 'bg-white/5 hover:bg-white/10'}`}>
+              <GripVertical className={`w-4 h-4 transition-colors ${isDragging ? 'text-purple-300' : 'text-purple-400/70'}`} />
+            </div>
             <MousePointer2 className="w-4 h-4 text-purple-400" />
             <span className="text-sm font-medium text-white">Element Selected</span>
+            {!hasBeenDragged && (
+              <span className="text-[10px] text-purple-400/60 ml-1">drag to move</span>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsMinimized(true); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              title="Minimize"
+            >
+              <Minimize2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Element Info */}
@@ -222,12 +378,98 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
   );
 };
 
+// Draggable selection label component
+const DraggableLabel: React.FC<{
+  selectedRect: { top: number; left: number; width: number; height: number };
+  selectedElement?: InspectedElement | null;
+}> = ({ selectedRect, selectedElement }) => {
+  const [offset, setOffset] = useState({ x: 0, y: -28 }); // Default position above element
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      offsetX: offset.x,
+      offsetY: offset.y,
+    };
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setOffset({
+        x: dragStartRef.current.offsetX + dx,
+        y: dragStartRef.current.offsetY + dy,
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
+  // Reset offset when selected element changes
+  useEffect(() => {
+    setOffset({ x: 0, y: -28 });
+  }, [selectedElement?.ffId]);
+
+  return (
+    <div
+      className={`absolute px-2 py-1.5 bg-purple-600 text-white text-[10px] rounded-lg shadow-xl whitespace-nowrap flex items-center gap-1.5 pointer-events-auto cursor-move select-none z-[150] ${
+        isDragging ? 'ring-2 ring-white/50 scale-105' : 'hover:ring-2 hover:ring-white/30'
+      } transition-all`}
+      style={{
+        top: selectedRect.top + offset.y,
+        left: selectedRect.left + offset.x,
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {/* Drag handle */}
+      <svg className="w-3 h-3 opacity-50" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="5" cy="6" r="2" />
+        <circle cx="12" cy="6" r="2" />
+        <circle cx="5" cy="12" r="2" />
+        <circle cx="12" cy="12" r="2" />
+        <circle cx="5" cy="18" r="2" />
+        <circle cx="12" cy="18" r="2" />
+      </svg>
+      <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+      <span className="font-semibold">
+        {selectedElement?.componentName || selectedElement?.tagName?.toLowerCase() || 'Element'}
+      </span>
+      {selectedElement?.ffId && (
+        <span className="opacity-60 text-[9px]">#{selectedElement.ffId.slice(0, 6)}</span>
+      )}
+      {selectedElement?.className && (
+        <span className="opacity-50 text-[9px] max-w-[80px] truncate">.{selectedElement.className.split(' ')[0]}</span>
+      )}
+    </div>
+  );
+};
+
 // Inspection overlay that shows on the preview when inspect mode is active
 export const InspectionOverlay: React.FC<{
   isActive: boolean;
   hoveredRect: { top: number; left: number; width: number; height: number } | null;
   selectedRect: { top: number; left: number; width: number; height: number } | null;
-}> = ({ isActive, hoveredRect, selectedRect }) => {
+  selectedElement?: InspectedElement | null;
+}> = ({ isActive, hoveredRect, selectedRect, selectedElement }) => {
   if (!isActive) return null;
 
   return (
@@ -243,23 +485,44 @@ export const InspectionOverlay: React.FC<{
             height: hoveredRect.height,
           }}
         >
-          <div className="absolute -top-6 left-0 px-2 py-0.5 bg-blue-500 text-white text-[10px] rounded whitespace-nowrap">
+          <div className="absolute -top-6 left-0 px-2 py-0.5 bg-blue-500 text-white text-[10px] rounded whitespace-nowrap shadow-lg">
             Click to select
           </div>
         </div>
       )}
 
-      {/* Selected element highlight */}
+      {/* Selected element highlight with animation */}
       {selectedRect && (
-        <div
-          className="absolute border-2 border-purple-500 bg-purple-500/10 ring-4 ring-purple-500/20"
-          style={{
-            top: selectedRect.top,
-            left: selectedRect.left,
-            width: selectedRect.width,
-            height: selectedRect.height,
-          }}
-        />
+        <>
+          {/* Pulsing ring animation */}
+          <div
+            className="absolute border-2 border-purple-400 rounded-sm animate-pulse"
+            style={{
+              top: selectedRect.top - 3,
+              left: selectedRect.left - 3,
+              width: selectedRect.width + 6,
+              height: selectedRect.height + 6,
+            }}
+          />
+          {/* Main selection box */}
+          <div
+            className="absolute border-2 border-purple-500 bg-purple-500/15 shadow-lg shadow-purple-500/25"
+            style={{
+              top: selectedRect.top,
+              left: selectedRect.left,
+              width: selectedRect.width,
+              height: selectedRect.height,
+            }}
+          >
+            {/* Corner markers */}
+            <div className="absolute -top-1 -left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-purple-400" />
+            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-purple-400" />
+            <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-purple-400" />
+            <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-purple-400" />
+          </div>
+          {/* Draggable selection label */}
+          <DraggableLabel selectedRect={selectedRect} selectedElement={selectedElement} />
+        </>
       )}
 
       {/* Info banner when in inspect mode */}

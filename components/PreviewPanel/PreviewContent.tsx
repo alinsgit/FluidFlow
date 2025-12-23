@@ -19,8 +19,13 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { LogEntry, NetworkRequest, PreviewDevice, TerminalTab } from '../../types';
-import { ConsolePanel } from './ConsolePanel';
-import { ComponentInspector, InspectionOverlay, InspectedElement, EditScope } from './ComponentInspector';
+import { DevToolsPanel } from './DevToolsPanel';
+import { InspectorPanel } from './InspectorPanel';
+import type { InspectorTab } from './InspectorPanel/types';
+import type { ComponentTreeNode, ComputedStylesResult } from '../../utils/sandboxHtml/scripts';
+import type { TailwindClassInfo } from '../../utils/tailwindParser';
+import type { EditScope } from './InspectorPanel/types';
+import { ComponentInspector, InspectionOverlay, InspectedElement } from './ComponentInspector';
 
 export interface PreviewContentProps {
   appCode: string | undefined;
@@ -62,6 +67,37 @@ export interface PreviewContentProps {
   onGoBack: () => void;
   onGoForward: () => void;
   onReload: () => void;
+  // Elements tab props (optional - for component tree inspection)
+  componentTree?: ComponentTreeNode | null;
+  selectedNodeId?: string | null;
+  expandedNodes?: Set<string>;
+  onSelectNode?: (nodeId: string) => void;
+  onToggleExpand?: (nodeId: string) => void;
+  onHoverNode?: (nodeId: string | null) => void;
+  onRefreshTree?: () => void;
+  isTreeLoading?: boolean;
+  // InspectorPanel props (optional - for CSS/props inspection)
+  isInspectorPanelOpen?: boolean;
+  inspectorActiveTab?: InspectorTab;
+  onInspectorTabChange?: (tab: InspectorTab) => void;
+  onCloseInspectorPanel?: () => void;
+  // Styles data
+  computedStyles?: ComputedStylesResult | null;
+  tailwindClasses?: TailwindClassInfo[];
+  isStylesLoading?: boolean;
+  // Props data
+  componentProps?: Record<string, unknown> | null;
+  componentState?: Array<{ index: number; value: unknown }> | null;
+  componentName?: string | null;
+  isPropsLoading?: boolean;
+  // Quick styles
+  selectedElementRef?: string | null;
+  ffGroup?: string | null;
+  onApplyPreset?: (prompt: string, scope: EditScope) => void;
+  onApplyCustomStyle?: (prompt: string, scope: EditScope) => void;
+  onApplyTempStyle?: (styles: Record<string, string>) => void;
+  onClearTempStyles?: () => void;
+  isQuickStylesProcessing?: boolean;
 }
 
 export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
@@ -104,6 +140,37 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
     onGoBack,
     onGoForward,
     onReload,
+    // Elements tab props
+    componentTree,
+    selectedNodeId,
+    expandedNodes,
+    onSelectNode,
+    onToggleExpand,
+    onHoverNode,
+    onRefreshTree,
+    isTreeLoading,
+    // InspectorPanel props
+    isInspectorPanelOpen = false,
+    inspectorActiveTab = 'styles',
+    onInspectorTabChange,
+    onCloseInspectorPanel,
+    // Styles data
+    computedStyles,
+    tailwindClasses = [],
+    isStylesLoading = false,
+    // Props data
+    componentProps,
+    componentState,
+    componentName,
+    isPropsLoading = false,
+    // Quick styles
+    selectedElementRef,
+    ffGroup,
+    onApplyPreset,
+    onApplyCustomStyle,
+    onApplyTempStyle,
+    onClearTempStyles,
+    isQuickStylesProcessing = false,
   } = props;
 
   // Local state for URL input
@@ -123,9 +190,9 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
     onNavigate(url);
   };
 
-  // Calculate content area height based on console state
+  // Calculate content area height based on console state (h-64 = 256px when open, h-8 = 32px when closed)
   const contentStyle = {
-    height: isConsoleOpen ? 'calc(100% - 192px)' : 'calc(100% - 32px)',
+    height: isConsoleOpen ? 'calc(100% - 256px)' : 'calc(100% - 32px)',
   };
 
   return (
@@ -235,9 +302,11 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
       )}
 
       <div
-        className="flex items-center justify-center overflow-hidden relative z-10 transition-all duration-300"
+        className="flex overflow-hidden relative z-10 transition-all duration-300"
         style={contentStyle}
       >
+        {/* Main preview area */}
+        <div className="flex-1 flex items-center justify-center overflow-hidden">
         {appCode ? (
           <div
             className={`relative z-10 transition-all duration-500 ease-in-out bg-slate-950 shadow-2xl overflow-hidden flex flex-col ${
@@ -331,6 +400,7 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
                 isActive={isInspectMode}
                 hoveredRect={hoveredElement}
                 selectedRect={inspectedElement?.rect || null}
+                selectedElement={inspectedElement}
               />
             </div>
 
@@ -361,10 +431,33 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
             </div>
           </div>
         )}
+        </div>
+
+        {/* Inspector Panel - Right sidebar */}
+        <InspectorPanel
+          isOpen={isInspectorPanelOpen}
+          activeTab={inspectorActiveTab}
+          onTabChange={onInspectorTabChange ?? (() => {})}
+          onClose={onCloseInspectorPanel ?? (() => {})}
+          computedStyles={computedStyles ?? null}
+          tailwindClasses={tailwindClasses}
+          isStylesLoading={isStylesLoading}
+          componentProps={componentProps ?? null}
+          componentState={componentState ?? null}
+          componentName={componentName ?? null}
+          isPropsLoading={isPropsLoading}
+          selectedElementRef={selectedElementRef ?? null}
+          ffGroup={ffGroup}
+          onApplyPreset={onApplyPreset ?? (() => {})}
+          onApplyCustom={onApplyCustomStyle ?? (() => {})}
+          onApplyTempStyle={onApplyTempStyle ?? (async () => {})}
+          onClearTempStyles={onClearTempStyles ?? (() => {})}
+          isQuickStylesProcessing={isQuickStylesProcessing}
+        />
       </div>
 
       {appCode && (
-        <ConsolePanel
+        <DevToolsPanel
           logs={logs}
           networkLogs={networkLogs}
           isOpen={isConsoleOpen}
@@ -374,6 +467,15 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
           onClearLogs={() => setLogs([])}
           onClearNetwork={() => setNetworkLogs([])}
           onFixError={fixError}
+          // Elements tab props
+          componentTree={componentTree}
+          selectedNodeId={selectedNodeId}
+          expandedNodes={expandedNodes}
+          onSelectNode={onSelectNode}
+          onToggleExpand={onToggleExpand}
+          onHoverNode={onHoverNode}
+          onRefreshTree={onRefreshTree}
+          isTreeLoading={isTreeLoading}
         />
       )}
     </div>

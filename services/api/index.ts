@@ -31,7 +31,14 @@ export type {
 } from './types';
 
 // Client utilities
-export { API_BASE, apiCall, checkServerHealth } from './client';
+export {
+  API_BASE,
+  apiCall,
+  checkServerHealth,
+  isBackendOnline,
+  startHealthMonitor,
+  stopHealthMonitor,
+} from './client';
 
 // API clients
 export { projectApi } from './projects';

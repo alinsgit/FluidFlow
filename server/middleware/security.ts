@@ -7,13 +7,17 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { Request, Response, NextFunction } from 'express';
 
+// Development mode has relaxed limits
+const isDev = process.env.NODE_ENV !== 'production';
+
 /**
  * Rate limiting configuration
  * Prevents brute force attacks and API abuse
+ * Relaxed limits in development for better DX
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: isDev ? 1000 : 100, // 1000 in dev, 100 in prod per 15 min
   message: {
     error: 'Too many requests from this IP, please try again later.',
   },
@@ -26,7 +30,7 @@ export const apiLimiter = rateLimit({
  */
 export const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Limit each IP to 20 AI requests per windowMs
+  max: isDev ? 100 : 20, // 100 in dev, 20 in prod per 15 min
   message: {
     error: 'Too many AI requests, please try again later.',
   },

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, memo } from 'react';
+import React, { useEffect, useState, useRef, memo, useCallback } from 'react';
 import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, FileText, Wrench, Package, Loader2,
@@ -19,7 +19,7 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useUI } from '../../contexts/UIContext';
 
 // Local hooks
-import { useIframeMessaging, useInspectMode } from './hooks';
+import { useIframeMessaging, useInspectMode, useComponentTree, useInspectorPanel } from './hooks';
 
 // Sub-components
 import { CodeEditor } from './CodeEditor';
@@ -231,6 +231,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     setActiveTerminalTab,
     hoveredElement,
     inspectedElement,
+    setInspectedElement,
     clearInspectedElement,
     currentUrl,
     canGoBack,
@@ -262,6 +263,249 @@ export const PreviewPanel = memo(function PreviewPanel({
     isInspectEditing,
     setIsInspectEditing,
   });
+
+  // Component tree hook for Elements tab in DevTools
+  const {
+    tree: componentTree,
+    selectedNodeId,
+    expandedNodes,
+    isLoading: isTreeLoading,
+    selectNode: handleSelectNode,
+    toggleExpand: onToggleExpand,
+    hoverNode: onHoverNode,
+    refreshTree: onRefreshTree,
+  } = useComponentTree({
+    iframeRef,
+    enabled: activeTab === 'preview' && isConsoleOpen && activeTerminalTab === 'elements',
+  });
+
+  // Ref for exit handler (defined later, used in useInspectorPanel callback)
+  const exitInspectModeRef = useRef<() => void>(() => {});
+
+  // Inspector panel hook for CSS/Props inspection sidebar
+  const {
+    isOpen: isInspectorPanelOpen,
+    activeTab: inspectorActiveTab,
+    setActiveTab: setInspectorActiveTab,
+    openPanel: openInspectorPanel,
+    closePanel: closeInspectorPanel,
+    selectElement,
+    computedStyles,
+    tailwindClasses,
+    isStylesLoading,
+    componentName,
+    componentProps,
+    componentState,
+    isPropsLoading,
+    selectedElementRef,
+    applyPreset,
+    applyCustomStyle,
+    applyTempStyle,
+    clearTempStyles,
+    isQuickStylesProcessing,
+  } = useInspectorPanel({
+    iframeRef,
+    enabled: activeTab === 'preview',
+    onApplyAIStyle: async (prompt, elementRef, scope) => {
+      // Use inspect edit to apply AI-powered styles
+      if (onInspectEdit) {
+        // Close inspect mode and modals IMMEDIATELY before AI request
+        // This prevents double prompts and gives clear feedback
+        exitInspectModeRef.current();
+
+        // If we have an inspectedElement from inspect mode, use it
+        if (inspectedElement) {
+          await onInspectEdit(prompt, inspectedElement, scope);
+        } else if (elementRef && componentName) {
+          // Create a minimal InspectedElement from component tree selection
+          const minimalElement: InspectedElement = {
+            tagName: 'div',
+            className: '',
+            componentName: componentName,
+            rect: { top: 0, left: 0, width: 0, height: 0 },
+            ffId: elementRef,
+          };
+          await onInspectEdit(prompt, minimalElement, scope);
+        }
+      }
+    },
+  });
+
+  // Track last synced element to prevent redundant processing
+  const lastSyncedElementRef = useRef<string | null>(null);
+
+  // Stable refs for tree operations (avoid recreating callbacks)
+  const componentTreeRef = useRef(componentTree);
+  componentTreeRef.current = componentTree;
+
+  // Helper: Find node in tree by elementRef (stable - no deps)
+  const findNodeByElementRef = useCallback((node: typeof componentTree, elementRef: string): typeof componentTree => {
+    if (!node) return null;
+    if (node.elementRef === elementRef) return node;
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findNodeByElementRef(child, elementRef);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper: Find node by ID (stable - no deps)
+  const findNodeById = useCallback((node: typeof componentTree, id: string): typeof componentTree => {
+    if (!node) return null;
+    if (node.id === id) return node;
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper: Get parent node IDs for auto-expand (stable - no deps)
+  const getNodePath = useCallback((node: typeof componentTree, targetId: string, path: string[] = []): string[] | null => {
+    if (!node) return null;
+    if (node.id === targetId) return path;
+    if (node.children) {
+      for (const child of node.children) {
+        const result = getNodePath(child, targetId, [...path, node.id]);
+        if (result) return result;
+      }
+    }
+    return null;
+  }, []);
+
+  // Wrapped exit handler that clears ALL selections and closes panels
+  const handleExitInspectMode = useCallback(() => {
+    exitInspectMode();
+    selectElement(null);
+    handleSelectNode('');
+    lastSyncedElementRef.current = null;
+    closeInspectorPanel(); // Also close the Inspector panel
+  }, [exitInspectMode, selectElement, handleSelectNode, closeInspectorPanel]);
+
+  // Keep exit ref updated for useInspectorPanel callback
+  exitInspectModeRef.current = handleExitInspectMode;
+
+  // Wrapped inspect edit handler that closes modals FIRST, then processes
+  // This prevents double prompts from Element Selected modal
+  const wrappedInspectEdit = useCallback(async (
+    prompt: string,
+    element: InspectedElement,
+    scope: EditScope
+  ) => {
+    // Close modals IMMEDIATELY before AI request starts
+    handleExitInspectMode();
+    // Then process the edit request
+    await inspectModeHandleEdit(prompt, element, scope);
+  }, [handleExitInspectMode, inspectModeHandleEdit]);
+
+  // Auto-open Inspector panel when entering inspect mode
+  useEffect(() => {
+    if (isInspectMode) {
+      openInspectorPanel();
+    }
+  }, [isInspectMode, openInspectorPanel]);
+
+  // Connect tree node selection to inspector panel AND ComponentInspector
+  // Uses ref for componentTree to avoid dependency on tree changes
+  // Also enables inspect mode if not already enabled
+  const onSelectNode = useCallback((nodeId: string) => {
+    // Use ref to get current tree without causing re-renders
+    const tree = componentTreeRef.current;
+    const node = findNodeById(tree, nodeId);
+
+    if (node?.elementRef) {
+      // Enable inspect mode if not already (so overlay and ComponentInspector show)
+      if (!isInspectMode) {
+        toggleInspectMode();
+      }
+
+      // Batch all state updates
+      handleSelectNode(nodeId);
+      selectElement(node.elementRef);
+
+      // Create InspectedElement to show ComponentInspector modal
+      setInspectedElement({
+        tagName: node.tagName || node.name || 'div',
+        className: '',
+        componentName: node.type === 'component' ? node.name : undefined,
+        rect: { top: 0, left: 0, width: 0, height: 0 },
+        ffId: node.elementRef,
+        textContent: '',
+      });
+      lastSyncedElementRef.current = node.elementRef;
+    } else {
+      // Just select the node even without elementRef
+      handleSelectNode(nodeId);
+    }
+  }, [findNodeById, handleSelectNode, selectElement, setInspectedElement, isInspectMode, toggleInspectMode]);
+
+  // Stable refs for callbacks to avoid dependency changes
+  const expandedNodesRef = useRef(expandedNodes);
+  const selectElementRef = useRef(selectElement);
+  const handleSelectNodeRef = useRef(handleSelectNode);
+  const onToggleExpandRef = useRef(onToggleExpand);
+
+  // Keep refs up to date (no dependencies - runs every render but is cheap)
+  expandedNodesRef.current = expandedNodes;
+  selectElementRef.current = selectElement;
+  handleSelectNodeRef.current = handleSelectNode;
+  onToggleExpandRef.current = onToggleExpand;
+
+  // Sync Inspect Mode selection → Inspector Panel + Elements tab
+  // Runs when inspectedElement changes (with ffId or identifier based on rect)
+  useEffect(() => {
+    if (!inspectedElement) return;
+
+    // Create a unique identifier for this element
+    const elementId = inspectedElement.ffId ||
+      `${inspectedElement.tagName}-${inspectedElement.rect.left}-${inspectedElement.rect.top}`;
+
+    if (elementId === lastSyncedElementRef.current) return;
+
+    // Mark as processed immediately
+    lastSyncedElementRef.current = elementId;
+
+    // Always open Inspector Panel when an element is selected
+    if (inspectedElement.ffId) {
+      selectElementRef.current(inspectedElement.ffId);
+    } else {
+      // For elements without ffId, still open the panel (it will show limited info)
+      // Create a temporary ID based on element properties
+      selectElementRef.current(elementId);
+    }
+
+    // Find and select the corresponding tree node using ref (only if ffId exists)
+    const ffId = inspectedElement.ffId;
+    const tree = componentTreeRef.current;
+    if (tree && ffId) {
+      const treeNode = findNodeByElementRef(tree, ffId);
+      if (treeNode) {
+        handleSelectNodeRef.current(treeNode.id);
+
+        // Auto-expand parent nodes (batched in microtask)
+        const parentPath = getNodePath(tree, treeNode.id);
+        if (parentPath && parentPath.length > 0) {
+          const currentExpanded = expandedNodesRef.current;
+          const toExpand = parentPath.filter(parentId => !currentExpanded.has(parentId));
+          if (toExpand.length > 0) {
+            queueMicrotask(() => {
+              toExpand.forEach(parentId => onToggleExpandRef.current(parentId));
+            });
+          }
+        }
+
+        // Open DevTools Elements tab if needed
+        if (!isConsoleOpen) {
+          setIsConsoleOpen(true);
+        }
+        setActiveTerminalTab('elements');
+      }
+    }
+  }, [inspectedElement, findNodeByElementRef, getNodePath, isConsoleOpen, setIsConsoleOpen, setActiveTerminalTab]);
 
   // Preview AI hook (accessibility, responsiveness, database)
   const {
@@ -313,11 +557,17 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, [appCode, files, isInspectMode]);
 
   // Handle inspect mode toggle with iframe refresh
-  const handleToggleInspectMode = () => {
+  const handleToggleInspectMode = useCallback(() => {
+    // If turning OFF inspect mode, clear all selections
+    if (isInspectMode) {
+      selectElement(null);
+      handleSelectNode('');
+      lastSyncedElementRef.current = null;
+    }
     toggleInspectMode();
     // Force iframe refresh to apply new event listeners
     setKey(prev => prev + 1);
-  };
+  }, [isInspectMode, selectElement, handleSelectNode, toggleInspectMode]);
 
   // Fix error from console
   const fixError = async (logId: string, message: string) => {
@@ -661,8 +911,8 @@ export const PreviewPanel = memo(function PreviewPanel({
             hoveredElement={hoveredElement}
             inspectedElement={inspectedElement}
             isInspectEditing={isInspectEditing}
-            onCloseInspector={exitInspectMode}
-            onInspectEdit={inspectModeHandleEdit}
+            onCloseInspector={handleExitInspectMode}
+            onInspectEdit={wrappedInspectEdit}
             iframeRef={iframeRef}
             currentUrl={currentUrl}
             canGoBack={canGoBack}
@@ -671,6 +921,34 @@ export const PreviewPanel = memo(function PreviewPanel({
             onGoBack={goBack}
             onGoForward={goForward}
             onReload={reloadPreview}
+            // Elements tab props for component tree
+            componentTree={componentTree}
+            selectedNodeId={selectedNodeId}
+            expandedNodes={expandedNodes}
+            onSelectNode={onSelectNode}
+            onToggleExpand={onToggleExpand}
+            onHoverNode={onHoverNode}
+            onRefreshTree={onRefreshTree}
+            isTreeLoading={isTreeLoading}
+            // InspectorPanel props
+            isInspectorPanelOpen={isInspectorPanelOpen}
+            inspectorActiveTab={inspectorActiveTab}
+            onInspectorTabChange={setInspectorActiveTab}
+            onCloseInspectorPanel={closeInspectorPanel}
+            computedStyles={computedStyles}
+            tailwindClasses={tailwindClasses}
+            isStylesLoading={isStylesLoading}
+            componentProps={componentProps}
+            componentState={componentState}
+            componentName={componentName}
+            isPropsLoading={isPropsLoading}
+            selectedElementRef={selectedElementRef}
+            ffGroup={inspectedElement?.ffGroup}
+            onApplyPreset={applyPreset}
+            onApplyCustomStyle={applyCustomStyle}
+            onApplyTempStyle={applyTempStyle}
+            onClearTempStyles={clearTempStyles}
+            isQuickStylesProcessing={isQuickStylesProcessing}
           />
         ) : (
           <div className="flex-1 flex min-h-0 h-full">

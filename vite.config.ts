@@ -22,11 +22,11 @@ export default defineConfig(({ mode }) => {
         'Cross-Origin-Opener-Policy': 'same-origin',
       },
       proxy: {
-        // Proxy API requests to HTTP backend to avoid mixed content issues
+        // Proxy API requests to HTTPS backend
         '/api': {
-          target: 'http://localhost:3200',
+          target: 'https://localhost:3200',
           changeOrigin: true,
-          secure: false,
+          secure: false, // Allow self-signed certificates
         },
       },
     },

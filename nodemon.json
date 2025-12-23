@@ -1,0 +1,13 @@
+{
+  "watch": ["server"],
+  "ext": "ts,js,json",
+  "ignore": ["node_modules", "projects", "*.test.ts"],
+  "exec": "npx tsx server/index.ts",
+  "delay": "500",
+  "signal": "SIGTERM",
+  "restartable": "rs",
+  "verbose": true,
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

@@ -833,7 +833,13 @@ router.post('/:id/start', async (req, res) => {
     installProcess.on('exit', (code) => {
       if (code === 0) {
         pushLog(runningProject, `[${new Date().toISOString()}] Dependencies installed successfully`);
-        startDevServer();
+        try {
+          startDevServer();
+        } catch (err) {
+          runningProject.status = 'error';
+          pushLog(runningProject, `Failed to start dev server: ${err}`, true);
+          console.error(`[Runner] Project ${id} failed to start dev server:`, err);
+        }
       } else {
         runningProject.status = 'error';
         pushLog(runningProject, `npm install failed with code ${code}`, true);
@@ -844,7 +850,13 @@ router.post('/:id/start', async (req, res) => {
     });
   } else {
     // Start immediately if node_modules exists
-    startDevServer();
+    try {
+      startDevServer();
+    } catch (err) {
+      runningProject.status = 'error';
+      pushLog(runningProject, `Failed to start dev server: ${err}`, true);
+      console.error(`[Runner] Project ${id} failed to start dev server:`, err);
+    }
   }
 
   res.json({
@@ -1000,4 +1012,55 @@ router.post('/cleanup', (req, res) => {
   res.json({ message: 'Orphan processes cleaned up' });
 });
 
-export { router as runnerRouter };
+/**
+ * Cleanup all running projects - used for graceful shutdown
+ * Returns the number of projects stopped
+ */
+function cleanupAllRunningProjects(): number {
+  let stopped = 0;
+
+  for (const [id, running] of runningProjects.entries()) {
+    if (running.process && !running.process.killed) {
+      try {
+        if (process.platform === 'win32') {
+          spawnSync('taskkill', ['/pid', String(running.process.pid), '/f', '/t'], { stdio: 'ignore' });
+        } else {
+          running.process.kill('SIGTERM');
+        }
+        stopped++;
+        console.log(`[Runner] Stopped project: ${id}`);
+      } catch (err) {
+        console.error(`[Runner] Failed to stop project ${id}:`, err);
+      }
+    }
+  }
+
+  runningProjects.clear();
+  cleanupOrphanProcesses();
+
+  return stopped;
+}
+
+/**
+ * Get health status of running projects
+ */
+function getRunnerHealth(): { running: number; healthy: number; unhealthy: string[] } {
+  let healthy = 0;
+  const unhealthy: string[] = [];
+
+  for (const [id, running] of runningProjects.entries()) {
+    if (running.status === 'running' && running.process && !running.process.killed) {
+      healthy++;
+    } else if (running.status === 'error' || (running.process && running.process.killed)) {
+      unhealthy.push(id);
+    }
+  }
+
+  return {
+    running: runningProjects.size,
+    healthy,
+    unhealthy
+  };
+}
+
+export { router as runnerRouter, cleanupAllRunningProjects, getRunnerHealth };

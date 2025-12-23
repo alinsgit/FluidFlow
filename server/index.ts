@@ -1,15 +1,17 @@
 import express from 'express';
 import cors from 'cors';
+import https from 'https';
 import { projectsRouter } from './api/projects.js';
 import { gitRouter } from './api/git.js';
 import { githubRouter } from './api/github.js';
 import { settingsRouter } from './api/settings.js';
-import { runnerRouter } from './api/runner.js';
+import { runnerRouter, cleanupAllRunningProjects, getRunnerHealth } from './api/runner.js';
 import { aiRouter } from './api/ai.js';
 import { apiLimiter, requestLogger } from './middleware/security.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { generateSelfSignedCert } from './utils/ssl.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,9 +53,22 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(requestLogger);
 }
 
-// Health check
+// Health check with runner status
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
+  const runnerHealth = getRunnerHealth();
+  const memoryUsage = process.memoryUsage();
+
+  res.json({
+    status: 'ok',
+    timestamp: Date.now(),
+    uptime: process.uptime(),
+    memory: {
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + 'MB',
+      rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB'
+    },
+    runner: runnerHealth
+  });
 });
 
 // API Routes
@@ -84,10 +99,54 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[Unhandled Rejection] at:', promise, 'reason:', reason);
 });
 
-// Start server (HTTP - Vite proxies requests from HTTPS frontend)
-app.listen(PORT, () => {
-  console.log(`\n🚀 FluidFlow Backend Server running on http://localhost:${PORT}`);
+// Generate SSL certificates for HTTPS
+const sslCert = generateSelfSignedCert();
+
+// Start HTTPS server
+const server = https.createServer(sslCert, app).listen(PORT, () => {
+  console.log(`\n🚀 FluidFlow Backend Server running on https://localhost:${PORT}`);
   console.log(`   Projects directory: ${PROJECTS_DIR}\n`);
 });
+
+// Graceful shutdown handler
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) {
+    console.log(`[Server] Already shutting down, ignoring ${signal}`);
+    return;
+  }
+  isShuttingDown = true;
+
+  console.log(`\n[Server] Received ${signal}, starting graceful shutdown...`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    console.log('[Server] HTTP server closed');
+  });
+
+  // Cleanup running projects
+  try {
+    const stopped = cleanupAllRunningProjects();
+    console.log(`[Server] Cleaned up ${stopped} running projects`);
+  } catch (err) {
+    console.error('[Server] Error during project cleanup:', err);
+  }
+
+  // Give time for cleanup to complete
+  setTimeout(() => {
+    console.log('[Server] Shutdown complete');
+    process.exit(0);
+  }, 2000);
+}
+
+// Handle termination signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle Windows-specific close event
+if (process.platform === 'win32') {
+  process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+}
 
 export { PROJECTS_DIR };
