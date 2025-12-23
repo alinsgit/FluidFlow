@@ -148,6 +148,18 @@ class FixAgentImpl {
     }
   }
 
+  /**
+   * Clear all logs and reset state
+   */
+  clear(): void {
+    this.logs = [];
+    this.state = 'idle';
+    this.completionMessage = null;
+    this.currentAttempt = 0;
+    this.currentError = null;
+    this.currentTargetFile = null;
+  }
+
   // ============================================================================
   // Fix Loop
   // ============================================================================

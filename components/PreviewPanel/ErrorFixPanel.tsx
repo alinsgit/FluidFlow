@@ -25,7 +25,8 @@ import {
   AlertCircle,
   Clock,
   FileCode,
-  Undo2
+  Undo2,
+  Trash2
 } from 'lucide-react';
 import { AgentState, AgentLogEntry, fixAgent, AgentConfig } from '../../services/errorFix';
 import { FileSystem } from '../../types';
@@ -164,6 +165,14 @@ export const ErrorFixPanel: React.FC<ErrorFixPanelProps> = ({
     setIsRunning(false);
   };
 
+  const handleClear = () => {
+    fixAgent.clear();
+    setLogs([]);
+    setAgentState('idle');
+    setCompletionMessage(null);
+    setExpandedLogs(new Set());
+  };
+
   const toggleLogExpand = (id: string) => {
     setExpandedLogs(prev => {
       const next = new Set(prev);
@@ -201,6 +210,17 @@ export const ErrorFixPanel: React.FC<ErrorFixPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Clear logs button */}
+          {logs.length > 0 && !isRunning && (
+            <button
+              onClick={handleClear}
+              className="flex items-center gap-1.5 px-2 py-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded text-sm transition-colors"
+              title="Clear logs"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Max attempts selector */}
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <span>Max attempts:</span>
