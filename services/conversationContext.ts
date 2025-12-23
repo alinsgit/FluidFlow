@@ -1,5 +1,14 @@
-// Conversation Context Manager
-// Manages separate contexts for different features (prompt improver, git, db studio, etc.)
+/**
+ * Conversation Context Manager
+ *
+ * Manages separate contexts for different features (prompt improver, git, db studio, etc.)
+ *
+ * @module services/conversationContext
+ *
+ * Structure:
+ * - services/context/types.ts          - Type definitions
+ * - services/context/tokenEstimation.ts - Token estimation utilities
+ */
 
 import {
   DEFAULT_MAX_TOKENS,
@@ -8,84 +17,44 @@ import {
   STORAGE_KEYS,
 } from '@/constants';
 
-export interface ContextMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
-  metadata?: Record<string, unknown>;
-}
+// Import and re-export types from context module
+import type { ContextMessage, ConversationContext, ContextManagerConfig } from './context/types';
+import { CONTEXT_IDS } from './context/types';
+import { estimateTokens } from './context/tokenEstimation';
 
-export interface ConversationContext {
-  id: string;
-  name: string;
-  messages: ContextMessage[];
-  createdAt: number;
-  lastUpdatedAt: number;
-  metadata?: Record<string, unknown>;
-  // Token estimate for context management
-  estimatedTokens: number;
-}
+export type { ContextMessage, ConversationContext, ContextManagerConfig };
+export { CONTEXT_IDS };
 
-export interface ContextManagerConfig {
-  maxTokensPerContext: number;  // When to trigger compaction
-  compactToTokens: number;      // Target tokens after compaction
-  persistToStorage: boolean;    // Whether to save to localStorage
-  storageKey: string;
-}
+// ============================================================================
+// Default Configuration
+// ============================================================================
 
 const DEFAULT_CONFIG: ContextManagerConfig = {
-  maxTokensPerContext: DEFAULT_MAX_TOKENS,    // ~8k tokens before compaction
+  maxTokensPerContext: DEFAULT_MAX_TOKENS, // ~8k tokens before compaction
   compactToTokens: COMPACTION_THRESHOLD_TOKENS, // Compact to ~2k tokens
   persistToStorage: true,
-  storageKey: STORAGE_KEYS.CONTEXTS
+  storageKey: STORAGE_KEYS.CONTEXTS,
 };
 
-// AI-008 fix: Improved token estimation using word-based heuristics
-// Average: ~0.75 tokens per word for English, ~1.3 tokens per word for code
-function estimateTokens(text: string): number {
-  if (!text || text.length === 0) return 0;
-
-  // Count words (sequences of alphanumeric characters)
-  const wordMatches = text.match(/\b\w+\b/g);
-  const wordCount = wordMatches ? wordMatches.length : 0;
-
-  // Count code-like tokens (operators, brackets, special chars)
-  const codeMatches = text.match(/[{}()[\]<>:;,=+\-*/&|!@#$%^]+/g);
-  const codeCharCount = codeMatches ? codeMatches.reduce((sum: number, t: string) => sum + t.length, 0) : 0;
-
-  // Count numbers (each number is typically 1 token)
-  const numberMatches = text.match(/\b\d+\.?\d*\b/g);
-  const numberCount = numberMatches ? numberMatches.length : 0;
-
-  // Estimate based on content type
-  // - Words: ~1.3 tokens per word (accounts for subword tokenization)
-  // - Code tokens: ~0.5 tokens per character (densely packed)
-  // - Numbers: ~1 token each
-
-  const wordTokens = Math.ceil(wordCount * 1.3);
-  const codeTokens = Math.ceil(codeCharCount * 0.5);
-
-  // Add a small base for formatting/whitespace
-  const totalEstimate = wordTokens + codeTokens + numberCount;
-
-  // Ensure minimum of 1 token for non-empty strings, with fallback to char-based for very short strings
-  return Math.max(1, totalEstimate || Math.ceil(text.length / 4));
-}
+// ============================================================================
+// ConversationContextManager Class
+// ============================================================================
 
 class ConversationContextManager {
   private contexts: Map<string, ConversationContext> = new Map();
   private config: ContextManagerConfig;
   // AI-006 fix: Debounce streaming saves to prevent data loss
   private streamingSaveTimeout: ReturnType<typeof setTimeout> | null = null;
-  // Uses STREAMING_SAVE_DEBOUNCE_MS from @/constants
 
   constructor(config: Partial<ContextManagerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.loadFromStorage();
   }
 
-  // Load contexts from localStorage
+  // ============================================================================
+  // Storage Operations
+  // ============================================================================
+
   private loadFromStorage(): void {
     if (!this.config.persistToStorage) return;
 
@@ -93,7 +62,7 @@ class ConversationContextManager {
       const saved = localStorage.getItem(this.config.storageKey);
       if (saved) {
         const parsed = JSON.parse(saved) as ConversationContext[];
-        parsed.forEach(ctx => this.contexts.set(ctx.id, ctx));
+        parsed.forEach((ctx) => this.contexts.set(ctx.id, ctx));
         console.log(`[ContextManager] Loaded ${parsed.length} contexts from storage`);
       }
     } catch (e) {
@@ -108,7 +77,6 @@ class ConversationContextManager {
     }
   }
 
-  // Save contexts to localStorage
   private saveToStorage(): void {
     if (!this.config.persistToStorage) return;
 
@@ -120,7 +88,10 @@ class ConversationContextManager {
     }
   }
 
-  // Get or create a context
+  // ============================================================================
+  // Context Management
+  // ============================================================================
+
   getContext(id: string, name?: string): ConversationContext {
     let context = this.contexts.get(id);
 
@@ -131,7 +102,7 @@ class ConversationContextManager {
         messages: [],
         createdAt: Date.now(),
         lastUpdatedAt: Date.now(),
-        estimatedTokens: 0
+        estimatedTokens: 0,
       };
       this.contexts.set(id, context);
       this.saveToStorage();
@@ -140,7 +111,29 @@ class ConversationContextManager {
     return context;
   }
 
-  // Add a message to a context
+  clearContext(contextId: string): void {
+    const context = this.contexts.get(contextId);
+    if (context) {
+      context.messages = [];
+      context.estimatedTokens = 0;
+      context.lastUpdatedAt = Date.now();
+      this.saveToStorage();
+    }
+  }
+
+  deleteContext(contextId: string): void {
+    this.contexts.delete(contextId);
+    this.saveToStorage();
+  }
+
+  listContexts(): ConversationContext[] {
+    return Array.from(this.contexts.values());
+  }
+
+  // ============================================================================
+  // Message Management
+  // ============================================================================
+
   addMessage(
     contextId: string,
     role: 'user' | 'assistant' | 'system',
@@ -155,7 +148,7 @@ class ConversationContextManager {
       role,
       content,
       timestamp: Date.now(),
-      metadata
+      metadata,
     };
 
     context.messages.push(message);
@@ -165,7 +158,9 @@ class ConversationContextManager {
     context.lastUpdatedAt = Date.now();
 
     // Debug logging for message tracking
-    console.log(`[ContextManager] addMessage to "${contextId}": role=${role}, contentLen=${content.length}, tokens=${tokenCount}, totalMessages=${context.messages.length}, totalTokens=${context.estimatedTokens}`);
+    console.log(
+      `[ContextManager] addMessage to "${contextId}": role=${role}, contentLen=${content.length}, tokens=${tokenCount}, totalMessages=${context.messages.length}, totalTokens=${context.estimatedTokens}`
+    );
 
     // Check if compaction needed
     if (context.estimatedTokens > this.config.maxTokensPerContext) {
@@ -177,7 +172,6 @@ class ConversationContextManager {
     return message;
   }
 
-  // Add tokens directly (for tracking API response tokens)
   addTokens(contextId: string, tokens: number): void {
     const context = this.getContext(contextId);
     context.estimatedTokens += tokens;
@@ -185,7 +179,6 @@ class ConversationContextManager {
     this.saveToStorage();
   }
 
-  // Set exact token count (from API response)
   setTokenCount(contextId: string, tokens: number): void {
     const context = this.getContext(contextId);
     context.estimatedTokens = tokens;
@@ -193,7 +186,6 @@ class ConversationContextManager {
     this.saveToStorage();
   }
 
-  // Update the last assistant message (for streaming)
   updateLastMessage(contextId: string, content: string): void {
     const context = this.contexts.get(contextId);
     if (!context || context.messages.length === 0) return;
@@ -208,7 +200,6 @@ class ConversationContextManager {
       context.lastUpdatedAt = Date.now();
 
       // AI-006 fix: Debounce save during streaming to prevent data loss
-      // Save periodically rather than never during streaming
       if (this.streamingSaveTimeout) {
         clearTimeout(this.streamingSaveTimeout);
       }
@@ -219,7 +210,6 @@ class ConversationContextManager {
     }
   }
 
-  // Finalize streaming (save after streaming completes)
   finalizeMessage(_contextId: string): void {
     // AI-006 fix: Clear any pending debounced save
     if (this.streamingSaveTimeout) {
@@ -229,47 +219,51 @@ class ConversationContextManager {
     this.saveToStorage();
   }
 
-  // Get messages formatted for AI (as conversation history)
-  getMessagesForAI(contextId: string, maxMessages?: number): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
+  // ============================================================================
+  // Message Retrieval
+  // ============================================================================
+
+  getMessagesForAI(
+    contextId: string,
+    maxMessages?: number
+  ): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
     const context = this.contexts.get(contextId);
     if (!context) {
       console.log(`[ContextManager] getMessagesForAI: No context found for "${contextId}"`);
       return [];
     }
 
-    let messages = context.messages.filter(m => m.role !== 'system');
+    let messages = context.messages.filter((m) => m.role !== 'system');
 
     if (maxMessages && messages.length > maxMessages) {
       messages = messages.slice(-maxMessages);
     }
 
-    console.log(`[ContextManager] getMessagesForAI("${contextId}"): returning ${messages.length} messages, total tokens: ${context.estimatedTokens}`);
+    console.log(
+      `[ContextManager] getMessagesForAI("${contextId}"): returning ${messages.length} messages, total tokens: ${context.estimatedTokens}`
+    );
 
-    return messages.map(m => ({
+    return messages.map((m) => ({
       role: m.role,
-      content: m.content
+      content: m.content,
     }));
   }
 
-  // Get conversation as text (for providers that do not support message arrays)
   getConversationAsText(contextId: string, maxMessages?: number): string {
     const messages = this.getMessagesForAI(contextId, maxMessages);
-    return messages
-      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
+    return messages.map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
   }
 
-  // Check if context needs compaction
+  // ============================================================================
+  // Token Management & Compaction
+  // ============================================================================
+
   needsCompaction(contextId: string): boolean {
     const context = this.contexts.get(contextId);
     return context ? context.estimatedTokens > this.config.maxTokensPerContext : false;
   }
 
-  // Compact a context using AI summarization
-  async compactContext(
-    contextId: string,
-    summarizer: (text: string) => Promise<string>
-  ): Promise<void> {
+  async compactContext(contextId: string, summarizer: (text: string) => Promise<string>): Promise<void> {
     const context = this.contexts.get(contextId);
     if (!context || context.messages.length < 4) return;
 
@@ -282,9 +276,7 @@ class ConversationContextManager {
     if (toSummarize.length === 0) return;
 
     // Create summary text
-    const summaryInput = toSummarize
-      .map(m => `${m.role}: ${m.content}`)
-      .join('\n\n');
+    const summaryInput = toSummarize.map((m) => `${m.role}: ${m.content}`).join('\n\n');
 
     try {
       const summary = await summarizer(summaryInput);
@@ -295,16 +287,13 @@ class ConversationContextManager {
           id: crypto.randomUUID(),
           role: 'system',
           content: `[Previous conversation summary]\n${summary}`,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         },
-        ...toKeep
+        ...toKeep,
       ];
 
       // Recalculate tokens
-      context.estimatedTokens = context.messages.reduce(
-        (sum, m) => sum + estimateTokens(m.content),
-        0
-      );
+      context.estimatedTokens = context.messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
 
       context.lastUpdatedAt = Date.now();
       this.saveToStorage();
@@ -315,29 +304,10 @@ class ConversationContextManager {
     }
   }
 
-  // Clear a specific context
-  clearContext(contextId: string): void {
-    const context = this.contexts.get(contextId);
-    if (context) {
-      context.messages = [];
-      context.estimatedTokens = 0;
-      context.lastUpdatedAt = Date.now();
-      this.saveToStorage();
-    }
-  }
+  // ============================================================================
+  // Stats
+  // ============================================================================
 
-  // Delete a context entirely
-  deleteContext(contextId: string): void {
-    this.contexts.delete(contextId);
-    this.saveToStorage();
-  }
-
-  // List all contexts
-  listContexts(): ConversationContext[] {
-    return Array.from(this.contexts.values());
-  }
-
-  // Get context stats
   getStats(contextId: string): { messages: number; tokens: number; lastUpdated: Date } | null {
     const context = this.contexts.get(contextId);
     if (!context) return null;
@@ -345,12 +315,15 @@ class ConversationContextManager {
     return {
       messages: context.messages.length,
       tokens: context.estimatedTokens,
-      lastUpdated: new Date(context.lastUpdatedAt)
+      lastUpdated: new Date(context.lastUpdatedAt),
     };
   }
 }
 
-// Singleton instance
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
 let contextManagerInstance: ConversationContextManager | null = null;
 
 export function getContextManager(config?: Partial<ContextManagerConfig>): ConversationContextManager {
@@ -359,15 +332,5 @@ export function getContextManager(config?: Partial<ContextManagerConfig>): Conve
   }
   return contextManagerInstance;
 }
-
-// Predefined context IDs for different features
-export const CONTEXT_IDS = {
-  MAIN_CHAT: 'main-chat',
-  PROMPT_IMPROVER: 'prompt-improver',
-  GIT_COMMIT: 'git-commit',
-  DB_STUDIO: 'db-studio',
-  CODE_REVIEW: 'code-review',
-  QUICK_EDIT: 'quick-edit'
-} as const;
 
 export default ConversationContextManager;

@@ -1,102 +1,36 @@
-// FluidFlow Project Configuration
-// Manages .fluidflow folder structure and configuration files
+/**
+ * FluidFlow Project Configuration Manager
+ *
+ * Manages .fluidflow folder structure and configuration files.
+ *
+ * @module services/fluidflowConfig
+ *
+ * Structure:
+ * - services/fluidflow/types.ts    - Type definitions
+ * - services/fluidflow/defaults.ts - Default configurations
+ */
 
-/** AI Response format type - json (default) or marker (experimental) */
-export type AIResponseFormat = 'json' | 'marker';
+// Import and re-export types from fluidflow module
+import type {
+  AIResponseFormat,
+  FluidFlowConfig,
+  AgentConfig,
+  ContextSettings,
+  CompactionLog,
+} from './fluidflow/types';
 
-export interface FluidFlowConfig {
-  // Project-level AI instructions
-  rules?: string;
-  // Agent configurations
-  agents?: AgentConfig[];
-  // Context management settings
-  contextSettings?: ContextSettings;
-  // AI Response format (json or marker) - affects how AI returns code
-  responseFormat?: AIResponseFormat;
-}
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_CONTEXT_SETTINGS,
+  STORAGE_KEYS,
+  MAX_COMPACTION_LOGS,
+} from './fluidflow/defaults';
 
-export interface AgentConfig {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  model?: string;
-  temperature?: number;
-  enabled: boolean;
-}
+export type { AIResponseFormat, FluidFlowConfig, AgentConfig, ContextSettings, CompactionLog };
 
-export interface ContextSettings {
-  maxTokensBeforeCompact: number;
-  compactToTokens: number;
-  autoCompact: boolean;
-  saveCompactionLogs: boolean;
-}
-
-export interface CompactionLog {
-  id: string;
-  timestamp: number;
-  contextId: string;
-  beforeTokens: number;
-  afterTokens: number;
-  messagesSummarized: number;
-  summary: string;
-}
-
-// Default configuration
-const DEFAULT_CONFIG: FluidFlowConfig = {
-  rules: `# FluidFlow Project Rules
-
-## Code Style
-- Use TypeScript with strict mode
-- Follow React best practices
-- Use Tailwind CSS for styling
-- Prefer functional components with hooks
-
-## Generation Guidelines
-- Always include proper error handling
-- Add loading states for async operations
-- Make components responsive by default
-- Include accessibility attributes (ARIA)
-
-## File Structure
-- Components in src/components/
-- Utilities in src/utils/
-- Types in src/types/
-`,
-  agents: [
-    {
-      id: 'prompt-engineer',
-      name: 'Prompt Engineer',
-      description: 'Helps improve prompts through conversation',
-      systemPrompt: 'You are a prompt engineering expert...',
-      enabled: true
-    },
-    {
-      id: 'code-reviewer',
-      name: 'Code Reviewer',
-      description: 'Reviews generated code for best practices',
-      systemPrompt: 'You are a senior code reviewer...',
-      enabled: false
-    },
-    {
-      id: 'accessibility-auditor',
-      name: 'Accessibility Auditor',
-      description: 'Checks code for accessibility issues',
-      systemPrompt: 'You are an accessibility expert...',
-      enabled: false
-    }
-  ],
-  contextSettings: {
-    maxTokensBeforeCompact: 8000,
-    compactToTokens: 2000,
-    autoCompact: false,  // Require confirmation
-    saveCompactionLogs: true
-  }
-};
-
-// Storage keys
-const CONFIG_KEY = 'fluidflow_config';
-const COMPACTION_LOGS_KEY = 'fluidflow_compaction_logs';
+// ============================================================================
+// FluidFlowConfigManager Class
+// ============================================================================
 
 class FluidFlowConfigManager {
   private config: FluidFlowConfig;
@@ -107,9 +41,13 @@ class FluidFlowConfigManager {
     this.compactionLogs = this.loadCompactionLogs();
   }
 
+  // ============================================================================
+  // Storage Operations
+  // ============================================================================
+
   private loadConfig(): FluidFlowConfig {
     try {
-      const saved = localStorage.getItem(CONFIG_KEY);
+      const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
       if (saved) {
         return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
       }
@@ -121,7 +59,7 @@ class FluidFlowConfigManager {
 
   private saveConfig(): void {
     try {
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(this.config));
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(this.config));
     } catch (e) {
       console.error('[FluidFlow] Failed to save config:', e);
     }
@@ -129,7 +67,7 @@ class FluidFlowConfigManager {
 
   private loadCompactionLogs(): CompactionLog[] {
     try {
-      const saved = localStorage.getItem(COMPACTION_LOGS_KEY);
+      const saved = localStorage.getItem(STORAGE_KEYS.COMPACTION_LOGS);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -141,44 +79,46 @@ class FluidFlowConfigManager {
 
   private saveCompactionLogs(): void {
     try {
-      // Keep only last 50 logs
-      const logsToSave = this.compactionLogs.slice(-50);
-      localStorage.setItem(COMPACTION_LOGS_KEY, JSON.stringify(logsToSave));
+      // Keep only last N logs
+      const logsToSave = this.compactionLogs.slice(-MAX_COMPACTION_LOGS);
+      localStorage.setItem(STORAGE_KEYS.COMPACTION_LOGS, JSON.stringify(logsToSave));
     } catch (e) {
       console.error('[FluidFlow] Failed to save compaction logs:', e);
     }
   }
 
-  // Get configuration
+  // ============================================================================
+  // Config Getters/Setters
+  // ============================================================================
+
   getConfig(): FluidFlowConfig {
     return { ...this.config };
   }
 
-  // Get project rules
   getRules(): string {
     return this.config.rules || '';
   }
 
-  // Update rules
   setRules(rules: string): void {
     this.config.rules = rules;
     this.saveConfig();
   }
 
-  // Get agents
+  // ============================================================================
+  // Agent Management
+  // ============================================================================
+
   getAgents(): AgentConfig[] {
     return this.config.agents || [];
   }
 
-  // Get enabled agents
   getEnabledAgents(): AgentConfig[] {
-    return (this.config.agents || []).filter(a => a.enabled);
+    return (this.config.agents || []).filter((a) => a.enabled);
   }
 
-  // Update agent
   updateAgent(id: string, updates: Partial<AgentConfig>): void {
     const agents = this.config.agents || [];
-    const index = agents.findIndex(a => a.id === id);
+    const index = agents.findIndex((a) => a.id === id);
     if (index >= 0) {
       agents[index] = { ...agents[index], ...updates };
       this.config.agents = agents;
@@ -186,51 +126,50 @@ class FluidFlowConfigManager {
     }
   }
 
-  // Add agent
   addAgent(agent: AgentConfig): void {
     this.config.agents = [...(this.config.agents || []), agent];
     this.saveConfig();
   }
 
-  // Get context settings
+  // ============================================================================
+  // Context Settings
+  // ============================================================================
+
   getContextSettings(): ContextSettings {
-    // Default context settings (guaranteed to exist)
-    const defaultSettings: ContextSettings = {
-      maxTokensBeforeCompact: 8000,
-      compactToTokens: 2000,
-      autoCompact: false,
-      saveCompactionLogs: true
-    };
-    return this.config.contextSettings ?? defaultSettings;
+    return this.config.contextSettings ?? DEFAULT_CONTEXT_SETTINGS;
   }
 
-  // Update context settings
   updateContextSettings(settings: Partial<ContextSettings>): void {
     this.config.contextSettings = {
       ...this.getContextSettings(),
-      ...settings
+      ...settings,
     };
     this.saveConfig();
   }
 
-  // Get response format
+  // ============================================================================
+  // Response Format
+  // ============================================================================
+
   getResponseFormat(): AIResponseFormat {
     return this.config.responseFormat || 'json';
   }
 
-  // Set response format
   setResponseFormat(format: AIResponseFormat): void {
     this.config.responseFormat = format;
     this.saveConfig();
     console.log('[FluidFlow] Response format set to:', format);
   }
 
-  // Add compaction log
+  // ============================================================================
+  // Compaction Logs
+  // ============================================================================
+
   addCompactionLog(log: Omit<CompactionLog, 'id' | 'timestamp'>): CompactionLog {
     const fullLog: CompactionLog = {
       ...log,
       id: crypto.randomUUID(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     this.compactionLogs.push(fullLog);
     this.saveCompactionLogs();
@@ -238,21 +177,25 @@ class FluidFlowConfigManager {
     return fullLog;
   }
 
-  // Get compaction logs
   getCompactionLogs(contextId?: string): CompactionLog[] {
     if (contextId) {
-      return this.compactionLogs.filter(l => l.contextId === contextId);
+      return this.compactionLogs.filter((l) => l.contextId === contextId);
     }
     return [...this.compactionLogs];
   }
 
-  // Clear compaction logs
   clearCompactionLogs(): void {
     this.compactionLogs = [];
     this.saveCompactionLogs();
   }
 
-  // Export configuration as .fluidflow folder content
+  // ============================================================================
+  // File Export/Import
+  // ============================================================================
+
+  /**
+   * Export configuration as .fluidflow folder content
+   */
   exportAsFiles(): Record<string, string> {
     const files: Record<string, string> = {};
 
@@ -263,9 +206,13 @@ class FluidFlowConfigManager {
     files['.fluidflow/agents.json'] = JSON.stringify(this.config.agents || [], null, 2);
 
     // settings.json
-    files['.fluidflow/settings.json'] = JSON.stringify({
-      contextSettings: this.config.contextSettings
-    }, null, 2);
+    files['.fluidflow/settings.json'] = JSON.stringify(
+      {
+        contextSettings: this.config.contextSettings,
+      },
+      null,
+      2
+    );
 
     // compaction-logs.json (if enabled)
     if (this.config.contextSettings?.saveCompactionLogs) {
@@ -281,7 +228,9 @@ logs/
     return files;
   }
 
-  // Import from files
+  /**
+   * Import configuration from files
+   */
   importFromFiles(files: Record<string, string>): void {
     // Parse rules.md
     if (files['.fluidflow/rules.md']) {
@@ -311,7 +260,10 @@ logs/
   }
 }
 
-// Singleton instance
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
 let configManagerInstance: FluidFlowConfigManager | null = null;
 
 export function getFluidFlowConfig(): FluidFlowConfigManager {

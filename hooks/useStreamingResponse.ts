@@ -4,405 +4,55 @@
  * Handles streaming AI responses and file detection during generation.
  * Extracted from useCodeGeneration to reduce complexity.
  * Supports both JSON and Marker response formats.
+ *
+ * Module structure:
+ * - types.ts: Type definitions and error classes
+ * - planParsers.ts: Plan parsing for different formats
+ * - progressCalculator.ts: File progress calculation
  */
 
 import { useCallback } from 'react';
 import { debugLog } from './useDebugStore';
 import { getProviderManager, GenerationRequest, GenerationResponse } from '../services/ai';
-import { FilePlan, FileProgress } from './useGenerationState';
+import { FilePlan } from './useGenerationState';
+import { isMarkerFormat, parseMarkerPlan } from '../utils/markerFormat';
+
+// Re-export types for backward compatibility
+export type {
+  StreamingFormat,
+  StreamingCallbacks,
+  StreamingResult,
+  UseStreamingResponseReturn,
+  FileProgressResult,
+  ParsedFilePlan,
+} from './streaming';
+
+export { FormatMismatchError } from './streaming';
+
+// Import utilities from submodules
 import {
-  isMarkerFormat,
-  parseMarkerPlan,
-  type MarkerFilePlan,
-} from '../utils/markerFormat';
+  type StreamingFormat,
+  type StreamingCallbacks,
+  type StreamingResult,
+  type UseStreamingResponseReturn,
+  markerPlanToFilePlan,
+  parseFilePlanFromStream,
+  parseSimpleCommentPlan,
+  calculateFileProgress,
+} from './streaming';
 
-/** Detected response format */
-export type StreamingFormat = 'json' | 'marker' | 'unknown';
-
-export interface StreamingCallbacks {
-  setStreamingChars: (chars: number) => void;
-  setStreamingFiles: (files: string[]) => void;
-  setStreamingStatus: (status: string) => void;
-  setFilePlan: (plan: FilePlan | null) => void;
-  updateFileProgress?: (path: string, updates: Partial<FileProgress>) => void;
-  initFileProgressFromPlan?: (plan: FilePlan) => void;
-}
-
-export interface StreamingResult {
-  fullText: string;
-  chunkCount: number;
-  detectedFiles: string[];
-  streamResponse: GenerationResponse | null;
-  currentFilePlan: FilePlan | null;
-  /** Detected response format (json or marker) */
-  format: StreamingFormat;
-}
-
-/** Error thrown when expected format doesn't match actual response */
-export class FormatMismatchError extends Error {
-  constructor(
-    public expectedFormat: StreamingFormat,
-    public actualContent: string
-  ) {
-    super(`Format mismatch: expected ${expectedFormat} format but response doesn't match`);
-    this.name = 'FormatMismatchError';
-  }
-}
-
-export interface UseStreamingResponseReturn {
-  processStreamingResponse: (
-    request: GenerationRequest,
-    currentModel: string,
-    genRequestId: string,
-    genStartTime: number,
-    /** Expected format - if set, will validate early and throw FormatMismatchError if mismatch */
-    expectedFormat?: StreamingFormat
-  ) => Promise<StreamingResult>;
-}
+// Re-export plan parsers for backward compatibility
+export { parseFilePlanFromStream } from './streaming';
 
 /**
- * Convert MarkerFilePlan to FilePlan format
+ * Hook for handling streaming AI responses
+ *
+ * Features:
+ * - Format auto-detection (JSON/Marker)
+ * - Plan parsing during stream
+ * - Progress tracking with throttling
+ * - File detection as they appear
  */
-function markerPlanToFilePlan(markerPlan: MarkerFilePlan): FilePlan {
-  return {
-    create: [...markerPlan.create, ...markerPlan.update],
-    delete: markerPlan.delete,
-    total: markerPlan.total,
-    completed: [],
-    sizes: markerPlan.sizes,
-  };
-}
-
-/**
- * Parse file plan from streaming response (JSON format)
- * Supports both:
- * - Legacy format: // PLAN: {"create":[...],"update":[...],...}
- * - JSON v2 format: {"meta":...,"plan":{"create":[...],...},"manifest":[...],...}
- */
-export function parseFilePlanFromStream(
-  fullText: string
-): { create: string[]; delete: string[]; total: number; completed: string[]; sizes?: Record<string, number> } | null {
-  // Try JSON v2 format first (has "plan": object at root level)
-  const jsonV2Result = parseJsonV2Plan(fullText);
-  if (jsonV2Result) {
-    return jsonV2Result;
-  }
-
-  // Try legacy // PLAN: comment format
-  const planLineMatch = fullText.match(/\/\/\s*PLAN:\s*(\{.+)/);
-  if (!planLineMatch) return null;
-
-  try {
-    let jsonStr = planLineMatch[1];
-    // Find the balanced closing brace
-    let braceCount = 0;
-    let endIdx = 0;
-    for (let i = 0; i < jsonStr.length; i++) {
-      if (jsonStr[i] === '{') braceCount++;
-      if (jsonStr[i] === '}') braceCount--;
-      if (braceCount === 0) {
-        endIdx = i + 1;
-        break;
-      }
-    }
-    if (endIdx > 0) {
-      jsonStr = jsonStr.substring(0, endIdx);
-    }
-
-    // Fix malformed JSON (e.g., "total":} -> remove it)
-    jsonStr = jsonStr
-      .replace(/"total"\s*:\s*[}\]]/g, '') // Remove "total":} or "total":]
-      .replace(/,\s*}/g, '}') // Remove trailing commas before }
-      .replace(/,\s*]/g, ']'); // Remove trailing commas before ]
-
-    const plan = JSON.parse(jsonStr);
-    // Support both "create" and "update" keys
-    const createFiles = plan.create || [];
-    const updateFiles = plan.update || [];
-    const allFiles = [...createFiles, ...updateFiles];
-
-    if (allFiles.length > 0) {
-      return {
-        create: allFiles, // All files to generate (both new and updates)
-        delete: plan.delete || [],
-        total: plan.total || allFiles.length, // Fallback to calculated count
-        completed: [],
-        sizes: plan.sizes || undefined, // Extract sizes for progress tracking
-      };
-    }
-  } catch {
-    // Plan not complete yet or malformed - try regex extraction as fallback
-    const createMatch = fullText.match(/"create"\s*:\s*\[([^\]]*)\]/);
-    const updateMatch = fullText.match(/"update"\s*:\s*\[([^\]]*)\]/);
-
-    if (createMatch || updateMatch) {
-      const extractFiles = (match: RegExpMatchArray | null) => {
-        if (!match) return [];
-        return match[1].match(/"([^"]+)"/g)?.map((s) => s.replace(/"/g, '')) || [];
-      };
-
-      const createFiles = extractFiles(createMatch);
-      const updateFiles = extractFiles(updateMatch);
-      const allFiles = [...createFiles, ...updateFiles];
-
-      if (allFiles.length > 0) {
-        return {
-          create: allFiles,
-          delete: [],
-          total: allFiles.length,
-          completed: [],
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Parse file plan from JSON v2 format
- * JSON v2 has: { "meta": {...}, "plan": {"create":[], "update":[], "delete":[]}, "manifest": [...] }
- */
-function parseJsonV2Plan(
-  fullText: string
-): { create: string[]; delete: string[]; total: number; completed: string[]; sizes?: Record<string, number> } | null {
-  // Check if this looks like JSON v2 (starts with { and has "plan": key)
-  const trimmed = fullText.trim();
-  if (!trimmed.startsWith('{')) return null;
-
-  // Try to extract plan object using regex (more robust during streaming)
-  const planMatch = fullText.match(/"plan"\s*:\s*\{([^}]*)\}/);
-  if (!planMatch) return null;
-
-  try {
-    // Extract create/update/delete arrays from plan
-    const planContent = planMatch[1];
-
-    const extractArray = (key: string): string[] => {
-      const match = planContent.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]`));
-      if (!match) return [];
-      const items = match[1].match(/"([^"]+)"/g);
-      return items ? items.map(s => s.replace(/"/g, '')) : [];
-    };
-
-    const createFiles = extractArray('create');
-    const updateFiles = extractArray('update');
-    const deleteFiles = extractArray('delete');
-    const allFiles = [...createFiles, ...updateFiles];
-
-    if (allFiles.length === 0) return null;
-
-    // Try to extract sizes from manifest using matchAll
-    const sizes: Record<string, number> = {};
-    const manifestMatch = fullText.match(/"manifest"\s*:\s*\[([\s\S]*?)\]/);
-    if (manifestMatch) {
-      // Extract each manifest entry using matchAll
-      const entryPattern = /\{\s*"path"\s*:\s*"([^"]+)"[^}]*"lines"\s*:\s*(\d+)/g;
-      const entries = [...manifestMatch[1].matchAll(entryPattern)];
-      for (const entry of entries) {
-        sizes[entry[1]] = parseInt(entry[2], 10);
-      }
-    }
-
-    // Try to extract batch info for completed files
-    let completed: string[] = [];
-    const batchMatch = fullText.match(/"batch"\s*:\s*\{([^}]*)\}/);
-    if (batchMatch) {
-      const completedMatch = batchMatch[1].match(/"completed"\s*:\s*\[([^\]]*)\]/);
-      if (completedMatch) {
-        const items = completedMatch[1].match(/"([^"]+)"/g);
-        completed = items ? items.map(s => s.replace(/"/g, '')) : [];
-      }
-    }
-
-    console.log('[parseJsonV2Plan] Detected JSON v2 plan:', {
-      create: createFiles.length,
-      update: updateFiles.length,
-      delete: deleteFiles.length,
-      hasSizes: Object.keys(sizes).length > 0,
-    });
-
-    return {
-      create: allFiles,
-      delete: deleteFiles,
-      total: allFiles.length,
-      completed,
-      sizes: Object.keys(sizes).length > 0 ? sizes : undefined,
-    };
-  } catch (e) {
-    console.debug('[parseJsonV2Plan] Parse error:', e);
-    return null;
-  }
-}
-
-/**
- * Parse file plan from simple comment format
- * Format: // filename.tsx followed by code, then // another-file.tsx, etc.
- */
-function parseSimpleCommentPlan(
-  fullText: string
-): { create: string[]; delete: string[]; total: number; completed: string[]; sizes?: Record<string, number> } | null {
-  // Match all file path comments
-  const filePathRegex = /\/\/\s*((?:src\/)?[\w./-]+\.(?:tsx?|jsx?|css|json|md))\s*\n/g;
-  const matches = [...fullText.matchAll(filePathRegex)];
-
-  if (matches.length === 0) return null;
-
-  const files: string[] = [];
-  for (const match of matches) {
-    let filePath = match[1];
-    // Normalize path - add src/ prefix if not present
-    if (!filePath.startsWith('src/')) {
-      filePath = 'src/' + filePath;
-    }
-    if (!files.includes(filePath)) {
-      files.push(filePath);
-    }
-  }
-
-  if (files.length === 0) return null;
-
-  console.log('[parseSimpleCommentPlan] Detected files from comments:', files);
-
-  return {
-    create: files,
-    delete: [],
-    total: files.length,
-    completed: [],
-    sizes: undefined, // No size info in this format
-  };
-}
-
-/**
- * Calculate file progress based on streamed content (JSON format)
- * Estimates progress by measuring received chars vs expected line count
- * @param fullText - Full streamed text so far
- * @param filePath - File path to check
- * @param expectedLines - Expected line count from PLAN sizes
- * @returns Progress object with receivedChars and progress percentage
- */
-function calculateFileProgressJson(
-  fullText: string,
-  filePath: string,
-  expectedLines: number
-): { receivedChars: number; progress: number; status: 'pending' | 'streaming' | 'complete' } {
-  const CHARS_PER_LINE = 40; // Average chars per line estimate
-  const expectedChars = expectedLines * CHARS_PER_LINE;
-
-  // Escape special regex characters in file path
-  const escapedPath = filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // Find file content pattern: "path/to/file.tsx":"content..."
-  // Using match() instead of matchAll() for simplicity
-  const filePattern = new RegExp(`"${escapedPath}"\\s*:\\s*"`, 'g');
-  const matches = [...fullText.matchAll(filePattern)];
-
-  if (matches.length === 0) {
-    return { receivedChars: 0, progress: 0, status: 'pending' };
-  }
-
-  const match = matches[0];
-  const contentStart = (match.index ?? 0) + match[0].length;
-
-  // Find content end (closing quote not preceded by backslash)
-  let contentEnd = contentStart;
-  let escaped = false;
-  let foundEnd = false;
-
-  for (let i = contentStart; i < fullText.length; i++) {
-    const char = fullText[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      contentEnd = i;
-      foundEnd = true;
-      break;
-    }
-    contentEnd = i + 1; // Still streaming
-  }
-
-  const receivedChars = contentEnd - contentStart;
-  const progress = Math.min(foundEnd ? 100 : 99, Math.round((receivedChars / expectedChars) * 100));
-
-  return {
-    receivedChars,
-    progress,
-    status: foundEnd ? 'complete' : 'streaming',
-  };
-}
-
-/**
- * Calculate file progress based on streamed content (Marker format)
- * Looks for <!-- FILE:path --> content <!-- /FILE:path --> markers
- */
-function calculateFileProgressMarker(
-  fullText: string,
-  filePath: string,
-  expectedLines: number
-): { receivedChars: number; progress: number; status: 'pending' | 'streaming' | 'complete' } {
-  const CHARS_PER_LINE = 40;
-  const expectedChars = expectedLines * CHARS_PER_LINE;
-
-  // Escape special regex characters in file path
-  const escapedPath = filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // Check for opening marker
-  const openPattern = new RegExp(`<!--\\s*FILE:${escapedPath}\\s*-->`);
-  const openMatch = fullText.match(openPattern);
-
-  if (!openMatch || openMatch.index === undefined) {
-    return { receivedChars: 0, progress: 0, status: 'pending' };
-  }
-
-  const contentStart = openMatch.index + openMatch[0].length;
-
-  // Check for closing marker
-  const closePattern = new RegExp(`<!--\\s*/FILE:${escapedPath}\\s*-->`);
-  const closeMatch = fullText.slice(contentStart).match(closePattern);
-
-  if (closeMatch && closeMatch.index !== undefined) {
-    // File is complete
-    const contentEnd = contentStart + closeMatch.index;
-    const receivedChars = contentEnd - contentStart;
-    return {
-      receivedChars,
-      progress: 100,
-      status: 'complete',
-    };
-  }
-
-  // Still streaming - measure content so far
-  const receivedChars = fullText.length - contentStart;
-  const progress = Math.min(99, Math.round((receivedChars / expectedChars) * 100));
-
-  return {
-    receivedChars,
-    progress,
-    status: 'streaming',
-  };
-}
-
-/**
- * Unified file progress calculator that handles both formats
- */
-function calculateFileProgress(
-  fullText: string,
-  filePath: string,
-  expectedLines: number,
-  format: StreamingFormat
-): { receivedChars: number; progress: number; status: 'pending' | 'streaming' | 'complete' } {
-  if (format === 'marker') {
-    return calculateFileProgressMarker(fullText, filePath, expectedLines);
-  }
-  return calculateFileProgressJson(fullText, filePath, expectedLines);
-}
-
 export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamingResponseReturn {
   const {
     setStreamingChars,

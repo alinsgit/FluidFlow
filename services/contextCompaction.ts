@@ -3,26 +3,24 @@
  *
  * Provides utilities for checking and triggering context compaction
  * with user confirmation based on settings.
+ *
+ * @module services/contextCompaction
+ *
+ * Structure:
+ * - services/compaction/types.ts - Type definitions
  */
 
 import { getContextManager } from './conversationContext';
 import { getFluidFlowConfig } from './fluidflowConfig';
 
-export interface CompactionResult {
-  compacted: boolean;
-  beforeTokens: number;
-  afterTokens: number;
-  messagesSummarized: number;
-  summary?: string;
-}
+// Import and re-export types from compaction module
+import type { CompactionResult, CompactionInfo, ContextStats, TokenSpaceResult } from './compaction/types';
 
-export interface CompactionInfo {
-  currentTokens: number;
-  utilizationPercent: number;
-  messageCount: number;
-  targetTokens: number;
-  message: string;
-}
+export type { CompactionResult, CompactionInfo, ContextStats, TokenSpaceResult };
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
 /**
  * Check if a context needs compaction based on current settings
@@ -39,7 +37,7 @@ export function checkNeedsCompaction(contextId: string): boolean {
 /**
  * Get context statistics for display
  */
-export function getContextStats(contextId: string) {
+export function getContextStats(contextId: string): ContextStats {
   const contextManager = getContextManager();
   const context = contextManager.getContext(contextId);
   const config = getFluidFlowConfig();
@@ -51,7 +49,7 @@ export function getContextStats(contextId: string) {
     target: settings.compactToTokens,
     messageCount: context.messages.length,
     needsCompaction: context.estimatedTokens >= settings.maxTokensBeforeCompact,
-    utilizationPercent: (context.estimatedTokens / settings.maxTokensBeforeCompact) * 100
+    utilizationPercent: (context.estimatedTokens / settings.maxTokensBeforeCompact) * 100,
   };
 }
 
@@ -68,13 +66,18 @@ export function getCompactionInfo(contextId: string): CompactionInfo {
     utilizationPercent: stats.utilizationPercent,
     messageCount: stats.messageCount,
     targetTokens: settings.compactToTokens,
-    message: `Context is ${stats.currentTokens.toLocaleString()} tokens (${stats.utilizationPercent.toFixed(0)}% full).\n\n` +
+    message:
+      `Context is ${stats.currentTokens.toLocaleString()} tokens (${stats.utilizationPercent.toFixed(0)}% full).\n\n` +
       `Compacting will summarize older messages to free up space.\n\n` +
       `Messages: ${stats.messageCount}\n` +
       `Target: ~${settings.compactToTokens.toLocaleString()} tokens\n\n` +
-      `Continue with compaction?`
+      `Continue with compaction?`,
   };
 }
+
+// ============================================================================
+// Main Compaction Functions
+// ============================================================================
 
 /**
  * Trigger compaction with optional confirmation callback
@@ -110,12 +113,11 @@ export async function triggerCompaction(
           compacted: false,
           beforeTokens,
           afterTokens: beforeTokens,
-          messagesSummarized: 0
+          messagesSummarized: 0,
         };
       }
     } else {
       // Legacy behavior: use window.confirm if no callback provided
-      // This should ideally be removed in favor of always using the callback
       const stats = getContextStats(contextId);
       const confirmed = confirm(
         `Context is ${stats.currentTokens.toLocaleString()} tokens (${stats.utilizationPercent.toFixed(0)}% full).\n\n` +
@@ -130,7 +132,7 @@ export async function triggerCompaction(
           compacted: false,
           beforeTokens,
           afterTokens: beforeTokens,
-          messagesSummarized: 0
+          messagesSummarized: 0,
         };
       }
     }
@@ -147,8 +149,9 @@ export async function triggerCompaction(
 
       const request = {
         prompt: `Summarize this conversation concisely, preserving key decisions, code changes, and context:\n\n${text}`,
-        systemInstruction: 'You are a conversation summarizer. Create a brief but complete summary that captures the essential context, decisions made, and any code or technical details discussed.',
-        responseFormat: 'text' as const
+        systemInstruction:
+          'You are a conversation summarizer. Create a brief but complete summary that captures the essential context, decisions made, and any code or technical details discussed.',
+        responseFormat: 'text' as const,
       };
 
       const response = await manager.generate(request);
@@ -166,7 +169,7 @@ export async function triggerCompaction(
         beforeTokens,
         afterTokens,
         messagesSummarized: messageCount - 2, // Approximate
-        summary: capturedSummary
+        summary: capturedSummary,
       });
     }
 
@@ -177,7 +180,7 @@ export async function triggerCompaction(
       beforeTokens,
       afterTokens,
       messagesSummarized: messageCount - afterContext.messages.length,
-      summary: capturedSummary
+      summary: capturedSummary,
     };
   } catch (error) {
     console.error('[ContextCompaction] Failed:', error);
@@ -209,7 +212,7 @@ export async function checkAndAutoCompact(contextId: string): Promise<Compaction
     compacted: false,
     beforeTokens: context.estimatedTokens,
     afterTokens: context.estimatedTokens,
-    messagesSummarized: 0
+    messagesSummarized: 0,
   };
 }
 
@@ -218,12 +221,12 @@ export async function checkAndAutoCompact(contextId: string): Promise<Compaction
  * Call this BEFORE sending a prompt to ensure we don't exceed context limits
  * @param contextId - The context ID to check
  * @param estimatedPromptTokens - Estimated tokens for the new prompt (optional, defaults to 1000)
- * @returns Promise<{canProceed: boolean, compacted: boolean, reason?: string}>
+ * @returns Promise<TokenSpaceResult>
  */
 export async function ensureTokenSpace(
   contextId: string,
   estimatedPromptTokens: number = 1000
-): Promise<{ canProceed: boolean; compacted: boolean; reason?: string }> {
+): Promise<TokenSpaceResult> {
   const contextManager = getContextManager();
   const config = getFluidFlowConfig();
   const settings = config.getContextSettings();
@@ -233,7 +236,7 @@ export async function ensureTokenSpace(
   const maxTokens = settings.maxTokensBeforeCompact;
 
   // Reserve space for prompt + response (estimate 2x prompt tokens for response)
-  const totalEstimatedTokens = currentTokens + estimatedPromptTokens + (estimatedPromptTokens * 2);
+  const totalEstimatedTokens = currentTokens + estimatedPromptTokens + estimatedPromptTokens * 2;
 
   if (totalEstimatedTokens <= maxTokens) {
     // Enough space, no compaction needed
@@ -247,7 +250,7 @@ export async function ensureTokenSpace(
       const result = await triggerCompaction(contextId, true);
       if (result.compacted) {
         const newContext = contextManager.getContext(contextId);
-        const newTotal = newContext.estimatedTokens + estimatedPromptTokens + (estimatedPromptTokens * 2);
+        const newTotal = newContext.estimatedTokens + estimatedPromptTokens + estimatedPromptTokens * 2;
 
         if (newTotal <= maxTokens) {
           console.log(`[ContextCompaction] Auto-compacted: ${currentTokens} -> ${newContext.estimatedTokens} tokens`);
@@ -257,7 +260,7 @@ export async function ensureTokenSpace(
           return {
             canProceed: false,
             compacted: true,
-            reason: `Context still too large after compaction. Try clearing the conversation.`
+            reason: `Context still too large after compaction. Try clearing the conversation.`,
           };
         }
       }
@@ -266,7 +269,7 @@ export async function ensureTokenSpace(
       return {
         canProceed: false,
         compacted: false,
-        reason: `Failed to compact context: ${error instanceof Error ? error.message : 'Unknown error'}`
+        reason: `Failed to compact context: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -275,6 +278,6 @@ export async function ensureTokenSpace(
   return {
     canProceed: false,
     compacted: false,
-    reason: `Context is ${currentTokens.toLocaleString()} tokens (${(currentTokens / maxTokens * 100).toFixed(0)}% full). Adding this prompt would exceed the limit. Please compact the context first.`
+    reason: `Context is ${currentTokens.toLocaleString()} tokens (${((currentTokens / maxTokens) * 100).toFixed(0)}% full). Adding this prompt would exceed the limit. Please compact the context first.`,
   };
 }

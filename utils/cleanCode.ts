@@ -1,173 +1,153 @@
-// Import and re-export isIgnoredPath as isIgnoredFilePath for backwards compatibility
+/**
+ * Clean Code - Unified Facade
+ *
+ * This file re-exports all code cleaning, parsing, and validation utilities
+ * from their focused modules. It maintains backward compatibility with the
+ * original monolithic cleanCode.ts API.
+ *
+ * Modules:
+ * - jsxFixer.ts         - JSX text content escaping
+ * - importFixer.ts      - Bare specifier import fixing
+ * - codeCleaner.ts      - Code cleaning and artifact removal
+ * - jsonParser.ts       - JSON parsing and validation
+ * - multiFileParser.ts  - Multi-file response parsing
+ * - unifiedParser.ts    - Unified format detection and parsing
+ * - syntaxFixer.ts      - Comprehensive syntax error fixing
+ * - markerFormat.ts     - Marker format parsing
+ * - searchReplace.ts    - Search/replace mode parsing
+ * - codeValidator.ts    - Code validation and syntax checking
+ */
+
+// ============================================================================
+// File Path Utilities
+// ============================================================================
+
 import { isIgnoredPath } from './filePathUtils';
 export { isIgnoredPath as isIgnoredFilePath };
 
-// Import marker format utilities (ES module - no require())
-import {
+// ============================================================================
+// JSX Fixer - JSX text content escaping
+// ============================================================================
+
+export { fixJsxTextContent } from './jsxFixer';
+
+// ============================================================================
+// Import Fixer - Bare specifier import fixing
+// ============================================================================
+
+export { fixBareSpecifierImports, BARE_SPECIFIER_DIRS } from './importFixer';
+
+// ============================================================================
+// Code Cleaner - Artifact removal and cleaning
+// ============================================================================
+
+export { cleanGeneratedCode } from './codeCleaner';
+
+// ============================================================================
+// JSON Parser - JSON parsing and validation
+// ============================================================================
+
+export {
+  stripPlanComment,
+  preValidateJson,
+  safeParseAIResponse,
+  repairTruncatedJson,
+  type JsonValidationResult,
+} from './jsonParser';
+
+// ============================================================================
+// Multi-File Parser - Multi-file response parsing
+// ============================================================================
+
+export {
+  parseMultiFileResponse,
+  type GenerationMeta,
+  type MultiFileParseResult,
+} from './multiFileParser';
+
+// ============================================================================
+// Unified Parser - Format detection and unified parsing
+// ============================================================================
+
+export {
+  detectResponseFormat,
+  parseUnifiedResponse,
+  extractFileListUnified,
+  getStreamingStatusUnified,
+  type ResponseFormatType,
+  type UnifiedParsedResponse,
+} from './unifiedParser';
+
+// ============================================================================
+// Syntax Fixer - Comprehensive syntax fixing
+// ============================================================================
+
+export {
+  fixMalformedTernary,
+  fixArrowFunctions,
+  fixJsxAttributes,
+  fixStringIssues,
+  fixTypeScriptIssues,
+  extractJsxTags,
+  findUnclosedTags,
+  fixJsxTagBalance,
+  fixBracketBalanceAdvanced,
+  parseImports,
+  fixAndMergeImports,
+  fixReturnStatements,
+  aggressiveFix,
+  quickValidate,
+  safeAggressiveFix,
+  type ErrorPattern,
+  type JsxTag,
+  type ImportInfo,
+  type FixResult,
+} from './syntaxFixer';
+
+// ============================================================================
+// Search/Replace Mode
+// ============================================================================
+
+export {
+  parseSearchReplaceModeResponse,
+  applySearchReplace,
+  mergeSearchReplaceChanges,
+  type SearchReplaceMergeResult,
+} from './searchReplace';
+
+// ============================================================================
+// Marker Format
+// ============================================================================
+
+export {
   isMarkerFormat,
   parseMarkerFormatResponse,
+  parseMarkerPlan,
+  parseMarkerFiles,
+  parseStreamingMarkerFiles,
   extractMarkerFileList,
   getMarkerStreamingStatus,
+  stripMarkerMetadata,
+  type MarkerFilePlan,
+  type MarkerFormatResponse,
 } from './markerFormat';
 
-// Import unified AI response parser
-import { parseAIResponse as parseAIResponseUnified } from './aiResponseParser';
+// ============================================================================
+// Code Validator
+// ============================================================================
 
-// Import shared JSON repair utility
-import { repairJson as repairJsonShared } from './jsonRepair';
-
-// Import validation functions from codeValidator (re-exported below for backwards compatibility)
-import {
-  validateJsxSyntax as validateJsxSyntaxImpl,
-  validateAndFixCode as validateAndFixCodeImpl,
-  getErrorContext as getErrorContextImpl,
-  parseBabelError as parseBabelErrorImpl,
-  isValidCode as isValidCodeImpl,
+export {
+  validateJsxSyntax,
+  validateAndFixCode,
+  getErrorContext,
+  parseBabelError,
+  isValidCode,
   type SyntaxIssue,
 } from './codeValidator';
 
-// Note: syntaxFixer.ts exports are available but we intentionally do not use them here.
-// Aggressive syntax "fixes" were causing more harm than good.
-// The functions are still exported from syntaxFixer.ts for optional/explicit use.
-
-// Local alias for internal use
-const isIgnoredFilePath = isIgnoredPath;
-
-/**
- * Checks if position i in code starts a JSX tag (not a comparison operator)
- * JSX tags: <div, </div, <Component, <>, </>
- */
-function isJsxTagStart(code: string, i: number): boolean {
-  if (code[i] !== '<') return false;
-  const nextChar = code[i + 1];
-  // JSX tags start with <letter, </, or <>
-  return /[A-Za-z/!>]/.test(nextChar || '');
-}
-
-/**
- * Fixes unescaped < and > characters in JSX text content.
- * AI often generates code like <div>A -> B</div> which causes JSX parse errors.
- * This function escapes these characters in text content only.
- */
-export function fixJsxTextContent(code: string): string {
-  if (!code) return '';
-
-  // Only process if it looks like JSX/TSX (has JSX elements)
-  if (!/<\w+[^>]*>/.test(code)) {
-    return code;
-  }
-
-  let result = '';
-  let i = 0;
-  const len = code.length;
-
-  while (i < len) {
-    // Check if we're at a JSX tag opening
-    if (isJsxTagStart(code, i)) {
-      // Find the end of this tag
-      let tagEnd = i + 1;
-      let inString = false;
-      let stringChar = '';
-      let braceDepth = 0;
-
-      while (tagEnd < len) {
-        const ch = code[tagEnd];
-
-        // Track JSX expression braces
-        if (!inString && ch === '{') {
-          braceDepth++;
-        } else if (!inString && ch === '}') {
-          braceDepth--;
-        }
-
-        // Track strings
-        if ((ch === '"' || ch === "'" || ch === '`') && code[tagEnd - 1] !== '\\') {
-          if (!inString) {
-            inString = true;
-            stringChar = ch;
-          } else if (ch === stringChar) {
-            inString = false;
-          }
-        }
-
-        // End of tag (only if not in string or brace expression)
-        if (ch === '>' && !inString && braceDepth === 0) {
-          break;
-        }
-
-        tagEnd++;
-      }
-
-      // Copy the tag including the closing >
-      result += code.slice(i, tagEnd + 1);
-      i = tagEnd + 1;
-
-      // Now collect text content until next JSX tag
-      // Skip over JSX expressions {..} as they contain JavaScript code, not text
-      let textContent = '';
-      while (i < len && !isJsxTagStart(code, i)) {
-        // If we hit a JSX expression, copy it verbatim (do not escape inside)
-        if (code[i] === '{') {
-          let braceDepth = 1;
-          textContent += code[i];
-          i++;
-          while (i < len && braceDepth > 0) {
-            if (code[i] === '{') braceDepth++;
-            if (code[i] === '}') braceDepth--;
-            textContent += code[i];
-            i++;
-          }
-          continue;
-        }
-        textContent += code[i];
-        i++;
-      }
-
-      // If we have text content with non-whitespace, escape problematic chars
-      // But NOT inside JSX expressions, and NOT arrow functions (=>)
-      if (textContent.length > 0 && textContent.trim().length > 0) {
-        // Process text in segments, preserving JSX expressions
-        let processed = '';
-        let j = 0;
-        while (j < textContent.length) {
-          if (textContent[j] === '{') {
-            // Find matching closing brace and copy verbatim
-            let depth = 1;
-            processed += textContent[j];
-            j++;
-            while (j < textContent.length && depth > 0) {
-              if (textContent[j] === '{') depth++;
-              if (textContent[j] === '}') depth--;
-              processed += textContent[j];
-              j++;
-            }
-          } else if (textContent[j] === '>' && textContent[j - 1] !== '=') {
-            // Escape standalone > (not part of =>)
-            processed += "{'>'}";
-            j++;
-          } else if (textContent[j] === '<' && !isJsxTagStart(textContent, j)) {
-            // Escape standalone < (not a JSX tag)
-            processed += "{'<'}";
-            j++;
-          } else {
-            processed += textContent[j];
-            j++;
-          }
-        }
-        textContent = processed;
-      }
-
-      result += textContent;
-      continue;
-    }
-
-    // Default: copy character as-is (non-JSX code)
-    result += code[i];
-    i++;
-  }
-
-  return result;
-}
+// ============================================================================
+// Backward Compatibility - fixCommonSyntaxErrors
+// ============================================================================
 
 /**
  * Comprehensive syntax error fixer for AI-generated JSX/TSX code.
@@ -191,7 +171,6 @@ export function fixCommonSyntaxErrors(code: string): string {
   // ══════════════════════════════════════════════════════════════
 
   // 1a: `) : condition && (` → `) : condition ? (`
-  // Example: `status === 'error' ? <Error/>) : status === 'loading' && (<Loading/>)`
   fixed = fixed.replace(
     /\)\s*:\s*([\w.]+\s*===?\s*['"][^'"]+['"]\s*)&&\s*\(/g,
     ') : $1? ('
@@ -232,11 +211,9 @@ export function fixCommonSyntaxErrors(code: string): string {
   // ══════════════════════════════════════════════════════════════
 
   // 2a: `{condition ? <Component /> }` missing `: null`
-  // Match: `? <.../>` followed by `}` without a `:` in between
   fixed = fixed.replace(
     /(\?\s*<[\w][\w\s="'{}.,-]*?\s*\/>)\s*(\})/g,
     (match, ternaryPart, closeBrace) => {
-      // Check if there's already a colon after the ternary
       if (match.includes(' : ') || match.includes(': ')) return match;
       return ternaryPart + ' : null' + closeBrace;
     }
@@ -258,16 +235,9 @@ export function fixCommonSyntaxErrors(code: string): string {
   // 3a: FIRST - `() = > {` (space before >) → `() => {` (must run before hybrid fix)
   fixed = fixed.replace(/=\s+>/g, '=>');
 
-  // 3b: CRITICAL - Fix hybrid function/arrow syntax: "function Name() => {" -> "function Name() {"
-  // AI commonly generates this invalid mix of function declaration and arrow function
-
-  // Pattern 1: Simple case - no params: function Name() => {
+  // 3b: CRITICAL - Fix hybrid function/arrow syntax
   fixed = fixed.replace(/function\s+(\w+)\s*\(\)\s*=>\s*\{/g, 'function $1() {');
-
-  // Pattern 2: With params but no nested parens: function Name(a, b) => {
   fixed = fixed.replace(/function\s+(\w+)\s*\(([^)]*)\)\s*=>\s*\{/g, 'function $1($2) {');
-
-  // Pattern 3: Complex - any content between function and => { (non-greedy)
   fixed = fixed.replace(/(\bfunction\s+\w+[\s\S]*?)\s*=>\s*\{/g, '$1 {');
 
   // 3c: `= >{` (no space after =>) → `=> {`
@@ -294,7 +264,6 @@ export function fixCommonSyntaxErrors(code: string): string {
   // ══════════════════════════════════════════════════════════════
 
   // 5a: Extra `}}` that should be single `}`
-  // Only when followed by JSX closing tag
   fixed = fixed.replace(/\}\}\s*(<\/)/g, '}$1');
 
   // 5b: `{ {` double opening braces
@@ -313,33 +282,28 @@ export function fixCommonSyntaxErrors(code: string): string {
     const trimmed = line.trim();
 
     if (trimmed.startsWith('import ') && trimmed.includes('from')) {
-      // Extract source
       const sourceMatch = trimmed.match(/from\s+['"]([^'"]+)['"]/);
       if (sourceMatch) {
         const source = sourceMatch[1];
         const existing = importsBySource.get(source);
 
-        // Extract named imports
         const namedMatch = trimmed.match(/\{\s*([^}]+)\s*\}/);
         const namedImports = new Set<string>();
         if (namedMatch) {
           namedMatch[1].split(',').map(s => s.trim()).filter(Boolean).forEach(n => namedImports.add(n));
         }
 
-        // Extract default import
         const defaultMatch = trimmed.match(/import\s+(\w+)\s*(?:,|\s+from)/);
         const defaultImport = (defaultMatch && !trimmed.startsWith('import {')) ? defaultMatch[1] : null;
 
         if (existing) {
-          // Merge with existing import
           namedImports.forEach(n => existing.named.add(n));
           if (defaultImport && !existing.defaultImport) {
             existing.defaultImport = defaultImport;
           }
-          // Update the existing line
           const merged = buildImportLine(existing.defaultImport, existing.named, source);
           dedupedLines[existing.idx] = merged;
-          continue; // Skip this duplicate
+          continue;
         }
 
         importsBySource.set(source, {
@@ -350,7 +314,6 @@ export function fixCommonSyntaxErrors(code: string): string {
         });
       }
     } else if (trimmed.startsWith('import ') && !trimmed.includes('from')) {
-      // Side-effect import like `import './styles.css'`
       const alreadyExists = dedupedLines.some(l => l.trim() === trimmed);
       if (alreadyExists) continue;
     }
@@ -366,7 +329,6 @@ export function fixCommonSyntaxErrors(code: string): string {
 
   const backtickCount = (fixed.match(/`/g) || []).length;
   if (backtickCount % 2 !== 0) {
-    // Find unclosed template literal and close it
     const lines2 = fixed.split('\n');
     let inTemplate = false;
     for (let i = 0; i < lines2.length; i++) {
@@ -374,14 +336,12 @@ export function fixCommonSyntaxErrors(code: string): string {
       if (count % 2 !== 0) {
         inTemplate = !inTemplate;
         if (inTemplate && i === lines2.length - 1) {
-          // Last line starts unclosed template - close it
           lines2[i] += '`';
           inTemplate = false;
         }
       }
     }
     if (inTemplate) {
-      // Still unclosed - add closing backtick to last line
       fixed += '`';
     } else {
       fixed = lines2.join('\n');
@@ -409,7 +369,6 @@ export function fixCommonSyntaxErrors(code: string): string {
 
 /**
  * Fix unbalanced brackets, braces, and parentheses
- * This is a best-effort fix - it adds missing closers at the end
  */
 function fixBracketBalance(code: string): string {
   const stack: { char: string; line: number }[] = [];
@@ -418,7 +377,6 @@ function fixBracketBalance(code: string): string {
 
   let inString = false;
   let stringChar = '';
-  let inTemplate = false;
   let inJsx = false;
   let lineNum = 1;
 
@@ -426,63 +384,46 @@ function fixBracketBalance(code: string): string {
     const char = code[i];
     const prev = code[i - 1];
 
-    // Track line numbers
     if (char === '\n') lineNum++;
 
-    // Track string state
     if ((char === '"' || char === "'" || char === '`') && prev !== '\\') {
       if (!inString) {
         inString = true;
         stringChar = char;
-        if (char === '`') inTemplate = true;
       } else if (char === stringChar) {
         inString = false;
         stringChar = '';
-        if (char === '`') inTemplate = false;
       }
       continue;
     }
 
-    // Skip if in string (except template literal expressions)
-    if (inString && !inTemplate) continue;
+    if (inString) continue;
 
-    // Handle template literal ${} expressions
-    if (inTemplate && char === '$' && code[i + 1] === '{') {
-      // Template expression start - push the brace
-      continue;
-    }
-
-    // Track JSX tags (simple heuristic)
     if (char === '<' && /[A-Z]/.test(code[i + 1] || '')) {
       inJsx = true;
     }
     if (inJsx && char === '>') {
       inJsx = false;
-      continue; // do not track JSX angle brackets
+      continue;
     }
     if (inJsx) continue;
 
-    // Skip angle brackets in type annotations
     if (char === '<' || char === '>') {
-      // Simple heuristic: skip if looks like generic/type annotation
       const before = code.substring(Math.max(0, i - 20), i);
       if (/<\w+>/.test(before) || /:\s*$/.test(before) || /extends\s+$/.test(before)) {
         continue;
       }
     }
 
-    // Track brackets
     if (pairs[char] && char !== '<') {
       stack.push({ char, line: lineNum });
     } else if (closers[char] && char !== '>') {
       if (stack.length > 0 && stack[stack.length - 1].char === closers[char]) {
         stack.pop();
       }
-      // If we have an unmatched closer, leave it (might be intentional)
     }
   }
 
-  // Add missing closers at the end
   if (stack.length > 0) {
     let suffix = '';
     while (stack.length > 0) {
@@ -491,7 +432,6 @@ function fixBracketBalance(code: string): string {
         suffix += pairs[unmatched.char];
       }
     }
-    // Add closers on new line if there's content
     if (suffix && code.trim().length > 0) {
       code = code.trimEnd() + '\n' + suffix;
     }
@@ -500,20 +440,19 @@ function fixBracketBalance(code: string): string {
   return code;
 }
 
-// Re-export validation functions for backwards compatibility
-// Actual implementations are in codeValidator.ts
-export { SyntaxIssue };
-export const validateJsxSyntax = validateJsxSyntaxImpl;
-
-export const validateAndFixCode = validateAndFixCodeImpl;
-
-export const getErrorContext = getErrorContextImpl;
-export const parseBabelError = parseBabelErrorImpl;
+// ============================================================================
+// Backward Compatibility - buildImportLine helper
+// ============================================================================
 
 /**
  * Build an import statement from components
+ * @deprecated This is an internal helper, use fixAndMergeImports instead
  */
-function buildImportLine(defaultImport: string | null, named: Set<string>, source: string): string {
+export function buildImportLine(
+  defaultImport: string | null,
+  named: Set<string>,
+  source: string
+): string {
   const namedStr = Array.from(named).filter(Boolean).join(', ');
 
   if (defaultImport && namedStr) {
@@ -524,1134 +463,4 @@ function buildImportLine(defaultImport: string | null, named: Set<string>, sourc
     return `import { ${namedStr} } from '${source}';`;
   }
   return `import '${source}';`;
-}
-
-/**
- * Fixes bare specifier imports that AI often generates incorrectly.
- * Converts: import X from "src/..." to import X from "/src/..."
- * Also handles: import X from "components/..." etc.
- *
- * Browser ES modules require paths to start with "/", "./", or "../"
- */
-export function fixBareSpecifierImports(code: string): string {
-  if (!code) return '';
-
-  // Common directory patterns that AI incorrectly uses as bare specifiers
-  // These should be converted to absolute paths (prefixed with /)
-  const bareSpecifierDirs = [
-    'src',
-    'components',
-    'hooks',
-    'utils',
-    'services',
-    'contexts',
-    'types',
-    'lib',
-    'pages',
-    'features',
-    'modules',
-    'assets',
-    'styles',
-    'api',
-  ];
-
-  // Build regex pattern: matches import/export from "dir/..." or 'dir/...'
-  // Captures: full match, quote char, path
-  const pattern = new RegExp(
-    `(import\\s+[^;]+?from\\s*|export\\s+[^;]*?from\\s*|import\\s*\\()(['"\`])(${bareSpecifierDirs.join('|')})/`,
-    'g'
-  );
-
-  // Replace bare specifiers with absolute paths
-  return code.replace(pattern, (match, prefix, quote, dir) => {
-    return `${prefix}${quote}/${dir}/`;
-  });
-}
-
-/**
- * Cleans AI-generated code by removing markdown artifacts and code block markers.
- *
- * IMPORTANT: This function intentionally does MINIMAL processing.
- * We only remove markdown formatting - we do NOT attempt to "fix" syntax.
- * Aggressive transformations were causing more harm than good by breaking
- * valid code that LLMs generate.
- */
-export function cleanGeneratedCode(code: string, filePath?: string): string {
-  if (!code) return '';
-
-  let cleaned = code;
-
-  // Remove code block markers with various language tags
-  const codeBlockPatterns = [
-    /^```(?:javascript|typescript|tsx|jsx|ts|js|react|html|css|json|sql|markdown|md|plaintext|text|sh|bash|shell)?\s*\n?/gim,
-    /\n?```\s*$/gim,
-    /^```\s*\n?/gim,
-  ];
-
-  codeBlockPatterns.forEach(pattern => {
-    cleaned = cleaned.replace(pattern, '');
-  });
-
-  // Remove leading language identifier on first line (e.g., "javascript" or "typescript" alone)
-  cleaned = cleaned.replace(/^(javascript|typescript|tsx|jsx|ts|js|react)\s*\n/i, '');
-
-  // Remove any remaining triple backticks
-  cleaned = cleaned.replace(/```/g, '');
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Remove stray FILE markers that AI sometimes leaves in generated code
-  // These are from marker-based format parsing that wasn't fully cleaned
-  // ═══════════════════════════════════════════════════════════════════════
-  // Remove: <!-- FILE:path --> or <!-- /FILE:path --> or <!-- /FILE -->
-  cleaned = cleaned.replace(/<!--\s*\/?FILE(?::[^\s>]*)?\s*-->/g, '');
-  // Remove: <!-- GENERATION_META --> blocks
-  cleaned = cleaned.replace(/<!--\s*GENERATION_META\s*-->[\s\S]*?<!--\s*\/GENERATION_META\s*-->/g, '');
-  // Remove standalone GENERATION_META markers
-  cleaned = cleaned.replace(/<!--\s*\/?GENERATION_META\s*-->/g, '');
-  // Remove: <!-- PLAN --> blocks
-  cleaned = cleaned.replace(/<!--\s*PLAN\s*-->[\s\S]*?<!--\s*\/PLAN\s*-->/g, '');
-  // Remove standalone PLAN markers
-  cleaned = cleaned.replace(/<!--\s*\/?PLAN\s*-->/g, '');
-  // Remove: <!-- EXPLANATION --> blocks
-  cleaned = cleaned.replace(/<!--\s*EXPLANATION\s*-->[\s\S]*?<!--\s*\/EXPLANATION\s*-->/g, '');
-  // Remove standalone EXPLANATION markers
-  cleaned = cleaned.replace(/<!--\s*\/?EXPLANATION\s*-->/g, '');
-  // Remove: <!-- META --> blocks (v2 format)
-  cleaned = cleaned.replace(/<!--\s*META\s*-->[\s\S]*?<!--\s*\/META\s*-->/g, '');
-  // Remove standalone META markers
-  cleaned = cleaned.replace(/<!--\s*\/?META\s*-->/g, '');
-  // Remove: <!-- MANIFEST --> blocks (v2 format)
-  cleaned = cleaned.replace(/<!--\s*MANIFEST\s*-->[\s\S]*?<!--\s*\/MANIFEST\s*-->/g, '');
-  // Remove standalone MANIFEST markers
-  cleaned = cleaned.replace(/<!--\s*\/?MANIFEST\s*-->/g, '');
-  // Remove: <!-- BATCH --> blocks (v2 format)
-  cleaned = cleaned.replace(/<!--\s*BATCH\s*-->[\s\S]*?<!--\s*\/BATCH\s*-->/g, '');
-  // Remove standalone BATCH markers
-  cleaned = cleaned.replace(/<!--\s*\/?BATCH\s*-->/g, '');
-
-  // Check if this is a JS/TS file
-  const isJsFile = filePath
-    ? /\.(tsx?|jsx?|mjs|cjs)$/.test(filePath)
-    : /import\s+.*from\s+['"]|export\s+/.test(cleaned);
-
-  // Fix bare specifier imports (src/... -> /src/...)
-  // This is safe and necessary for browser ES modules
-  if (isJsFile) {
-    cleaned = fixBareSpecifierImports(cleaned);
-
-    // ═══════════════════════════════════════════════════════════════════
-    // AI SYNTAX ERROR FIXES - Applied when code is saved to files state
-    // These fix common mistakes AI makes with arrow function syntax
-    // ═══════════════════════════════════════════════════════════════════
-
-    // Fix space in arrow: = > → =>
-    cleaned = cleaned.replace(/=\s+>/g, '=>');
-
-    // ─────────────────────────────────────────────────────────────────
-    // FIX 1: Hybrid function/arrow - "function Name() => {" → "function Name() {"
-    // AI sometimes mixes function declaration with arrow syntax
-    // ─────────────────────────────────────────────────────────────────
-    cleaned = cleaned.replace(/function\s+(\w+)\s*\(\)\s*=>\s*\{/g, 'function $1() {');
-    cleaned = cleaned.replace(/function\s+(\w+)\s*\(([^)]*)\)\s*=>\s*\{/g, 'function $1($2) {');
-    cleaned = cleaned.replace(/(\bfunction\s+\w+[\s\S]*?)\s*=>\s*\{/g, '$1 {');
-
-    // ─────────────────────────────────────────────────────────────────
-    // FIX 2: Missing arrow - "= () {" → "= () => {"
-    // AI sometimes forgets the => in arrow functions
-    // ─────────────────────────────────────────────────────────────────
-
-    // Pattern: const fn = () { or const fn = async () {
-    cleaned = cleaned.replace(/(=\s*)(async\s+)?\(([^)]*)\)\s*\{/g, (match, eq, asyncKw, params) => {
-      if (match.includes('=>')) return match;
-      return eq + (asyncKw || '') + '(' + params + ') => {';
-    });
-
-    // Pattern: useEffect(() { or any callback(() {
-    cleaned = cleaned.replace(/(\w+)\s*\(\s*\(([^)]*)\)\s*\{(?!\s*=>)/g, (match, fnName, params) => {
-      if (fnName === 'function') return match;
-      if (match.includes('=>')) return match;
-      return fnName + '((' + params + ') => {';
-    });
-
-    // ─────────────────────────────────────────────────────────────────
-    // FIX 3: JSX event handler missing arrow - "onClick={() {}}" → "onClick={() => {}}"
-    // AI sometimes forgets the => in JSX callback props
-    // ─────────────────────────────────────────────────────────────────
-    // Pattern: ={( or ={ ( followed by params and { without =>
-    // Handles: onClick={() {}} onChange={(e) {}} onSubmit={(e, data) {}}
-    cleaned = cleaned.replace(/=\{\s*\(([^)]*)\)\s*\{(?!\s*=>)/g, (match, params) => {
-      if (match.includes('=>')) return match;
-      return '={(' + params + ') => {';
-    });
-
-    // ─────────────────────────────────────────────────────────────────
-    // FIX 4: Object property arrow syntax - "render: (value) {" → "render: (value) => {"
-    // AI sometimes forgets the => in object method shorthand
-    // ─────────────────────────────────────────────────────────────────
-    // Pattern: propertyName: (params) { without =>
-    // Handles: render: (value: string) {}, onClick: (e) {}, getValue: () {}
-    // Must not match function declarations or already correct arrows
-    cleaned = cleaned.replace(/(\w+)\s*:\s*\(([^)]*)\)\s*\{(?!\s*=>)/g, (match, prop, params) => {
-      if (match.includes('=>')) return match;
-      // Skip if it looks like a destructuring pattern
-      if (/^\s*\{/.test(params)) return match;
-      return prop + ': (' + params + ') => {';
-    });
-
-    // Pattern: return () { (useEffect cleanup)
-    cleaned = cleaned.replace(/return\s+\(([^)]*)\)\s*\{/g, (match, params) => {
-      if (match.includes('=>')) return match;
-      return 'return (' + params + ') => {';
-    });
-
-    // Pattern: ( ) => → () => (extra space in empty params)
-    cleaned = cleaned.replace(/\(\s+\)\s*=>/g, '() =>');
-  }
-
-  // Trim whitespace
-  cleaned = cleaned.trim();
-
-  return cleaned;
-}
-
-/**
- * Strips PLAN comment from AI response if present.
- * PLAN comments have format: // PLAN: {"create":[...],"update":[...],"delete":[],"total":N}
- * This should be called before JSON.parse on any AI response that might contain PLAN.
- */
-export function stripPlanComment(response: string): string {
-  if (!response) return '';
-
-  // Trim leading whitespace and invisible characters
-  let cleaned = response.trimStart();
-  cleaned = cleaned.replace(/^[\uFEFF\u200B-\u200D\u00A0]+/, '');
-
-  // Check for PLAN comment
-  const planIndex = cleaned.indexOf('// PLAN:');
-  if (planIndex === -1) return cleaned;
-
-  // Only process if PLAN is at start or preceded only by whitespace
-  if (planIndex !== 0 && !/^[\s]*$/.test(cleaned.slice(0, planIndex))) {
-    return cleaned;
-  }
-
-  // Find the PLAN JSON's opening brace
-  const firstBrace = cleaned.indexOf('{', planIndex);
-  if (firstBrace === -1 || firstBrace <= planIndex) return cleaned;
-
-  // Use brace counting to find where PLAN JSON ends
-  let braceCount = 0;
-  let planEnd = firstBrace;
-
-  for (let i = firstBrace; i < cleaned.length; i++) {
-    const char = cleaned[i];
-    if (char === '{') braceCount++;
-    else if (char === '}') {
-      braceCount--;
-      if (braceCount === 0) {
-        planEnd = i + 1;
-        break;
-      }
-    }
-  }
-
-  // Remove PLAN comment and return the rest
-  return cleaned.substring(planEnd).trimStart();
-}
-
-/**
- * Common JSON errors and their fixes
- */
-interface JsonValidationResult {
-  valid: boolean;
-  error?: string;
-  suggestion?: string;
-  fixedJson?: string;
-}
-
-/**
- * Pre-validates JSON string and attempts to fix common issues
- */
-export function preValidateJson(jsonStr: string): JsonValidationResult {
-  if (!jsonStr || !jsonStr.trim()) {
-    return { valid: false, error: 'Empty response' };
-  }
-
-  let json = jsonStr.trim();
-
-  // Check for markdown code blocks
-  if (json.startsWith('```')) {
-    const match = json.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (match) {
-      json = match[1].trim();
-    } else {
-      return {
-        valid: false,
-        error: 'Unclosed markdown code block',
-        suggestion: 'Remove markdown formatting and return pure JSON'
-      };
-    }
-  }
-
-  // Check for common prefixes that shouldn't be there
-  const invalidPrefixes = ['Here is', 'Sure,', 'I\'ll', 'Let me', 'The following'];
-  for (const prefix of invalidPrefixes) {
-    if (json.startsWith(prefix)) {
-      return {
-        valid: false,
-        error: `Response starts with text: "${prefix}..."`,
-        suggestion: 'Return only JSON, no explanatory text before it'
-      };
-    }
-  }
-
-  // Check for PLAN comment (valid, but note it)
-  const hasPlan = json.includes('// PLAN:');
-
-  // Find the JSON object
-  const firstBrace = json.indexOf('{');
-  if (firstBrace === -1) {
-    return { valid: false, error: 'No JSON object found (missing opening brace)' };
-  }
-
-  // Extract just the JSON part (after PLAN if present)
-  let jsonPart = json;
-  if (hasPlan) {
-    const afterPlan = stripPlanComment(json);
-    jsonPart = afterPlan;
-  }
-
-  // Try to fix common issues
-  let fixedJson = jsonPart;
-
-  // Fix 1: Trailing commas before closing braces/brackets
-  fixedJson = fixedJson.replace(/,(\s*[}\]])/g, '$1');
-
-  // Fix 2: Single quotes to double quotes (naive - only for keys)
-  // This is risky, so only do it if there are no double quotes
-  if (!fixedJson.includes('"') && fixedJson.includes("'")) {
-    fixedJson = fixedJson.replace(/'/g, '"');
-  }
-
-  // Try parsing
-  try {
-    JSON.parse(fixedJson);
-    return { valid: true, fixedJson: fixedJson !== jsonPart ? fixedJson : undefined };
-  } catch (e) {
-    const error = e instanceof Error ? e.message : 'Unknown parse error';
-
-    // Provide specific suggestions based on error
-    let suggestion = 'Check JSON syntax';
-    if (error.includes('Unexpected token')) {
-      suggestion = 'Invalid character in JSON - check for unescaped quotes or special characters';
-    } else if (error.includes('Unexpected end')) {
-      suggestion = 'JSON is truncated - missing closing braces or brackets';
-    } else if (error.includes('position')) {
-      const posMatch = error.match(/position (\d+)/);
-      if (posMatch) {
-        const pos = parseInt(posMatch[1]);
-        const context = fixedJson.slice(Math.max(0, pos - 20), pos + 20);
-        suggestion = `Error near: "...${context}..."`;
-      }
-    }
-
-    return { valid: false, error, suggestion };
-  }
-}
-
-/**
- * Safely parses JSON from AI response, handling PLAN comments and other artifacts.
- * Returns null if parsing fails instead of throwing.
- */
-export function safeParseAIResponse<T = unknown>(response: string): T | null {
-  if (!response) return null;
-
-  try {
-    // Pre-validate first
-    const validation = preValidateJson(response);
-    if (!validation.valid) {
-      console.debug('[safeParseAIResponse] Pre-validation failed:', validation.error, validation.suggestion);
-    }
-
-    // Strip PLAN comment first
-    let cleaned = stripPlanComment(response);
-
-    // Try to extract JSON from markdown code blocks
-    const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (codeBlockMatch) {
-      cleaned = codeBlockMatch[1].trimStart();
-      cleaned = cleaned.replace(/^[\uFEFF\u200B-\u200D\u00A0]+/, '');
-    }
-
-    // Find JSON object
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      // Use fixed JSON if available from pre-validation
-      const jsonToParse = validation.fixedJson || jsonMatch[0];
-      return JSON.parse(jsonToParse) as T;
-    }
-
-    return null;
-  } catch (e) {
-    console.debug('[safeParseAIResponse] Parse failed:', e);
-    return null;
-  }
-}
-
-/**
- * Attempts to repair truncated JSON from AI responses
- * Returns the repaired JSON string or throws a descriptive error
- *
- * Uses shared jsonRepair utility for consistent behavior across the codebase.
- */
-export function repairTruncatedJson(jsonStr: string): string {
-  const result = repairJsonShared(jsonStr, { verbose: true });
-  return result.json;
-}
-
-/**
- * Generation metadata for smart continuation
- */
-export interface GenerationMeta {
-  totalFilesPlanned: number;
-  filesInThisBatch: string[];
-  completedFiles: string[];
-  remainingFiles: string[];
-  currentBatch: number;
-  totalBatches: number;
-  isComplete: boolean;
-}
-
-/**
- * Parses AI response that might contain multiple files in JSON format
- * Includes enhanced repair for truncated responses
- * Supports generationMeta for smart continuation
- */
-export function parseMultiFileResponse(response: string, noThrow: boolean = false): {
-  files: Record<string, string>;
-  explanation?: string;
-  truncated?: boolean;
-  deletedFiles?: string[];
-  fileChanges?: Record<string, string>;
-  generationMeta?: GenerationMeta;
-  continuation?: {
-    prompt: string;
-    remainingFiles: string[];
-    currentBatch: number;
-    totalBatches: number;
-  };
-} | null {
-  try {
-    // Prevent recursion by limiting response size
-    if (response.length > 100000) {
-      console.warn('[parseMultiFileResponse] Response too large, potential recursion:', response.length);
-      if (noThrow) return null;
-      throw new Error(`Response too large (${Math.round(response.length/1000)}KB). This may indicate infinite recursion.`);
-    }
-
-    // First, try to extract JSON from markdown code blocks
-    const codeBlockMatch = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    let jsonString = codeBlockMatch ? codeBlockMatch[1] : response;
-
-    // Trim leading whitespace/newlines (common in AI responses)
-    // Use trimStart() which handles more Unicode whitespace than regex
-    jsonString = jsonString.trimStart();
-    // Also strip BOM and other invisible characters
-    jsonString = jsonString.replace(/^[\uFEFF\u200B-\u200D\u00A0]+/, '');
-
-    // Remove PLAN comment if present (it has its own JSON that would confuse parsing)
-    // Format: // PLAN: {"create":[...],"update":[...],"delete":[],"total":N}
-    // Strategy: Find the PLAN line, use brace counting to find where its JSON ends
-    // Also handle case where PLAN might appear after some whitespace on the first line
-    const planIndex = jsonString.indexOf('// PLAN:');
-    const hasPlanComment = planIndex !== -1 && (planIndex === 0 || /^[\s]*$/.test(jsonString.slice(0, planIndex)));
-    if (hasPlanComment) {
-      // Start from the PLAN comment position
-      const planStart = planIndex;
-      // Find where the PLAN JSON starts (first { after the PLAN: prefix, not from string start)
-      const firstBrace = jsonString.indexOf('{', planStart);
-      if (firstBrace !== -1 && firstBrace > planStart) {
-        // Use brace counting to find where the PLAN JSON ends
-        let braceCount = 0;
-        let planEnd = firstBrace;
-
-        for (let i = firstBrace; i < jsonString.length; i++) {
-          const char = jsonString[i];
-          if (char === '{') braceCount++;
-          else if (char === '}') {
-            braceCount--;
-            if (braceCount === 0) {
-              planEnd = i + 1;
-              break;
-            }
-          }
-        }
-
-        // Remove everything from start to planEnd (including any trailing whitespace/newlines)
-        const afterPlan = jsonString.substring(planEnd).trimStart();
-        console.log('[parseMultiFileResponse] Removed PLAN comment, remaining:', afterPlan.slice(0, 100) + '...');
-        jsonString = afterPlan;
-      }
-    }
-
-    // Try to find JSON object in the string - be more greedy to capture full JSON
-    const jsonMatch = jsonString.match(/\{[\s\S]*$/);
-    if (jsonMatch) {
-      let jsonToParse = jsonMatch[0];
-
-      // Check if JSON ends abruptly (common with truncation)
-      const trimmed = jsonToParse.trim();
-      // Count braces to see if we're missing closing ones
-      let openBraces = 0;
-      let closeBraces = 0;
-      let inString = false;
-      let escapeNext = false;
-
-      for (let i = 0; i < trimmed.length; i++) {
-        const char = trimmed[i];
-        if (escapeNext) {
-          escapeNext = false;
-          continue;
-        }
-        if (char === '\\' && inString) {
-          escapeNext = true;
-          continue;
-        }
-        if (char === '"' && !escapeNext) {
-          inString = !inString;
-          continue;
-        }
-        if (!inString) {
-          if (char === '{') openBraces++;
-          else if (char === '}') closeBraces++;
-        }
-      }
-
-      // If we have more opening than closing braces, add the missing ones
-      if (openBraces > closeBraces) {
-        const missingBraces = openBraces - closeBraces;
-        for (let i = 0; i < missingBraces; i++) {
-          jsonToParse += '}';
-        }
-        console.log(`[parseMultiFileResponse] Added ${missingBraces} closing brace(s) to repair JSON`);
-      }
-      let wasTruncated = false;
-
-      // Try direct parse first
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonToParse);
-      } catch (_parseError) {
-        // Try to repair truncated JSON
-        console.log('[parseMultiFileResponse] Direct parse failed, attempting repair...');
-        wasTruncated = true;
-
-        try {
-          const repaired = repairTruncatedJson(jsonToParse);
-          parsed = JSON.parse(repaired);
-          console.log('[parseMultiFileResponse] Repair successful');
-        } catch (_repairError) {
-          // Last resort: try to extract just the files object
-          const filesMatch = jsonString.match(/"files"\s*:\s*\{([\s\S]*)/);
-          if (filesMatch) {
-            try {
-              const filesJson = '{' + filesMatch[1];
-              const repairedFiles = repairTruncatedJson(filesJson);
-              const filesObj = JSON.parse(repairedFiles);
-              parsed = { files: filesObj, explanation: 'Response was truncated - showing partial results.' };
-              console.log('[parseMultiFileResponse] Extracted partial files object');
-            } catch {
-              // Try one more aggressive repair approach
-              try {
-                // Find the last complete file entry
-                const fileMatches = jsonToParse.match(/"([^"]+\.(?:tsx?|jsx?|css|json))":\s*`([^`]*)`/gs);
-                if (fileMatches && fileMatches.length > 0) {
-                  const partialFiles: Record<string, string> = {};
-                  fileMatches.forEach(match => {
-                    const fileMatch = match.match(/"([^"]+\.(?:tsx?|jsx?|css|json))":\s*`([^`]*)`/);
-                    if (fileMatch) {
-                      partialFiles[fileMatch[1]] = fileMatch[2];
-                    }
-                  });
-                  if (Object.keys(partialFiles).length > 0) {
-                    parsed = {
-                      files: partialFiles,
-                      explanation: 'Response was severely truncated - recovered ' + Object.keys(partialFiles).length + ' files.'
-                    };
-                    console.log('[parseMultiFileResponse] Recovered partial files using regex');
-                    return parsed;
-                  }
-                }
-              } catch (_e) {
-                // Final attempt: try to salvage any valid file content
-                try {
-                  // Look for files in quotes with content in backticks
-                  const simpleFilePattern = /"([^"]+\.(?:tsx?|jsx?|css|json))":\s*"([^"]*(?:\\.[^"]*)*?)"/g;
-                  const matches = [...jsonToParse.matchAll(simpleFilePattern)];
-
-                  if (matches && matches.length > 0) {
-                    const partialFiles: Record<string, string> = {};
-                    matches.forEach(([_fullMatch, filePath, fileContent]) => {
-                      // Clean up escaped quotes and newlines
-                      const cleanedContent = fileContent
-                        .replace(/\\'/g, "'")
-                        .replace(/\\"/g, '"')
-                        .replace(/\\n/g, '\n')
-                        .trim();
-                      partialFiles[filePath] = cleanedContent;
-                    });
-
-                    if (Object.keys(partialFiles).length > 0) {
-                      parsed = {
-                        files: partialFiles,
-                        explanation: 'Response was severely truncated - recovered ' + Object.keys(partialFiles).length + ' files with basic parsing.'
-                      };
-                      console.log('[parseMultiFileResponse] Recovered files with simple pattern matching');
-                      return parsed;
-                    }
-
-                    // Enhanced string-level truncation recovery
-                    console.log('[parseMultiFileResponse] Attempting enhanced string-level truncation recovery...');
-
-                    // Look for truncated file patterns where content is cut off mid-string
-                    // JSON-002 fix: Use non-backtracking pattern to prevent ReDoS
-                    // Match file path, then capture content up to next file pattern or end
-                    const recoveredFiles: Record<string, string> = {};
-
-                    // Limit input size to prevent DoS (max 500KB for recovery)
-                    const safeJsonToParse = jsonToParse.length > 500000 ? jsonToParse.slice(0, 500000) : jsonToParse;
-
-                    // Use simpler pattern: match "filepath": "content" without complex lookahead
-                    const filePathPattern = /"([^"]{1,200}\.(tsx?|jsx?|css|json|md|ts|js))":\s*"/g;
-                    let pathMatch;
-
-                    while ((pathMatch = filePathPattern.exec(safeJsonToParse)) !== null) {
-                      const filePath = pathMatch[1];
-                      const contentStart = pathMatch.index + pathMatch[0].length;
-
-                      // Find content end by looking for next unescaped quote followed by comma/brace or end
-                      let contentEnd = contentStart;
-                      let inEscape = false;
-                      for (let i = contentStart; i < Math.min(safeJsonToParse.length, contentStart + 100000); i++) {
-                        const char = safeJsonToParse[i];
-                        if (inEscape) {
-                          inEscape = false;
-                          continue;
-                        }
-                        if (char === '\\') {
-                          inEscape = true;
-                          continue;
-                        }
-                        if (char === '"') {
-                          contentEnd = i;
-                          break;
-                        }
-                      }
-
-                      if (contentEnd > contentStart) {
-                        const content = safeJsonToParse.slice(contentStart, contentEnd);
-                        if (content.length >= 50) {
-                          recoveredFiles[filePath] = content;
-                        }
-                      }
-                    }
-
-                    // Process and clean recovered files
-                    for (const filePath of Object.keys(recoveredFiles)) {
-                      let content = recoveredFiles[filePath];
-
-                      // Remove trailing ellipsis or incomplete patterns
-                      content = content
-                        .replace(/\.\.\.$/, '')
-                        .replace(/```$/, '')
-                        .replace(/className=\\"[^"]*$/, 'className=""');
-
-                      // Clean up escaped content (JSON escapes)
-                      content = content
-                        .replace(/\\n/g, '\n')
-                        .replace(/\\t/g, '\t')
-                        .replace(/\\"/g, '"')
-                        .replace(/\\\\/g, '\\')
-                        .trim();
-
-                      // Only keep if it looks like valid code
-                      if (isValidCode(content)) {
-                        console.log(`[parseMultiFileResponse] Recovered file: ${filePath} (${content.length} chars)`);
-                        recoveredFiles[filePath] = content;
-                      } else {
-                        delete recoveredFiles[filePath];
-                      }
-                    }
-
-                    // Last resort: Look for code blocks without JSON structure
-                    if (Object.keys(recoveredFiles).length === 0) {
-                      const codeBlockPattern = /```(?:tsx?|jsx?|typescript|javascript)\s*\n([\s\S]*?)\n```/g;
-                      let codeMatch;
-                      let fileIndex = 1;
-
-                      while ((codeMatch = codeBlockPattern.exec(jsonToParse)) !== null) {
-                        const content = codeMatch[1].trim();
-                        if (content.length > 50 && isValidCode(content)) {
-                          const inferredFileName = content.includes('export default') || content.includes('React')
-                            ? `component${fileIndex}.tsx`
-                            : content.includes('export')
-                            ? `module${fileIndex}.ts`
-                            : `utils${fileIndex}.js`;
-
-                          console.log(`[parseMultiFileResponse] Last resort recovery: ${inferredFileName}`);
-                          recoveredFiles[inferredFileName] = content;
-                          fileIndex++;
-                        }
-                      }
-                    }
-
-                    if (Object.keys(recoveredFiles).length > 0) {
-                      parsed = {
-                        files: recoveredFiles,
-                        explanation: 'Enhanced recovery from string-level truncation - recovered ' + Object.keys(recoveredFiles).length + ' files.'
-                      };
-                      console.log('[parseMultiFileResponse] Enhanced recovery successful');
-                      return parsed;
-                    }
-                  }
-                } catch (_e) {
-                  // Final attempt failed
-                }
-              }
-
-              if (!noThrow) {
-                throw new Error('Response was truncated and could not be repaired. The model may have hit token limits. Try a shorter prompt or different model.');
-              }
-              return null;
-            }
-          } else {
-            if (!noThrow) {
-                throw new Error('Response was truncated and could not be repaired. The model may have hit token limits. Try a shorter prompt or different model.');
-              }
-              return null;
-          }
-        }
-      }
-
-      // Validate that parsed is an object
-      if (typeof parsed !== 'object' || parsed === null) {
-        return null;
-      }
-
-      // Extract explanation if present
-      const explanation = parsed.explanation || parsed.description;
-
-      // Get the files - could be in "files", "Changes", "fileChanges" key or at root level
-      let filesObj = parsed.files || parsed.fileChanges || parsed.Changes || parsed.changes || parsed;
-      if (filesObj.explanation) delete filesObj.explanation;
-      if (filesObj.description) delete filesObj.description;
-
-      // If no file-like keys found, check if filesObj itself is a file (single file response)
-      const hasFileKeys = Object.keys(filesObj).some(k =>
-        k.includes('.') || k.includes('/') // Has extension or path separator
-      );
-
-      // If filesObj doesn't look like a collection of files, but parsed does, check root level
-      if (!hasFileKeys && typeof parsed === 'object') {
-        const rootFileKeys = Object.keys(parsed).filter(k =>
-          k.includes('.') || k.includes('/') // Has extension or path separator
-        );
-        if (rootFileKeys.length > 0) {
-          filesObj = parsed;
-        }
-      }
-
-      const fileKeys = Object.keys(filesObj).filter(k =>
-        k.includes('.') || k.includes('/') // Has extension or path separator
-      );
-
-      if (fileKeys.length === 0) {
-        throw new Error('Model returned no code files. Try a model better suited for code generation.');
-      }
-
-      // Clean each file's content
-      const cleaned: Record<string, string> = {};
-      const skippedFiles: { path: string; reason: string }[] = [];
-
-      for (const [path, content] of Object.entries(filesObj)) {
-        // Skip non-file keys
-        if (!path.includes('.') && !path.includes('/')) {
-          continue;
-        }
-
-        // Skip malformed file paths (e.g., "src/components/.tsx")
-        if (path.includes('/.') || path.endsWith('/') || !path.match(/\.[a-z]+$/i)) {
-          console.warn('[parseMultiFileResponse] Malformed file path:', path);
-          skippedFiles.push({ path, reason: 'malformed path' });
-          continue;
-        }
-
-        // Skip ignored paths like .git, node_modules
-        if (isIgnoredFilePath(path)) {
-          console.log('[parseMultiFileResponse] Skipping ignored path:', path);
-          continue;
-        }
-
-        // Check content type - handle various formats AI might return
-        let contentStr: string;
-
-        if (typeof content === 'string') {
-          contentStr = content;
-        } else if (typeof content === 'object' && content !== null) {
-          // AI might return { content: "...", type: "tsx" } or { diff: "...", isNew: true } format
-          const contentObj = content as Record<string, unknown>;
-          if ('content' in contentObj && typeof contentObj.content === 'string') {
-            contentStr = contentObj.content;
-            console.log('[parseMultiFileResponse] Extracted content from object for:', path);
-          } else if ('code' in contentObj && typeof contentObj.code === 'string') {
-            contentStr = contentObj.code;
-            console.log('[parseMultiFileResponse] Extracted code from object for:', path);
-          } else if ('diff' in contentObj && typeof contentObj.diff === 'string') {
-            // Support diff mode format as fallback (for when isNew: true means full content)
-            contentStr = contentObj.diff;
-            console.log('[parseMultiFileResponse] Extracted diff from object for:', path);
-          } else {
-            console.warn('[parseMultiFileResponse] Object content without string content for:', path, '- keys:', Object.keys(content));
-            skippedFiles.push({ path, reason: `object without content (keys: ${Object.keys(content).join(', ')})` });
-            continue;
-          }
-        } else {
-          console.warn('[parseMultiFileResponse] Invalid content type for:', path, '- type:', typeof content, '- value:', content);
-          skippedFiles.push({ path, reason: `invalid content type (${typeof content})` });
-          continue;
-        }
-
-        // Clean the content (pass file path for JSX detection)
-        const cleanedContent = cleanGeneratedCode(contentStr, path);
-
-        // Validate cleaned content
-        if (!cleanedContent || cleanedContent.length < 10) {
-          console.warn('[parseMultiFileResponse] Empty/too short content for:', path, '- length:', cleanedContent.length, '- content:', cleanedContent);
-          skippedFiles.push({ path, reason: `empty content (${cleanedContent.length} chars)` });
-          continue;
-        }
-
-        // Check for obviously invalid content (just file extension, etc.)
-        if (/^(tsx|jsx|ts|js|css|json|md|html);?$/i.test(cleanedContent.trim())) {
-          console.warn('[parseMultiFileResponse] Invalid content (just extension):', path, '- content:', cleanedContent);
-          skippedFiles.push({ path, reason: 'content is just file extension' });
-          continue;
-        }
-
-        cleaned[path] = cleanedContent;
-      }
-
-      // Log results
-      if (skippedFiles.length > 0) {
-        console.warn('[parseMultiFileResponse] Skipped files:', skippedFiles);
-      }
-      console.log('[parseMultiFileResponse] Valid files:', Object.keys(cleaned));
-
-      // Return null if no valid file entries found
-      if (Object.keys(cleaned).length === 0) {
-        return null;
-      }
-
-      // Extract generationMeta - supports multiple formats
-      let generationMeta: GenerationMeta | undefined;
-
-      // Format 1: JSON v2 with batch object
-      if (parsed.batch) {
-        const batch = parsed.batch;
-        const plan = parsed.plan || {};
-        generationMeta = {
-          totalFilesPlanned: (plan.create?.length || 0) + (plan.update?.length || 0),
-          filesInThisBatch: Object.keys(cleaned),
-          completedFiles: batch.completed || Object.keys(cleaned),
-          remainingFiles: batch.remaining || [],
-          currentBatch: batch.current || 1,
-          totalBatches: batch.total || 1,
-          isComplete: batch.isComplete ?? true
-        };
-        console.log('[parseMultiFileResponse] JSON v2 batch detected:', {
-          format: parsed.meta?.format || 'json',
-          version: parsed.meta?.version || '1.0',
-          batch: `${generationMeta.currentBatch}/${generationMeta.totalBatches}`,
-          completed: generationMeta.completedFiles.length,
-          remaining: generationMeta.remainingFiles.length,
-          isComplete: generationMeta.isComplete
-        });
-      }
-
-      // Format 2: Legacy generationMeta object
-      if (!generationMeta && parsed.generationMeta) {
-        generationMeta = {
-          totalFilesPlanned: parsed.generationMeta.totalFilesPlanned || 0,
-          filesInThisBatch: parsed.generationMeta.filesInThisBatch || [],
-          completedFiles: parsed.generationMeta.completedFiles || [],
-          remainingFiles: parsed.generationMeta.remainingFiles || [],
-          currentBatch: parsed.generationMeta.currentBatch || 1,
-          totalBatches: parsed.generationMeta.totalBatches || 1,
-          isComplete: parsed.generationMeta.isComplete ?? true
-        };
-        console.log('[parseMultiFileResponse] Legacy generationMeta detected:', {
-          batch: `${generationMeta.currentBatch}/${generationMeta.totalBatches}`,
-          completed: generationMeta.completedFiles.length,
-          remaining: generationMeta.remainingFiles.length,
-          isComplete: generationMeta.isComplete
-        });
-      }
-
-      // Format 3: Old continuation format
-      if (!generationMeta && parsed.continuation) {
-        generationMeta = {
-          totalFilesPlanned: (parsed.continuation.remainingFiles?.length || 0) + Object.keys(cleaned).length,
-          filesInThisBatch: Object.keys(cleaned),
-          completedFiles: Object.keys(cleaned),
-          remainingFiles: parsed.continuation.remainingFiles || [],
-          currentBatch: parsed.continuation.currentBatch || 1,
-          totalBatches: parsed.continuation.totalBatches || 1,
-          isComplete: !parsed.continuation.remainingFiles?.length
-        };
-        console.log('[parseMultiFileResponse] Converted old continuation to generationMeta');
-      }
-
-      // Extract deleted files from plan (v2) or deletedFiles (legacy)
-      const deletedFiles = parsed.plan?.delete || parsed.deletedFiles;
-
-      return {
-        files: cleaned,
-        explanation: typeof explanation === 'string' ? explanation : undefined,
-        truncated: wasTruncated,
-        deletedFiles,
-        fileChanges: parsed.fileChanges,
-        generationMeta,
-        continuation: parsed.continuation
-      };
-    }
-
-    // No JSON found in response
-    throw new Error('No valid JSON found in response. The model may not support structured code generation.');
-  } catch (e) {
-    // Re-throw with better error message
-    if (e instanceof Error) {
-      throw e;
-    }
-    throw new Error('Failed to parse model response. Try a different model.');
-  }
-}
-
-export const isValidCode = isValidCodeImpl;
-
-// ============================================================================
-// SEARCH/REPLACE MODE - Re-exported from searchReplace.ts for backwards compatibility
-// ============================================================================
-export {
-  parseSearchReplaceModeResponse,
-  applySearchReplace,
-  mergeSearchReplaceChanges,
-  type SearchReplaceMergeResult,
-} from './searchReplace';
-
-// ============================================================================
-// MARKER FORMAT - Re-exported from markerFormat.ts
-// ============================================================================
-export {
-  isMarkerFormat,
-  parseMarkerFormatResponse,
-  parseMarkerPlan,
-  parseMarkerFiles,
-  parseStreamingMarkerFiles,
-  extractMarkerFileList,
-  getMarkerStreamingStatus,
-  stripMarkerMetadata,
-  type MarkerFilePlan,
-  type MarkerFormatResponse,
-} from './markerFormat';
-
-// ============================================================================
-// UNIFIED RESPONSE PARSER
-// ============================================================================
-
-/** Response format type */
-export type ResponseFormatType = 'json' | 'marker';
-
-/** Unified parsed response */
-export interface UnifiedParsedResponse {
-  format: ResponseFormatType;
-  files: Record<string, string>;
-  explanation?: string;
-  truncated?: boolean;
-  deletedFiles?: string[];
-  generationMeta?: GenerationMeta;
-  /** Files that were started but not completed (missing closing marker) */
-  incompleteFiles?: string[];
-}
-
-/**
- * Detects the response format (JSON vs Marker)
- */
-export function detectResponseFormat(response: string): ResponseFormatType {
-  if (isMarkerFormat(response)) {
-    return 'marker';
-  }
-  return 'json';
-}
-
-/**
- * Unified parser that handles both JSON and Marker formats
- * Automatically detects the format and calls the appropriate parser
- *
- * Uses the new aiResponseParser as backend for robust multi-format handling
- */
-export function parseUnifiedResponse(response: string): UnifiedParsedResponse | null {
-  if (!response || !response.trim()) {
-    return null;
-  }
-
-  // Use the new unified parser from aiResponseParser
-  const result = parseAIResponseUnified(response, { aggressiveRecovery: true });
-
-  // Check if we got any files
-  if (Object.keys(result.files).length === 0) {
-    // Fall back to legacy parsers for backwards compatibility
-    // Check for marker format first (it's more distinctive)
-    if (isMarkerFormat(response)) {
-      const markerResult = parseMarkerFormatResponse(response);
-      if (markerResult) {
-        // Log warning if there are incomplete files
-        if (markerResult.incompleteFiles && markerResult.incompleteFiles.length > 0) {
-          console.warn('[parseUnifiedResponse] Response has incomplete files that will NOT be included:', markerResult.incompleteFiles);
-        }
-
-        return {
-          format: 'marker',
-          files: markerResult.files,
-          explanation: markerResult.explanation,
-          truncated: markerResult.truncated,
-          deletedFiles: markerResult.plan?.delete,
-          generationMeta: markerResult.generationMeta,
-          incompleteFiles: markerResult.incompleteFiles,
-        };
-      }
-    }
-
-    // Try JSON format
-    const jsonResult = parseMultiFileResponse(response, true);
-    if (jsonResult) {
-      return {
-        format: 'json',
-        files: jsonResult.files,
-        explanation: jsonResult.explanation,
-        truncated: jsonResult.truncated,
-        deletedFiles: jsonResult.deletedFiles,
-        generationMeta: jsonResult.generationMeta,
-      };
-    }
-
-    return null;
-  }
-
-  // Convert new parser result to UnifiedParsedResponse format
-  const format: ResponseFormatType = result.format.startsWith('marker') ? 'marker' : 'json';
-
-  // Convert batch info to generationMeta if present
-  let generationMeta: GenerationMeta | undefined;
-  if (result.batch) {
-    generationMeta = {
-      totalFilesPlanned: result.plan
-        ? result.plan.create.length + result.plan.update.length
-        : Object.keys(result.files).length + (result.batch.remaining?.length || 0),
-      filesInThisBatch: Object.keys(result.files),
-      completedFiles: result.batch.completed,
-      remainingFiles: result.batch.remaining,
-      currentBatch: result.batch.current,
-      totalBatches: result.batch.total,
-      isComplete: result.batch.isComplete,
-    };
-  }
-
-  // Log warning if there are incomplete files
-  if (result.incompleteFiles && result.incompleteFiles.length > 0) {
-    console.warn('[parseUnifiedResponse] Response has incomplete files that will NOT be included:', result.incompleteFiles);
-  }
-
-  // Log warning if there were recovered files
-  if (result.recoveredFiles && result.recoveredFiles.length > 0) {
-    console.log('[parseUnifiedResponse] Files recovered from malformed response:', result.recoveredFiles);
-  }
-
-  return {
-    format,
-    files: result.files,
-    explanation: result.explanation,
-    truncated: result.truncated,
-    deletedFiles: result.deletedFiles,
-    generationMeta,
-    incompleteFiles: result.incompleteFiles,
-  };
-}
-
-/**
- * Extract file list from response (works with both formats)
- */
-export function extractFileListUnified(response: string): string[] {
-  if (isMarkerFormat(response)) {
-    return extractMarkerFileList(response);
-  }
-
-  // JSON format - use existing extraction
-  const files = new Set<string>();
-
-  // Try to parse PLAN comment
-  const planMatch = response.match(/\/\/\s*PLAN:\s*(\{[\s\S]*?\})/);
-  if (planMatch) {
-    try {
-      const plan = JSON.parse(planMatch[1]);
-      if (plan.create) plan.create.forEach((f: string) => files.add(f));
-      if (plan.update) plan.update.forEach((f: string) => files.add(f));
-    } catch {
-      // Ignore parse errors
-    }
-  }
-
-  // Extract from JSON keys using matchAll
-  const pattern = /"([^"]+\.(tsx?|jsx?|css|json|md|sql|ts|js))"\s*:/g;
-  const matches = [...response.matchAll(pattern)];
-  for (const match of matches) {
-    files.add(match[1]);
-  }
-
-  return Array.from(files).sort();
-}
-
-/**
- * Get streaming status from response (works with both formats)
- */
-export function getStreamingStatusUnified(response: string, detectedFiles: Set<string>): {
-  pending: string[];
-  streaming: string[];
-  complete: string[];
-} {
-  if (isMarkerFormat(response)) {
-    return getMarkerStreamingStatus(response);
-  }
-
-  // JSON format - analyze based on detected files and content
-  const allFiles = extractFileListUnified(response);
-  const complete: string[] = [];
-  const streaming: string[] = [];
-
-  for (const file of allFiles) {
-    // Check if file content appears complete in JSON
-    // A file is complete if we see its closing quote followed by comma or brace
-    const escapedFile = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const filePattern = new RegExp(`"${escapedFile}"\\s*:\\s*"[^"]*(?:\\\\.[^"]*)*"\\s*[,}]`);
-    if (filePattern.test(response)) {
-      complete.push(file);
-    } else if (detectedFiles.has(file)) {
-      streaming.push(file);
-    }
-  }
-
-  const completeSet = new Set(complete);
-  const streamingSet = new Set(streaming);
-  const pending = allFiles.filter(f => !completeSet.has(f) && !streamingSet.has(f));
-
-  return { pending, streaming, complete };
 }

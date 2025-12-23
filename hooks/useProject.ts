@@ -1,17 +1,27 @@
+/**
+ * useProject Hook
+ *
+ * Orchestrates project management including CRUD, Git, and file sync operations.
+ * Delegates to focused sub-hooks:
+ * - useProjectCrud: Project create, open, close, delete, duplicate
+ * - useProjectGit: Git init, commit, status
+ * - useProjectSync: File sync and confirmation handling
+ */
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { projectApi, gitApi, autoSave, checkServerHealth, ProjectMeta, GitStatus, ProjectContext } from '@/services/projectApi';
 import type { FileSystem } from '@/types';
+import { useProjectCrud, ProjectCrudState } from './useProjectCrud';
+import { useProjectGit, ProjectGitState } from './useProjectGit';
+import { useProjectSync, PendingSyncConfirmation, ProjectSyncState } from './useProjectSync';
 
 // Re-export types for use in other components
 export type { ProjectContext, HistoryEntry } from '@/services/projectApi';
+export type { PendingSyncConfirmation } from './useProjectSync';
 
-// Pending sync confirmation when significant file reduction detected
-export interface PendingSyncConfirmation {
-  files: FileSystem;
-  existingFileCount: number;
-  newFileCount: number;
-  message: string;
-}
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface ProjectState {
   // Current project
@@ -68,7 +78,10 @@ export interface UseProjectReturn extends ProjectState {
   clearError: () => void;
 }
 
-const _SYNC_DEBOUNCE_MS = 2000;
+// ============================================================================
+// Constants
+// ============================================================================
+
 const STORAGE_KEY_PROJECT_ID = 'fluidflow_current_project_id';
 
 // Helper to get/set localStorage (only for project ID persistence)
@@ -93,6 +106,10 @@ const storage = {
   },
 };
 
+// ============================================================================
+// Hook Implementation
+// ============================================================================
+
 export function useProject(onFilesChange?: (files: FileSystem) => void): UseProjectReturn {
   const [state, setState] = useState<ProjectState>({
     currentProject: null,
@@ -108,34 +125,75 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
     error: null,
   });
 
+  // Refs for tracking
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFilesRef = useRef<string>('');
   const hasRestoredRef = useRef<boolean>(false);
-  const isInitializedRef = useRef<boolean>(false); // Prevents sync before load
-  const restoreAbortedRef = useRef<boolean>(false); // Track if restore was cancelled
-  const openProjectIdRef = useRef<string | null>(null); // Track current openProject operation
+  const isInitializedRef = useRef<boolean>(false);
+  const restoreAbortedRef = useRef<boolean>(false);
+  const openProjectIdRef = useRef<string | null>(null);
 
-  // Refresh projects list - defined before useEffect that uses it
-  const refreshProjects = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoadingProjects: true, error: null }));
+  // State ref for sub-hooks to access current state
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-    try {
-      const projects = await projectApi.list();
-      setState(prev => ({ ...prev, projects, isLoadingProjects: false }));
-    } catch (_err) {
-      setState(prev => ({
-        ...prev,
-        isLoadingProjects: false,
-        error: 'Failed to load projects',
-      }));
-    }
-  }, []);
+  // Unified state updater for sub-hooks
+  const updateState = useCallback(
+    <T extends Partial<ProjectState>>(updater: (prev: ProjectState) => T) => {
+      setState((prev) => ({ ...prev, ...updater(prev) }));
+    },
+    []
+  );
+
+  // Refs bundle for sub-hooks
+  const refs = {
+    lastFilesRef,
+    isInitializedRef,
+    restoreAbortedRef,
+    openProjectIdRef,
+    syncTimeoutRef,
+  };
+
+  // ============================================================================
+  // Compose Sub-Hooks
+  // ============================================================================
+
+  // Project CRUD operations
+  const crudOps = useProjectCrud({
+    onFilesChange,
+    updateState: updateState as (updater: (prev: ProjectCrudState) => Partial<ProjectCrudState>) => void,
+    getState: () => stateRef.current,
+    storage,
+    refs,
+    autoSave,
+  });
+
+  // Git operations
+  const gitOps = useProjectGit({
+    getCurrentProject: () => stateRef.current.currentProject,
+    getFiles: () => stateRef.current.files,
+    getGitStatus: () => stateRef.current.gitStatus,
+    updateState: updateState as (updater: (prev: ProjectGitState) => Partial<ProjectGitState>) => void,
+  });
+
+  // File sync operations
+  const syncOps = useProjectSync({
+    getCurrentProject: () => stateRef.current.currentProject,
+    getFiles: () => stateRef.current.files,
+    getPendingSyncConfirmation: () => stateRef.current.pendingSyncConfirmation,
+    updateState: updateState as (updater: (prev: ProjectSyncState) => Partial<ProjectSyncState>) => void,
+    refs,
+  });
+
+  // ============================================================================
+  // Effects
+  // ============================================================================
 
   // Check server health on mount
   useEffect(() => {
     const checkHealth = async () => {
       const isOnline = await checkServerHealth();
-      setState(prev => ({ ...prev, isServerOnline: isOnline }));
+      setState((prev) => ({ ...prev, isServerOnline: isOnline }));
     };
 
     checkHealth();
@@ -145,6 +203,7 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
   }, []);
 
   // Load projects on mount
+  const { refreshProjects } = crudOps;
   useEffect(() => {
     if (state.isServerOnline) {
       refreshProjects();
@@ -157,7 +216,7 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
       if (!state.isServerOnline || hasRestoredRef.current) return;
 
       hasRestoredRef.current = true;
-      restoreAbortedRef.current = false; // Reset abort flag
+      restoreAbortedRef.current = false;
       const savedProjectId = storage.getProjectId();
 
       if (savedProjectId) {
@@ -165,13 +224,12 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
         try {
           const project = await projectApi.get(savedProjectId);
 
-          // Check if restore was aborted (user opened different project)
           if (restoreAbortedRef.current) {
             console.log('[Project] Restore aborted - another project was opened');
             return;
           }
 
-          setState(prev => ({
+          setState((prev) => ({
             ...prev,
             currentProject: project,
             files: project.files || {},
@@ -181,489 +239,94 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
           lastFilesRef.current = JSON.stringify(project.files || {});
           onFilesChange?.(project.files || {});
 
-          // Refresh git status - this is the single source of truth
+          // Refresh git status
           try {
-            // Check abort again before git status
             if (restoreAbortedRef.current) return;
 
             const gitStatus = await gitApi.status(savedProjectId);
 
-            // Final abort check before updating state
             if (restoreAbortedRef.current) return;
 
-            setState(prev => ({
+            setState((prev) => ({
               ...prev,
               gitStatus,
             }));
           } catch {
-            // Git might not be initialized - gitStatus stays null
+            // Git might not be initialized
           }
 
-          // Only mark as initialized if not aborted
           if (!restoreAbortedRef.current) {
             console.log('[Project] Restored successfully:', project.name);
-            isInitializedRef.current = true; // Now safe to sync
-            setState(prev => ({ ...prev, isInitialized: true }));
+            isInitializedRef.current = true;
+            setState((prev) => ({ ...prev, isInitialized: true }));
           }
         } catch (_err) {
           console.error('[Project] Failed to restore project:', _err);
-          // Clear invalid project ID
           storage.setProjectId(null);
-          isInitializedRef.current = true; // No project to restore, safe to create new
-          setState(prev => ({ ...prev, isInitialized: true }));
+          isInitializedRef.current = true;
+          setState((prev) => ({ ...prev, isInitialized: true }));
         }
       } else {
-        // No saved project, safe to create new ones
         isInitializedRef.current = true;
-        setState(prev => ({ ...prev, isInitialized: true }));
+        setState((prev) => ({ ...prev, isInitialized: true }));
       }
     };
 
     restoreProject();
   }, [state.isServerOnline, onFilesChange]);
 
-  // Create new project
-  const createProject = useCallback(async (
-    name?: string,
-    description?: string,
-    initialFiles?: FileSystem
-  ): Promise<ProjectMeta | null> => {
-    // Abort any in-flight restore operation
-    restoreAbortedRef.current = true;
+  // Enhanced openProject to fetch git status async
+  const openProject = useCallback(
+    async (id: string) => {
+      const result = await crudOps.openProject(id);
 
-    setState(prev => ({ ...prev, error: null }));
-
-    try {
-      const project = await projectApi.create({
-        name: name || 'Untitled Project',
-        description,
-        files: initialFiles,
-      });
-
-      setState(prev => ({
-        ...prev,
-        currentProject: project,
-        files: project.files || {},
-        // Filter out any existing project with the same ID to prevent duplicates
-        projects: [project, ...prev.projects.filter(p => p.id !== project.id)],
-        gitStatus: null, // Will be fetched on demand
-        lastSyncedAt: Date.now(),
-        isInitialized: true,
-      }));
-
-      // Save project ID to localStorage for persistence
-      storage.setProjectId(project.id);
-
-      lastFilesRef.current = JSON.stringify(project.files || {});
-      isInitializedRef.current = true; // Safe to sync now
-      onFilesChange?.(project.files || {});
-
-      return project;
-    } catch (_err) {
-      setState(prev => ({ ...prev, error: 'Failed to create project' }));
-      return null;
-    }
-  }, [onFilesChange]);
-
-  // Open existing project - returns files directly to avoid stale closure issues
-  const openProject = useCallback(async (id: string): Promise<{ success: boolean; files: FileSystem; context: ProjectContext | null }> => {
-    // IMPORTANT: Abort any in-flight restore operation
-    restoreAbortedRef.current = true;
-
-    // Track this operation - used to detect if a newer openProject was called
-    openProjectIdRef.current = id;
-
-    // IMPORTANT: Clear any pending syncs from old project FIRST
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-      syncTimeoutRef.current = null;
-    }
-    autoSave.reset();
-
-    // Temporarily disable syncing until new project is loaded
-    isInitializedRef.current = false;
-
-    setState(prev => ({ ...prev, error: null, isSyncing: true }));
-
-    try {
-      // Fetch project and context in parallel
-      const [project, savedContext] = await Promise.all([
-        projectApi.get(id),
-        projectApi.getContext(id).catch(() => null) // do not fail if context doesn't exist
-      ]);
-
-      // Check if a newer openProject call was made while we were fetching
-      if (openProjectIdRef.current !== id) {
-        console.log('[Project] openProject aborted - newer request in progress');
-        return { success: false, files: {}, context: null };
+      if (result.success) {
+        // Refresh git status async - single source of truth
+        gitApi
+          .status(id)
+          .then((gitStatus) => {
+            if (openProjectIdRef.current === id) {
+              setState((prev) => ({
+                ...prev,
+                gitStatus,
+              }));
+            }
+          })
+          .catch((error) => {
+            if (openProjectIdRef.current === id) {
+              console.debug('[Project] Git status refresh skipped:', error?.message || error);
+            }
+          });
       }
 
-      const projectFiles = project.files || {};
+      return result;
+    },
+    [crudOps]
+  );
 
-      setState(prev => ({
-        ...prev,
-        currentProject: project,
-        files: projectFiles,
-        isSyncing: false,
-        lastSyncedAt: Date.now(),
-        isInitialized: true,
-        // Reset git status - will be fetched fresh
-        gitStatus: null,
-      }));
+  // ============================================================================
+  // Context Management
+  // ============================================================================
 
-      // Save project ID to localStorage for persistence
-      storage.setProjectId(id);
-
-      // Set lastFilesRef BEFORE enabling sync to prevent old files from syncing
-      lastFilesRef.current = JSON.stringify(projectFiles);
-
-      // NOW enable syncing for new project
-      isInitializedRef.current = true;
-
-      // Refresh git status async - single source of truth
-      // BUG-032 FIX: Add error logging instead of silently swallowing errors
-      gitApi.status(id).then(gitStatus => {
-        // Only update if this project is still the current one
-        if (openProjectIdRef.current === id) {
-          setState(prev => ({
-            ...prev,
-            gitStatus,
-          }));
-        }
-      }).catch((error) => {
-        // Git might not be initialized - gitStatus stays null
-        // BUG-032 FIX: Log error for debugging instead of silently ignoring
-        if (openProjectIdRef.current === id) {
-          console.debug('[Project] Git status refresh skipped (not initialized or error):', error?.message || error);
-        }
-      });
-
-      console.log('[Project] Opened project:', project.name, 'with', Object.keys(projectFiles).length, 'files');
-      if (savedContext?.history?.length) {
-        console.log('[Project] Loaded context with', savedContext.history.length, 'history entries');
-      }
-
-      return { success: true, files: projectFiles, context: savedContext };
-    } catch (_err) {
-      // Only handle error if this is still the current operation
-      if (openProjectIdRef.current === id) {
-        console.error('[Project] Failed to open project:', _err);
-        // Re-enable syncing if open fails
-        isInitializedRef.current = true;
-        setState(prev => ({
-          ...prev,
-          isSyncing: false,
-          error: 'Failed to open project',
-        }));
-      }
-      return { success: false, files: {}, context: null };
-    }
-  }, []);
-
-  // Close current project
-  const closeProject = useCallback(() => {
-    // Clear any pending sync
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-      syncTimeoutRef.current = null;
-    }
-    autoSave.reset();
-
-    // Clear localStorage
-    storage.setProjectId(null);
-
-    setState(prev => ({
-      ...prev,
-      currentProject: null,
-      files: {},
-      gitStatus: null,
-      lastSyncedAt: null,
-    }));
-
-    lastFilesRef.current = '';
-  }, []);
-
-  // Delete project
-  const deleteProject = useCallback(async (id: string): Promise<boolean> => {
-    setState(prev => ({ ...prev, error: null }));
-
-    try {
-      await projectApi.delete(id);
-
-      // Clear localStorage if deleting current project
-      const savedId = storage.getProjectId();
-      if (savedId === id) {
-        storage.setProjectId(null);
-      }
-
-      setState(prev => ({
-        ...prev,
-        projects: prev.projects.filter(p => p.id !== id),
-        // Close if current project was deleted
-        ...(prev.currentProject?.id === id ? {
-          currentProject: null,
-          files: {},
-          gitStatus: null,
-        } : {}),
-      }));
-
-      return true;
-    } catch (_err) {
-      setState(prev => ({ ...prev, error: 'Failed to delete project' }));
-      return false;
-    }
-  }, []);
-
-  // Duplicate project
-  const duplicateProject = useCallback(async (
-    id: string,
-    newName?: string
-  ): Promise<ProjectMeta | null> => {
-    setState(prev => ({ ...prev, error: null }));
-
-    try {
-      const project = await projectApi.duplicate(id, newName);
-      setState(prev => ({
-        ...prev,
-        // Filter out any existing project with the same ID to prevent duplicates
-        projects: [project, ...prev.projects.filter(p => p.id !== project.id)],
-      }));
-      return project;
-    } catch (_err) {
-      setState(prev => ({ ...prev, error: 'Failed to duplicate project' }));
-      return null;
-    }
-  }, []);
-
-  // Update files (LOCAL ONLY - no auto-sync to backend)
-  // Files sync to backend only on COMMIT (git-centric approach)
-  const updateFiles = useCallback((files: FileSystem) => {
-    // Just update local state - no backend sync
-    setState(prev => ({ ...prev, files }));
-  }, []);
-
-  // Force sync files immediately
-  const syncFiles = useCallback(async (): Promise<boolean> => {
-    if (!state.currentProject) {
-      console.warn('[Project] Ignoring syncFiles - no current project');
-      return false;
-    }
-
-    // CRITICAL: do not sync until initialized
-    if (!isInitializedRef.current) {
-      console.warn('[Project] Ignoring syncFiles - not initialized yet');
-      setState(prev => ({ ...prev, error: 'Cannot sync: project still initializing' }));
-      return false;
-    }
-
-    // CRITICAL: Never sync empty files - protect against data loss
-    const fileCount = Object.keys(state.files).length;
-    if (fileCount === 0) {
-      console.warn('[Project] Blocking empty files sync - would cause data loss!');
-      setState(prev => ({ ...prev, error: 'Cannot sync: no files to save (data loss protection)' }));
-      return false;
-    }
-
-    // Clear pending sync
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-      syncTimeoutRef.current = null;
-    }
-
-    setState(prev => ({ ...prev, isSyncing: true, error: null }));
-
-    try {
-      const response = await projectApi.update(state.currentProject.id, { files: state.files });
-
-      // Check if confirmation is required
-      if (response.confirmationRequired) {
-        console.log('[Project] Sync requires confirmation:', response.message);
-        setState(prev => ({
-          ...prev,
-          isSyncing: false,
-          pendingSyncConfirmation: {
-            files: state.files,
-            existingFileCount: response.existingFileCount || 0,
-            newFileCount: response.newFileCount || 0,
-            message: response.message || 'Significant file reduction detected. Do you want to continue?'
-          }
-        }));
-        return false; // Not synced yet, waiting for confirmation
-      }
-
-      // Check if blocked
-      if (response.blocked) {
-        console.warn('[Project] Sync blocked:', response.warning);
-        setState(prev => ({ ...prev, isSyncing: false, error: response.warning || 'Sync blocked by server' }));
+  const saveContext = useCallback(
+    async (context: Partial<ProjectContext>): Promise<boolean> => {
+      if (!state.currentProject) {
+        console.warn('[Project] Cannot save context - no current project');
         return false;
       }
 
-      lastFilesRef.current = JSON.stringify(state.files);
-      setState(prev => ({
-        ...prev,
-        isSyncing: false,
-        lastSyncedAt: Date.now(),
-      }));
-      return true;
-    } catch (_err) {
-      setState(prev => ({
-        ...prev,
-        isSyncing: false,
-        error: 'Failed to sync files',
-      }));
-      return false;
-    }
-  }, [state.currentProject, state.files]);
-
-  // Initialize git
-  // force=true will delete and reinitialize corrupted repos
-  // filesToSync: current working files to sync before init
-  const initGit = useCallback(async (force = false, filesToSync?: FileSystem): Promise<boolean> => {
-    console.log('[Project] initGit called with force:', force);
-
-    if (!state.currentProject) {
-      console.warn('[Project] initGit failed - no current project');
-      return false;
-    }
-
-    const files = filesToSync || state.files;
-    const fileCount = Object.keys(files).length;
-
-    if (fileCount === 0) {
-      console.warn('[Project] Cannot init git with empty files');
-      setState(prev => ({ ...prev, error: 'Cannot initialize: no files' }));
-      return false;
-    }
-
-    setState(prev => ({ ...prev, error: null, isSyncing: true }));
-
-    try {
-      // Step 1: Sync files to backend first (force=true to bypass confirmation)
-      console.log('[Project] initGit - syncing', fileCount, 'files first...');
-      const syncResponse = await projectApi.update(state.currentProject.id, { files, force: true });
-      if (syncResponse.blocked) {
-        console.error('[Project] Sync blocked before git init:', syncResponse.warning);
-        setState(prev => ({ ...prev, isSyncing: false, error: 'Sync blocked: ' + syncResponse.warning }));
+      try {
+        await projectApi.saveContext(state.currentProject.id, context);
+        console.log('[Project] Saved context for project:', state.currentProject.name);
+        return true;
+      } catch (_err) {
+        console.error('[Project] Failed to save context:', _err);
         return false;
       }
-      console.log('[Project] initGit - files synced');
+    },
+    [state.currentProject]
+  );
 
-      // Step 2: Initialize git (force=true for corrupted repos)
-      console.log('[Project] initGit - calling gitApi.init...');
-      await gitApi.init(state.currentProject.id, force);
-      console.log('[Project] initGit - git initialized successfully');
-
-      // Step 3: Refresh status - gitStatus.initialized will now be true
-      console.log('[Project] initGit - refreshing git status...');
-      const gitStatus = await gitApi.status(state.currentProject.id);
-      console.log('[Project] initGit - got status:', gitStatus);
-
-      setState(prev => ({
-        ...prev,
-        gitStatus,
-        isSyncing: false,
-        lastSyncedAt: Date.now(),
-      }));
-
-      return true;
-    } catch (_err) {
-      console.error('[Project] initGit failed:', _err);
-      setState(prev => ({ ...prev, isSyncing: false, error: 'Failed to initialize git' }));
-      return false;
-    }
-  }, [state.currentProject, state.files]);
-
-  // Create commit - syncs files to backend first, then commits
-  // This is the ONLY time files are synced to backend (git-centric approach)
-  const commit = useCallback(async (message: string, filesToCommit?: FileSystem): Promise<boolean> => {
-    if (!state.currentProject || !state.gitStatus?.initialized) return false;
-
-    const files = filesToCommit || state.files;
-    const fileCount = Object.keys(files).length;
-
-    if (fileCount === 0) {
-      console.warn('[Project] Cannot commit empty files');
-      setState(prev => ({ ...prev, error: 'Cannot commit: no files' }));
-      return false;
-    }
-
-    setState(prev => ({ ...prev, error: null, isSyncing: true }));
-
-    try {
-      console.log('[Project] Committing', fileCount, 'files...');
-
-      // Step 1: Sync files to backend (force=true to bypass confirmation)
-      const syncResponse = await projectApi.update(state.currentProject.id, { files, force: true });
-      if (syncResponse.blocked) {
-        console.error('[Project] Sync blocked before commit:', syncResponse.warning);
-        setState(prev => ({ ...prev, isSyncing: false, error: 'Sync blocked: ' + syncResponse.warning }));
-        return false;
-      }
-      console.log('[Project] Files synced to backend');
-
-      // Step 2: Git commit
-      await gitApi.commit(state.currentProject.id, message, files);
-      console.log('[Project] Git commit created');
-
-      // Step 3: Refresh status
-      const gitStatus = await gitApi.status(state.currentProject.id);
-      setState(prev => ({
-        ...prev,
-        gitStatus,
-        isSyncing: false,
-        lastSyncedAt: Date.now(),
-      }));
-
-      console.log('[Project] Commit complete!');
-      return true;
-    } catch (_err) {
-      console.error('[Project] Commit failed:', _err);
-      setState(prev => ({ ...prev, isSyncing: false, error: 'Failed to create commit' }));
-      return false;
-    }
-  }, [state.currentProject, state.gitStatus?.initialized, state.files]);
-
-  // Refresh git status - this is the single source of truth for git state
-  const refreshGitStatus = useCallback(async () => {
-    if (!state.currentProject) return;
-
-    try {
-      const gitStatus = await gitApi.status(state.currentProject.id);
-      console.log('[Project] Git status response:', gitStatus);
-
-      setState(prev => ({
-        ...prev,
-        gitStatus,
-      }));
-    } catch (_err) {
-      console.error('[Project] Failed to refresh git status:', _err);
-      // On error, keep current gitStatus - do not reset to null
-    }
-  }, [state.currentProject]);
-
-  // Clear error
-  const clearError = useCallback(() => {
-    setState(prev => ({ ...prev, error: null }));
-  }, []);
-
-  // Save context (including version history) to backend
-  const saveContext = useCallback(async (context: Partial<ProjectContext>): Promise<boolean> => {
-    if (!state.currentProject) {
-      console.warn('[Project] Cannot save context - no current project');
-      return false;
-    }
-
-    try {
-      await projectApi.saveContext(state.currentProject.id, context);
-      console.log('[Project] Saved context for project:', state.currentProject.name);
-      return true;
-    } catch (_err) {
-      console.error('[Project] Failed to save context:', _err);
-      return false;
-    }
-  }, [state.currentProject]);
-
-  // Get context from backend for current project
   const getContext = useCallback(async (): Promise<ProjectContext | null> => {
     if (!state.currentProject) {
       return null;
@@ -676,77 +339,52 @@ export function useProject(onFilesChange?: (files: FileSystem) => void): UseProj
     }
   }, [state.currentProject]);
 
-  // Confirm pending sync (force update after user confirmation)
-  const confirmPendingSync = useCallback(async (): Promise<boolean> => {
-    if (!state.currentProject || !state.pendingSyncConfirmation) {
-      return false;
-    }
+  // ============================================================================
+  // Utils
+  // ============================================================================
 
-    const { files } = state.pendingSyncConfirmation;
-
-    setState(prev => ({ ...prev, isSyncing: true, pendingSyncConfirmation: null }));
-
-    try {
-      // Send with force=true to bypass the confirmation check
-      const response = await projectApi.update(state.currentProject.id, { files, force: true });
-
-      if (response.blocked) {
-        console.warn('[Project] Force sync still blocked:', response.warning);
-        setState(prev => ({ ...prev, isSyncing: false, error: response.warning || 'Force sync blocked' }));
-        return false;
-      }
-
-      lastFilesRef.current = JSON.stringify(files);
-      setState(prev => ({
-        ...prev,
-        isSyncing: false,
-        lastSyncedAt: Date.now(),
-      }));
-      console.log('[Project] Force sync completed after confirmation');
-      return true;
-    } catch (_err) {
-      setState(prev => ({
-        ...prev,
-        isSyncing: false,
-        error: 'Failed to sync files',
-      }));
-      return false;
-    }
-  }, [state.currentProject, state.pendingSyncConfirmation]);
-
-  // Cancel pending sync
-  const cancelPendingSync = useCallback(() => {
-    setState(prev => ({ ...prev, pendingSyncConfirmation: null }));
-    console.log('[Project] Pending sync cancelled by user');
+  const clearError = useCallback(() => {
+    setState((prev) => ({ ...prev, error: null }));
   }, []);
 
   // Cleanup on unmount
   useEffect(() => {
+    const timeoutRef = syncTimeoutRef;
     return () => {
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
       autoSave.reset();
     };
   }, []);
 
+  // ============================================================================
+  // Return
+  // ============================================================================
+
   return {
     ...state,
-    createProject,
+    // Project CRUD
+    createProject: crudOps.createProject,
     openProject,
-    closeProject,
-    deleteProject,
-    duplicateProject,
-    refreshProjects,
-    updateFiles,
-    syncFiles,
-    initGit,
-    commit,
-    refreshGitStatus,
+    closeProject: crudOps.closeProject,
+    deleteProject: crudOps.deleteProject,
+    duplicateProject: crudOps.duplicateProject,
+    refreshProjects: crudOps.refreshProjects,
+    // File operations
+    updateFiles: syncOps.updateFiles,
+    syncFiles: syncOps.syncFiles,
+    // Git operations
+    initGit: gitOps.initGit,
+    commit: gitOps.commit,
+    refreshGitStatus: gitOps.refreshGitStatus,
+    // Context
     saveContext,
     getContext,
-    confirmPendingSync,
-    cancelPendingSync,
+    // Sync confirmation
+    confirmPendingSync: syncOps.confirmPendingSync,
+    cancelPendingSync: syncOps.cancelPendingSync,
+    // Utils
     clearError,
   };
 }

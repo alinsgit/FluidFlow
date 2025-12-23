@@ -3,35 +3,29 @@
  *
  * Handles the main code generation logic for the AI chat.
  * Orchestrates streaming, parsing, and continuation handling.
+ *
+ * Delegates to focused sub-hooks:
+ * - useContinuationHandler: Multi-batch generation continuation
+ * - useTruncationRecovery: Recovery from truncated responses
+ * - useGenerationSuccess: Success handling and diff modal
  */
 
 import { useCallback } from 'react';
 import { FileSystem, ChatMessage, ChatAttachment } from '../types';
 import { GenerationMeta } from '../utils/cleanCode';
 import { debugLog } from './useDebugStore';
-import { getProviderManager, GenerationRequest, GenerationResponse } from '../services/ai';
+import { getProviderManager, GenerationRequest } from '../services/ai';
 import {
   FILE_GENERATION_SCHEMA,
   supportsAdditionalProperties,
 } from '../services/ai/utils/schemas';
-import {
-  CONTINUATION_SYSTEM_INSTRUCTION,
-  CONTINUATION_SYSTEM_INSTRUCTION_MARKER,
-} from '../components/ControlPanel/prompts';
-import { checkAndAutoCompact } from '../services/contextCompaction';
 import { FilePlan, TruncatedContent, ContinuationState, FileProgress } from './useGenerationState';
 import { useStreamingResponse } from './useStreamingResponse';
 import { useResponseParser } from './useResponseParser';
-import {
-  calculateFileChanges,
-  createTokenUsage,
-  buildSystemInstruction,
-  buildPromptParts,
-} from '../utils/generationUtils';
-import {
-  analyzeTruncatedResponse,
-  emergencyCodeBlockExtraction,
-} from '../utils/truncationRecovery';
+import { useContinuationHandler } from './useContinuationHandler';
+import { useTruncationRecovery } from './useTruncationRecovery';
+import { useGenerationSuccess } from './useGenerationSuccess';
+import { buildSystemInstruction, buildPromptParts } from '../utils/generationUtils';
 import { getFluidFlowConfig } from '../services/fluidflowConfig';
 
 export interface CodeGenerationOptions {
@@ -136,315 +130,36 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
     setStreamingStatus,
   });
 
-  /**
-   * Handle generation success - create message and show diff modal
-   */
-  const handleGenerationSuccess = useCallback(
-    (
-      newFiles: Record<string, string>,
-      mergedFiles: FileSystem,
-      explanation: string,
-      genStartTime: number,
-      currentModel: string,
-      providerName: string,
-      streamResponse: GenerationResponse | null,
-      fullText: string,
-      continuation?: { prompt: string; remainingFiles: string[]; currentBatch: number; totalBatches: number },
-      incompleteFiles?: string[]
-    ) => {
-      const fileChanges = calculateFileChanges(files, mergedFiles);
-      const generatedFileList = Object.keys(newFiles);
+  // Use extracted hooks for focused responsibilities
+  const { handleMissingFiles, handleSmartContinuation } = useContinuationHandler({
+    files,
+    existingApp: !!existingApp,
+    setStreamingStatus,
+    setFilePlan,
+    setContinuationState,
+    handleContinueGeneration,
+  });
 
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        timestamp: Date.now(),
-        explanation: explanation || 'Generation complete.',
-        files: newFiles,
-        fileChanges,
-        snapshotFiles: { ...files },
-        model: currentModel,
-        provider: providerName,
-        generationTime: Date.now() - genStartTime,
-        continuation: continuation,
-        tokenUsage: createTokenUsage(streamResponse?.usage, undefined, fullText, newFiles),
-      };
+  const { handleTruncationError } = useTruncationRecovery({
+    files,
+    existingApp: !!existingApp,
+    setStreamingStatus,
+    setFilePlan,
+    setMessages,
+    setContinuationState,
+    reviewChange,
+    handleContinueGeneration,
+  });
 
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Check if context needs compaction and trigger based on settings
-      if (sessionId) {
-        checkAndAutoCompact(sessionId).then(result => {
-          if (result) {
-            if (result.compacted) {
-              console.log('[useCodeGeneration] Context compacted:', result);
-              setMessages((prev) => [...prev, {
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                timestamp: Date.now(),
-                content: `📦 Context compacted: ${result.beforeTokens.toLocaleString()} → ${result.afterTokens.toLocaleString()} tokens`,
-              }]);
-            }
-          }
-        }).catch(err => {
-          console.error('[useCodeGeneration] Compaction check failed:', err);
-        });
-      }
-
-      // Show warning if there are incomplete files
-      if (incompleteFiles && incompleteFiles.length > 0) {
-        setStreamingStatus(`⚠️ Generated ${generatedFileList.length} files (${incompleteFiles.length} incomplete, excluded)`);
-      } else {
-        setStreamingStatus(`✅ Generated ${generatedFileList.length} files!`);
-      }
-
-      console.log('[Generation] Success - adding message and showing diff modal:', {
-        fileCount: generatedFileList.length,
-        files: generatedFileList,
-        incompleteFiles,
-      });
-
-      setTimeout(() => {
-        setFilePlan(null);
-        reviewChange(
-          existingApp ? 'Updated App' : 'Generated Initial App',
-          mergedFiles,
-          { incompleteFiles }
-        );
-      }, 150);
-    },
-    [files, existingApp, setMessages, setStreamingStatus, setFilePlan, reviewChange, sessionId]
-  );
-
-  /**
-   * Handle missing files - trigger continuation
-   */
-  const handleMissingFiles = useCallback(
-    (
-      currentFilePlan: FilePlan,
-      newFiles: Record<string, string>,
-      prompt: string,
-      systemInstruction: string
-    ): boolean => {
-      const receivedFiles = Object.keys(newFiles);
-      const missingFiles = currentFilePlan.create.filter((f) => !receivedFiles.includes(f));
-
-      if (missingFiles.length === 0) return false;
-
-      console.log('[Generation] Missing files detected from plan:', missingFiles);
-
-      const genMeta: GenerationMeta = {
-        totalFilesPlanned: currentFilePlan.total,
-        filesInThisBatch: receivedFiles,
-        completedFiles: receivedFiles,
-        remainingFiles: missingFiles,
-        currentBatch: 1,
-        totalBatches: Math.ceil(currentFilePlan.total / 5),
-        isComplete: false,
-      };
-
-      setStreamingStatus(`✨ Generating... ${receivedFiles.length}/${currentFilePlan.total} files`);
-
-      setFilePlan({
-        create: currentFilePlan.create,
-        delete: currentFilePlan.delete || [],
-        total: currentFilePlan.total,
-        completed: receivedFiles,
-      });
-
-      const contState: ContinuationState = {
-        isActive: true,
-        originalPrompt: prompt || 'Generate app',
-        systemInstruction,
-        generationMeta: genMeta,
-        accumulatedFiles: newFiles,
-        currentBatch: 1,
-      };
-      setContinuationState(contState);
-
-      setTimeout(() => {
-        handleContinueGeneration(contState, existingApp ? files : undefined);
-      }, 100);
-
-      return true;
-    },
-    [files, existingApp, setStreamingStatus, setFilePlan, setContinuationState, handleContinueGeneration]
-  );
-
-  /**
-   * Handle smart continuation from AI response metadata
-   */
-  const handleSmartContinuation = useCallback(
-    (
-      generationMeta: GenerationMeta,
-      newFiles: Record<string, string>,
-      prompt: string,
-      systemInstruction: string
-    ): boolean => {
-      if (generationMeta.isComplete || generationMeta.remainingFiles.length === 0) {
-        return false;
-      }
-
-      console.log('[Generation] Multi-batch generation detected:', {
-        batch: `${generationMeta.currentBatch}/${generationMeta.totalBatches}`,
-        completed: generationMeta.completedFiles.length,
-        remaining: generationMeta.remainingFiles.length,
-      });
-
-      setStreamingStatus(
-        `✨ Generating... ${generationMeta.completedFiles.length}/${generationMeta.totalFilesPlanned} files`
-      );
-
-      setFilePlan({
-        create: [...generationMeta.completedFiles, ...generationMeta.remainingFiles],
-        delete: [],
-        total: generationMeta.totalFilesPlanned,
-        completed: generationMeta.completedFiles,
-      });
-
-      const contState: ContinuationState = {
-        isActive: true,
-        originalPrompt: prompt || 'Generate app',
-        systemInstruction,
-        generationMeta,
-        accumulatedFiles: newFiles,
-        currentBatch: generationMeta.currentBatch,
-      };
-      setContinuationState(contState);
-
-      setTimeout(() => {
-        handleContinueGeneration(contState, existingApp ? files : undefined);
-      }, 100);
-
-      return true;
-    },
-    [files, existingApp, setStreamingStatus, setFilePlan, setContinuationState, handleContinueGeneration]
-  );
-
-  /**
-   * Handle truncation error - try to recover files using utility
-   */
-  const handleTruncationError = useCallback(
-    async (
-      fullText: string,
-      currentFilePlan: FilePlan | null,
-      prompt: string,
-      currentModel: string,
-      providerName: string,
-      genStartTime: number,
-      streamResponse: GenerationResponse | null
-    ): Promise<{ handled: boolean; continuationStarted: boolean }> => {
-      // Use utility to analyze truncated response
-      const result = analyzeTruncatedResponse(
-        fullText,
-        files,
-        currentFilePlan ? { create: currentFilePlan.create, delete: currentFilePlan.delete || [], total: currentFilePlan.total } : null
-      );
-
-      console.log('[Truncation Recovery] Analysis result:', result.action);
-
-      if (result.action === 'none') {
-        // Try emergency code block extraction as last resort
-        const emergencyFiles = emergencyCodeBlockExtraction(fullText);
-        if (emergencyFiles) {
-          console.log(`[Truncation] Emergency recovery: ${Object.keys(emergencyFiles).length} code blocks`);
-          const recoveredFiles = { ...files, ...emergencyFiles };
-
-          const assistantMessage: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            timestamp: Date.now(),
-            explanation: `Generation was truncated but recovered ${Object.keys(emergencyFiles).length} code sections.`,
-            files: emergencyFiles,
-            fileChanges: calculateFileChanges(files, recoveredFiles),
-            snapshotFiles: { ...files },
-            model: currentModel,
-            provider: providerName,
-            generationTime: Date.now() - genStartTime,
-            tokenUsage: createTokenUsage(streamResponse?.usage, undefined, fullText, emergencyFiles),
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-
-          setTimeout(() => {
-            setFilePlan(null);
-            reviewChange('Generated App (Recovered)', recoveredFiles);
-          }, 150);
-
-          return { handled: true, continuationStarted: false };
-        }
-        return { handled: false, continuationStarted: false };
-      }
-
-      if (result.action === 'continuation' && result.generationMeta) {
-        setStreamingStatus(`✨ ${result.message}`);
-
-        if (currentFilePlan) {
-          setFilePlan({
-            create: currentFilePlan.create,
-            delete: currentFilePlan.delete || [],
-            total: currentFilePlan.total,
-            completed: result.generationMeta.completedFiles,
-          });
-        }
-
-        // Use format-aware continuation instruction
-        const currentResponseFormat = getFluidFlowConfig().getResponseFormat();
-        const continuationInstruction = currentResponseFormat === 'marker'
-          ? CONTINUATION_SYSTEM_INSTRUCTION_MARKER
-          : CONTINUATION_SYSTEM_INSTRUCTION;
-
-        const contState: ContinuationState = {
-          isActive: true,
-          originalPrompt: prompt || 'Generate app',
-          systemInstruction: continuationInstruction,
-          generationMeta: result.generationMeta,
-          accumulatedFiles: result.recoveredFiles || {},
-          currentBatch: 1,
-        };
-        setContinuationState(contState);
-
-        setTimeout(() => {
-          handleContinueGeneration(contState, existingApp ? files : undefined);
-        }, 100);
-
-        return { handled: true, continuationStarted: true };
-      }
-
-      if (result.action === 'success' || result.action === 'partial') {
-        const recoveredFiles = result.recoveredFiles || {};
-        const mergedFiles = { ...files, ...recoveredFiles };
-
-        setStreamingStatus(`✅ ${result.message}`);
-
-        const assistantMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          timestamp: Date.now(),
-          explanation: result.action === 'partial'
-            ? 'Generation incomplete (recovered partial files).'
-            : 'Generation complete.',
-          files: recoveredFiles,
-          fileChanges: calculateFileChanges(files, mergedFiles),
-          snapshotFiles: { ...files },
-          model: currentModel,
-          provider: providerName,
-          generationTime: Date.now() - genStartTime,
-          tokenUsage: createTokenUsage(streamResponse?.usage, undefined, fullText, recoveredFiles),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-
-        setTimeout(() => {
-          setFilePlan(null);
-          reviewChange(result.action === 'partial' ? 'Generated App (Partial)' : 'Generated App', mergedFiles);
-        }, 150);
-
-        return { handled: true, continuationStarted: false };
-      }
-
-      return { handled: false, continuationStarted: false };
-    },
-    [files, existingApp, setStreamingStatus, setFilePlan, setMessages, setContinuationState, reviewChange, handleContinueGeneration]
-  );
+  const { handleGenerationSuccess } = useGenerationSuccess({
+    files,
+    existingApp: !!existingApp,
+    sessionId,
+    setStreamingStatus,
+    setFilePlan,
+    setMessages,
+    reviewChange,
+  });
 
   /**
    * Main code generation function
