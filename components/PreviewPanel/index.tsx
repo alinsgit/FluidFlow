@@ -14,6 +14,10 @@ import { useAutoFix } from '../../hooks/useAutoFix';
 import { usePreviewAI } from '../../hooks/usePreviewAI';
 import { useExport } from '../../hooks/useExport';
 
+// Context hooks - direct consumption instead of prop drilling
+import { useAppContext } from '../../contexts/AppContext';
+import { useUI } from '../../contexts/UIContext';
+
 // Local hooks
 import { useIframeMessaging, useInspectMode } from './hooks';
 
@@ -37,51 +41,63 @@ import { ErrorFixPanel } from './ErrorFixPanel';
 import { DocsPanel } from './DocsPanel';
 import { PreviewContent } from './PreviewContent';
 import { CodeQualityPanel } from './CodeQualityPanel';
-import { GitStatus, runnerApi } from '../../services/projectApi';
+import { runnerApi } from '../../services/projectApi';
 
+/**
+ * Minimal props interface - most data now comes from contexts directly
+ * Reduced from 28 props to 4 props (86% reduction)
+ */
 interface PreviewPanelProps {
-  files: FileSystem;
-  setFiles: (files: FileSystem) => void;
-  activeFile: string;
-  setActiveFile: (file: string) => void;
-  suggestions: string[] | null;
-  setSuggestions: (s: string[] | null) => void;
-  isGenerating: boolean;
-  reviewChange: (label: string, newFiles: FileSystem) => void;
-  selectedModel: string;
-  activeTab?: TabType;
-  setActiveTab?: (tab: TabType) => void;
+  // Callbacks that communicate with App.tsx local state
   onInspectEdit?: (prompt: string, element: InspectedElement, scope: EditScope) => Promise<void>;
   onSendErrorToChat?: (errorMessage: string) => void;
-  // Git props
-  projectId?: string | null;
-  gitStatus?: GitStatus | null;
-  onInitGit?: (force?: boolean) => Promise<boolean>;
-  onCommit?: (message: string) => Promise<boolean>;
-  onRefreshGitStatus?: () => Promise<void>;
-  // Local changes (WIP)
-  hasUncommittedChanges?: boolean;
-  localChanges?: { path: string; status: 'added' | 'modified' | 'deleted' }[];
-  onDiscardChanges?: () => Promise<void>;
-  onRevertToCommit?: (commitHash: string) => Promise<boolean>;
-  // Auto-commit error tracking
   onPreviewErrorsChange?: (hasErrors: boolean) => void;
-  // Undo/Revert support
-  onUndo?: () => void;
-  canUndo?: boolean;
-  // Runner status callback
   onRunnerStatusChange?: (isRunning: boolean) => void;
 }
 
 export const PreviewPanel = memo(function PreviewPanel({
-  files, setFiles, activeFile, setActiveFile, suggestions, setSuggestions, isGenerating, reviewChange, selectedModel,
-  activeTab: externalActiveTab, setActiveTab: externalSetActiveTab, onInspectEdit, onSendErrorToChat,
-  projectId, gitStatus, onInitGit, onCommit, onRefreshGitStatus,
-  hasUncommittedChanges, localChanges, onDiscardChanges, onRevertToCommit,
+  onInspectEdit,
+  onSendErrorToChat,
   onPreviewErrorsChange,
-  onUndo, canUndo,
   onRunnerStatusChange
 }: PreviewPanelProps) {
+  // ============ Context Consumption ============
+  // Get data directly from contexts instead of props (reduced from 28 to 4 props)
+  const ctx = useAppContext();
+  const ui = useUI();
+
+  // Destructure commonly used values from AppContext
+  const {
+    files,
+    setFiles,
+    activeFile,
+    setActiveFile,
+    currentProject,
+    gitStatus,
+    hasUncommittedChanges,
+    localChanges,
+    reviewChange,
+    initGit: onInitGit,
+    commit: onCommit,
+    refreshGitStatus: onRefreshGitStatus,
+    discardChanges: onDiscardChanges,
+    revertToCommit: onRevertToCommit,
+    undo: onUndo,
+    canUndo,
+  } = ctx;
+
+  // Destructure commonly used values from UIContext
+  const {
+    suggestions,
+    setSuggestions,
+    isGenerating,
+    selectedModel,
+    activeTab: externalActiveTab,
+    setActiveTab: externalSetActiveTab,
+  } = ui;
+
+  // Derive projectId from currentProject
+  const projectId = currentProject?.id ?? null;
   // State
   const [iframeSrc, setIframeSrc] = useState<string>('');
   const [key, setKey] = useState(0);

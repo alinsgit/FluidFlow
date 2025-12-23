@@ -177,37 +177,12 @@ export default function App() {
           hasRunningServer={hasRunningServer}
           historyPrompt={historyPrompt}
         />
+        {/* PreviewPanel - now consumes contexts directly, minimal props */}
         <PreviewPanel
-          files={ctx.files}
-          setFiles={ctx.setFiles}
-          activeFile={ctx.activeFile}
-          setActiveFile={ctx.setActiveFile}
-          suggestions={ui.suggestions}
-          setSuggestions={ui.setSuggestions}
-          isGenerating={ui.isGenerating}
-          reviewChange={ctx.reviewChange}
-          selectedModel={ui.selectedModel}
-          activeTab={ui.activeTab}
-          setActiveTab={ui.setActiveTab}
+          // Only App.tsx-specific callbacks remain
           onInspectEdit={handleInspectEdit}
-          // Git props
-          projectId={ctx.currentProject?.id}
-          gitStatus={ctx.gitStatus}
-          onInitGit={ctx.initGit}
-          onCommit={ctx.commit}
-          onRefreshGitStatus={ctx.refreshGitStatus}
-          // Local changes (WIP)
-          hasUncommittedChanges={ctx.hasUncommittedChanges}
-          localChanges={ctx.localChanges}
-          onDiscardChanges={ctx.discardChanges}
-          onRevertToCommit={ctx.revertToCommit}
           onSendErrorToChat={(error) => controlPanelRef.current?.sendErrorToChat(error)}
-          // Auto-commit error tracking
           onPreviewErrorsChange={setPreviewHasErrors}
-          // Undo/Revert support for error fix panel
-          onUndo={ctx.undo}
-          canUndo={ctx.canUndo}
-          // Runner status for Start Fresh modal
           onRunnerStatusChange={setHasRunningServer}
         />
       </main>
