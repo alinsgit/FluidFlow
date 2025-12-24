@@ -17,6 +17,7 @@ import { useExport } from '../../hooks/useExport';
 // Context hooks - direct consumption instead of prop drilling
 import { useAppContext } from '../../contexts/AppContext';
 import { useUI } from '../../contexts/UIContext';
+import { useStatusBar } from '../../contexts/StatusBarContext';
 
 // Local hooks
 import { useIframeMessaging, useInspectMode, useComponentTree, useInspectorPanel } from './hooks';
@@ -98,6 +99,9 @@ export const PreviewPanel = memo(function PreviewPanel({
     setActiveTab: externalSetActiveTab,
   } = ui;
 
+  // Get StatusBar context for updating status bar state
+  const { setLogCounts, setAutoFixStatus, setRunnerActive } = useStatusBar();
+
   // Derive projectId from currentProject
   const projectId = currentProject?.id ?? null;
   // State
@@ -124,6 +128,13 @@ export const PreviewPanel = memo(function PreviewPanel({
       onPreviewErrorsChange?.(hasErrors);
     }
   }, [logs, onPreviewErrorsChange]);
+
+  // Update StatusBar with log counts
+  useEffect(() => {
+    const errorCount = logs.filter(log => log.type === 'error' && !log.isFixed).length;
+    const warningCount = logs.filter(log => log.type === 'warn').length;
+    setLogCounts(errorCount, warningCount);
+  }, [logs, setLogCounts]);
 
   // Inspect editing state (shared between useIframeMessaging and useInspectMode)
   const [isInspectEditing, setIsInspectEditing] = useState(false);

@@ -4,6 +4,7 @@ import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppProvider } from './contexts/AppContext';
 import { UIProvider } from './contexts/UIContext';
+import { StatusBarProvider } from './contexts/StatusBarContext';
 import { DEFAULT_FILES } from './constants/defaultFiles';
 import './style.css';
 
@@ -22,9 +23,11 @@ root.render(
       }}
     >
       <UIProvider>
-        <AppProvider defaultFiles={DEFAULT_FILES}>
-          <App />
-        </AppProvider>
+        <StatusBarProvider>
+          <AppProvider defaultFiles={DEFAULT_FILES}>
+            <App />
+          </AppProvider>
+        </StatusBarProvider>
       </UIProvider>
     </ErrorBoundary>
   </React.StrictMode>

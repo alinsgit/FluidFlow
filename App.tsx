@@ -35,6 +35,7 @@ import { InspectedElement, EditScope } from './components/PreviewPanel/Component
 import { getContextManager } from './services/conversationContext';
 import { ToastProvider } from './components/Toast';
 import { ContextMenuProvider } from './components/ContextMenu';
+import { StatusBar } from './components/StatusBar';
 
 // Lazy-loaded modals for better initial bundle size (~80KB savings)
 import {
@@ -455,6 +456,9 @@ export default function App() {
           setHistoryPrompt(selectedPrompt);
         }}
       />
+
+      {/* Status Bar */}
+      <StatusBar />
       </div>
     </ToastProvider>
     </ContextMenuProvider>
