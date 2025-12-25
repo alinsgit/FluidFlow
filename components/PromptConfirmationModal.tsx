@@ -25,6 +25,7 @@ import {
   FileEdit,
   FileX,
   Files,
+  Layers,
 } from 'lucide-react';
 import { usePromptConfirmation } from '../contexts/PromptConfirmationContext';
 
@@ -135,6 +136,17 @@ export const PromptConfirmationModal: React.FC = () => {
                     (-{details.fileContext.tokensSaved.toLocaleString()} tok)
                   </span>
                 )}
+              </div>
+            </>
+          )}
+
+          {/* Batch Indicator */}
+          {details.batchId && (
+            <>
+              <div className="w-px h-4 bg-white/10" />
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-teal-500/20 rounded">
+                <Layers className="w-3.5 h-3.5 text-teal-400" />
+                <span className="text-teal-300 text-xs">Batch Operation</span>
               </div>
             </>
           )}
@@ -343,7 +355,13 @@ export const PromptConfirmationModal: React.FC = () => {
         <div className="px-6 py-3 bg-amber-950/20 border-t border-amber-800/30 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
           <p className="text-xs text-amber-200/80">
-            This prompt will be sent to the AI provider. Review the content before proceeding.
+            {details.batchId ? (
+              <>
+                <span className="text-teal-300 font-medium">Batch operation:</span> Confirming will approve all subsequent prompts in this batch automatically.
+              </>
+            ) : (
+              'This prompt will be sent to the AI provider. Review the content before proceeding.'
+            )}
           </p>
         </div>
 

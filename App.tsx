@@ -24,6 +24,7 @@ import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
 import { DiffModal } from './components/DiffModal';
 import { PromptHistoryModal } from './components/PromptHistoryModal';
 import { useModalManager } from './hooks/useModalManager';
+import { usePanelResize } from './hooks/usePanelResize';
 import { useAppContext } from './contexts/AppContext';
 import { useUI } from './contexts/UIContext';
 import { useAutoCommit } from './hooks/useAutoCommit';
@@ -60,6 +61,9 @@ export default function App() {
   // Centralized modal state management
   const modals = useModalManager();
   const [megaSettingsInitialCategory] = useState<'ai-providers' | 'context-manager' | 'tech-stack' | 'projects' | 'editor' | 'appearance' | 'debug' | 'shortcuts' | 'advanced'>('ai-providers');
+
+  // Resizable panel divider (drag to resize, double-click to reset)
+  const { panelWidth, isDragging, dividerProps } = usePanelResize();
 
   // Preview error tracking for auto-commit
   const [previewHasErrors, setPreviewHasErrors] = useState(false);
@@ -234,9 +238,12 @@ export default function App() {
           showStatusBar={true}
           isAutoCommitting={isAutoCommitting}
         >
-          <div className="flex flex-col md:flex-row h-full w-full overflow-hidden">
+          <div className="flex flex-col md:flex-row h-full w-full overflow-hidden" data-panel-container>
           {/* ControlPanel - CSS-based hiding to preserve state during hide/show */}
-          <div className={ui.leftPanelVisible ? '' : 'hidden'}>
+          <div
+            className={ui.leftPanelVisible ? 'shrink-0' : 'hidden'}
+            style={{ width: ui.leftPanelVisible ? panelWidth : 0 }}
+          >
             <ControlPanel
               ref={controlPanelRef}
               key={resetKey}
@@ -257,6 +264,16 @@ export default function App() {
               historyPrompt={historyPrompt}
             />
           </div>
+
+          {/* Resizable Divider - drag to resize, double-click to reset */}
+          {ui.leftPanelVisible && (
+            <div
+              {...dividerProps}
+              className={`hidden md:block h-full ${dividerProps.className} ${isDragging ? 'z-50' : ''}`}
+              title="Drag to resize, double-click to reset"
+            />
+          )}
+
           {/* PreviewPanel - now consumes contexts directly, minimal props */}
           <PreviewPanel
             // Only App.tsx-specific callbacks remain

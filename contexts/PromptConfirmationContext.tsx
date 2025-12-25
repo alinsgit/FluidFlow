@@ -44,6 +44,8 @@ export interface PromptDetails {
   attachments?: Array<{ type: string; size: number }>;
   /** File context information */
   fileContext?: FileContextInfo;
+  /** Batch/session ID for grouped operations (e.g., multi-file edits) */
+  batchId?: string;
 }
 
 export interface PromptConfirmationRequest {
@@ -59,6 +61,8 @@ interface PromptConfirmationContextType {
   confirmPrompt: (details: PromptDetails) => Promise<boolean>;
   handleConfirm: () => void;
   handleCancel: () => void;
+  /** Clear all confirmed batch sessions */
+  clearBatchSessions: () => void;
 }
 
 // ============================================================================
@@ -75,11 +79,56 @@ type PromptInterceptor = (details: PromptDetails) => Promise<boolean>;
 let globalInterceptor: PromptInterceptor | null = null;
 let isConfirmationEnabled = false;
 
+// Batch session tracking - once a batch is confirmed, subsequent prompts in that batch skip confirmation
+const confirmedBatches = new Set<string>();
+const BATCH_SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const batchTimeouts = new Map<string, NodeJS.Timeout>();
+
 // Load initial state from localStorage
 try {
   isConfirmationEnabled = localStorage.getItem(STORAGE_KEYS.PROMPT_CONFIRMATION) === 'true';
 } catch {
   // Ignore localStorage errors
+}
+
+/**
+ * Mark a batch as confirmed (called when user confirms first prompt in batch)
+ */
+export function confirmBatchSession(batchId: string): void {
+  confirmedBatches.add(batchId);
+
+  // Clear any existing timeout
+  const existingTimeout = batchTimeouts.get(batchId);
+  if (existingTimeout) {
+    clearTimeout(existingTimeout);
+  }
+
+  // Auto-expire batch session after timeout
+  const timeout = setTimeout(() => {
+    confirmedBatches.delete(batchId);
+    batchTimeouts.delete(batchId);
+    console.log('[PromptConfirmation] Batch session expired:', batchId);
+  }, BATCH_SESSION_TIMEOUT);
+
+  batchTimeouts.set(batchId, timeout);
+  console.log('[PromptConfirmation] Batch session confirmed:', batchId);
+}
+
+/**
+ * Check if a batch session is already confirmed
+ */
+export function isBatchConfirmed(batchId: string): boolean {
+  return confirmedBatches.has(batchId);
+}
+
+/**
+ * Clear all confirmed batch sessions
+ */
+export function clearAllBatchSessions(): void {
+  confirmedBatches.clear();
+  batchTimeouts.forEach((timeout) => clearTimeout(timeout));
+  batchTimeouts.clear();
+  console.log('[PromptConfirmation] All batch sessions cleared');
 }
 
 /**
@@ -112,6 +161,7 @@ const AUTO_CATEGORIES = ['git-commit', 'auto-commit', 'prompt-improver'];
  * Returns true if confirmed, false if cancelled
  * If confirmation is disabled or no interceptor, returns true immediately
  * Auto-generated prompts (git commit, etc.) skip confirmation
+ * Batch operations skip confirmation after first prompt is confirmed
  */
 export async function requestPromptConfirmation(details: PromptDetails): Promise<boolean> {
   // Skip confirmation for auto-generated categories
@@ -120,11 +170,18 @@ export async function requestPromptConfirmation(details: PromptDetails): Promise
     return true;
   }
 
+  // Skip confirmation for already-confirmed batch sessions
+  if (details.batchId && isBatchConfirmed(details.batchId)) {
+    console.log('[PromptConfirmation] Batch already confirmed, skipping:', details.batchId);
+    return true;
+  }
+
   console.log('[PromptConfirmation] Request received:', {
     enabled: isConfirmationEnabled,
     hasInterceptor: !!globalInterceptor,
     category: details.category,
     model: details.model,
+    batchId: details.batchId,
   });
 
   if (!isConfirmationEnabled || !globalInterceptor) {
@@ -133,7 +190,14 @@ export async function requestPromptConfirmation(details: PromptDetails): Promise
   }
 
   console.log('[PromptConfirmation] Showing modal...');
-  return globalInterceptor(details);
+  const confirmed = await globalInterceptor(details);
+
+  // If confirmed and part of a batch, mark the batch as confirmed for future prompts
+  if (confirmed && details.batchId) {
+    confirmBatchSession(details.batchId);
+  }
+
+  return confirmed;
 }
 
 // ============================================================================
@@ -184,6 +248,11 @@ export const PromptConfirmationProvider: React.FC<{ children: React.ReactNode }>
     }
   }, [pendingRequest]);
 
+  // Clear all batch sessions
+  const clearBatchSessions = useCallback(() => {
+    clearAllBatchSessions();
+  }, []);
+
   // Register the global interceptor
   useEffect(() => {
     setGlobalPromptInterceptor(confirmPrompt);
@@ -206,6 +275,7 @@ export const PromptConfirmationProvider: React.FC<{ children: React.ReactNode }>
         confirmPrompt,
         handleConfirm,
         handleCancel,
+        clearBatchSessions,
       }}
     >
       {children}

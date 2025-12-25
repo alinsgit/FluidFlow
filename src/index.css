@@ -12,10 +12,24 @@
 
 /* Custom theme extensions */
 @theme {
-  --font-sans: 'Inter', sans-serif;
+  --font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Glass morphism colors */
   --color-glass-100: rgba(255, 255, 255, 0.05);
   --color-glass-200: rgba(255, 255, 255, 0.1);
   --color-glass-300: rgba(255, 255, 255, 0.15);
+}
+
+/* Enable font ligatures globally */
+*, *::before, *::after {
+  font-feature-settings: "liga" 1, "calt" 1;
+  -webkit-font-feature-settings: "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+}
+
+/* Slightly larger line height for readability with monospace */
+body {
+  line-height: 1.6;
+  letter-spacing: -0.01em;
 }

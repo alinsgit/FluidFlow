@@ -1144,7 +1144,7 @@ export function getBootstrapScript(files: FileSystem): string {
               return React.createElement('div', {
                 style: {
                   padding: '20px',
-                  fontFamily: 'monospace',
+                  fontFamily: '"JetBrains Mono", monospace',
                   backgroundColor: '#1e1e2e',
                   color: '#f38ba8',
                   minHeight: '100vh',

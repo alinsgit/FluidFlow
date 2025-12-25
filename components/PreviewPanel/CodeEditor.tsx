@@ -202,7 +202,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ files, setFiles, activeF
           theme={editorSettings.theme}
           options={{
             fontSize: editorSettings.fontSize,
-            fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
+            fontLigatures: true,
             minimap: { enabled: editorSettings.minimap },
             scrollBeyondLastLine: false,
             lineNumbers: editorSettings.lineNumbers,

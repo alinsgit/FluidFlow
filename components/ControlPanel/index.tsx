@@ -610,7 +610,7 @@ Fix the error in src/App.tsx.`;
   };
 
   return (
-    <aside className="w-full md:w-[400px] md:min-w-[380px] md:max-w-[440px] h-full self-stretch min-h-0 flex flex-col bg-slate-900/60 backdrop-blur-xl border-r border-white/10 overflow-hidden relative z-20 transition-all">
+    <aside className="w-full h-full self-stretch min-h-0 flex flex-col bg-slate-900/60 backdrop-blur-xl border-r border-white/10 overflow-hidden relative z-20">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/5 flex-shrink-0">
         <div className="flex items-center gap-3">
