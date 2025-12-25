@@ -6,8 +6,8 @@
  * Files only sync to backend on COMMIT (git-centric approach).
  */
 
-import { WIP_DB_NAME, WIP_DB_VERSION, WIP_STORE_NAME } from '@/constants';
-import { FileSystem } from '@/types';
+import { WIP_DB_NAME, WIP_DB_VERSION, WIP_STORE_NAME, CHAT_STORE_NAME } from '@/constants';
+import { FileSystem, ChatMessage } from '@/types';
 
 /**
  * Special ID for scratch mode (no project selected)
@@ -55,6 +55,10 @@ function openDatabase(): Promise<IDBDatabase> {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(WIP_STORE_NAME)) {
         db.createObjectStore(WIP_STORE_NAME, { keyPath: 'id' });
+      }
+      // Add chat store for message persistence
+      if (!db.objectStoreNames.contains(CHAT_STORE_NAME)) {
+        db.createObjectStore(CHAT_STORE_NAME, { keyPath: 'id' });
       }
     };
   });
@@ -197,4 +201,123 @@ export function createWIPData(
     activeTab,
     savedAt: Date.now(),
   };
+}
+
+// ============ Chat Message Storage ============
+
+/**
+ * Chat data structure stored in IndexedDB
+ */
+export interface ChatData {
+  /** Project ID or SCRATCH_WIP_ID (used as key) */
+  id: string;
+  /** Chat messages */
+  messages: ChatMessage[];
+  /** Timestamp when chat was saved */
+  savedAt: number;
+}
+
+// Simple lock to prevent concurrent chat writes
+let chatWriteLock: Promise<void> = Promise.resolve();
+
+/**
+ * Get chat messages for a project
+ */
+export async function getChatMessages(projectId: string): Promise<ChatMessage[]> {
+  try {
+    const db = await openDatabase();
+    const tx = db.transaction(CHAT_STORE_NAME, 'readonly');
+    const store = tx.objectStore(CHAT_STORE_NAME);
+
+    return new Promise((resolve, reject) => {
+      const request = store.get(projectId);
+      request.onerror = () => {
+        console.error('[ChatStorage] Failed to get messages:', request.error);
+        reject(request.error);
+      };
+      request.onsuccess = () => {
+        const data = request.result as ChatData | undefined;
+        resolve(data?.messages || []);
+      };
+    });
+  } catch (err) {
+    console.error('[ChatStorage] getChatMessages failed:', err);
+    return [];
+  }
+}
+
+/**
+ * Save chat messages for a project
+ */
+export async function saveChatMessages(projectId: string, messages: ChatMessage[]): Promise<void> {
+  // Use lock to prevent concurrent operations
+  const previousLock = chatWriteLock;
+  let releaseLock: () => void = () => {};
+  chatWriteLock = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+
+  try {
+    await previousLock;
+    const db = await openDatabase();
+    const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(CHAT_STORE_NAME);
+
+    const data: ChatData = {
+      id: projectId,
+      messages,
+      savedAt: Date.now(),
+    };
+
+    return new Promise((resolve, reject) => {
+      const request = store.put(data);
+      request.onerror = () => {
+        console.error('[ChatStorage] Failed to save messages:', request.error);
+        reject(request.error);
+      };
+      request.onsuccess = () => {
+        console.log('[ChatStorage] Messages saved for:', projectId, '- count:', messages.length);
+        resolve();
+      };
+    });
+  } catch (err) {
+    console.error('[ChatStorage] saveChatMessages failed:', err);
+    throw err;
+  } finally {
+    releaseLock();
+  }
+}
+
+/**
+ * Clear chat messages for a project
+ */
+export async function clearChatMessages(projectId: string): Promise<void> {
+  const previousLock = chatWriteLock;
+  let releaseLock: () => void = () => {};
+  chatWriteLock = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+
+  try {
+    await previousLock;
+    const db = await openDatabase();
+    const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(CHAT_STORE_NAME);
+
+    return new Promise((resolve, reject) => {
+      const request = store.delete(projectId);
+      request.onerror = () => {
+        console.warn('[ChatStorage] Failed to clear messages:', request.error);
+        reject(request.error);
+      };
+      request.onsuccess = () => {
+        console.log('[ChatStorage] Cleared messages for:', projectId);
+        resolve();
+      };
+    });
+  } catch (err) {
+    console.warn('[ChatStorage] clearChatMessages failed:', err);
+  } finally {
+    releaseLock();
+  }
 }

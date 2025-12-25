@@ -6,8 +6,9 @@
 
 // IndexedDB
 export const WIP_DB_NAME = 'fluidflow-wip';
-export const WIP_DB_VERSION = 1;
+export const WIP_DB_VERSION = 2; // Bumped for chat store
 export const WIP_STORE_NAME = 'wip';
+export const CHAT_STORE_NAME = 'chat';
 
 // LocalStorage keys
 export const STORAGE_KEYS = {

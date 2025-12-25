@@ -641,7 +641,7 @@ export const ChatPanel = memo(function ChatPanel({
       {/* Chat Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-slate-300">Chat History</h3>
+          <h3 className="text-sm font-medium text-slate-300">History</h3>
           <span className="text-xs text-slate-500">({messages.length})</span>
         </div>
         <div className="flex items-center gap-2">

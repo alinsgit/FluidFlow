@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useCallback, useImperativeHandle, forwardRef, useEffect, useRef } from 'react';
 import { Layers, RotateCcw, Settings, ChevronDown, SlidersHorizontal, Upload } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
 import { estimateTokenCount } from './utils';
@@ -32,6 +32,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { ModeToggle } from './ModeToggle';
 import { ResetConfirmModal } from './ResetConfirmModal';
 import { runnerApi } from '@/services/projectApi';
+import { getChatMessages, saveChatMessages, clearChatMessages, SCRATCH_WIP_ID } from '@/services/wipStorage';
 
 // Local hooks
 import { useContextSync, useControlPanelModals } from './hooks';
@@ -133,6 +134,104 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   const [isConsultantMode, setIsConsultantMode] = useState(false);
   const [isEducationMode, setIsEducationMode] = useState(false);
   const [, forceUpdate] = useState({});
+
+  // Refs for chat persistence
+  const hasRestoredChatRef = useRef(false);
+  const lastSavedMessagesRef = useRef<string>('');
+  const previousProjectIdRef = useRef<string | undefined>(currentProject?.id);
+
+  // ============ Chat Persistence Effects ============
+  // Restore chat messages on mount (from project or scratch)
+  useEffect(() => {
+    if (hasRestoredChatRef.current) return;
+    hasRestoredChatRef.current = true;
+
+    const restoreChat = async () => {
+      try {
+        const chatId = currentProject?.id || SCRATCH_WIP_ID;
+        const savedMessages = await getChatMessages(chatId);
+        if (savedMessages.length > 0) {
+          console.log('[ControlPanel] Restoring chat messages:', savedMessages.length, 'for:', chatId);
+          setMessages(savedMessages);
+          lastSavedMessagesRef.current = JSON.stringify(savedMessages);
+        }
+      } catch (err) {
+        console.warn('[ControlPanel] Failed to restore chat messages:', err);
+      }
+    };
+
+    restoreChat();
+  }, []); // Only run once on mount
+
+  // Save chat messages when they change
+  useEffect(() => {
+    // Don't save if no messages or if this is the initial empty state
+    if (messages.length === 0) return;
+
+    const chatId = currentProject?.id || SCRATCH_WIP_ID;
+    const messagesJson = JSON.stringify(messages);
+
+    // Skip if messages haven't changed
+    if (messagesJson === lastSavedMessagesRef.current) return;
+    lastSavedMessagesRef.current = messagesJson;
+
+    // Debounce save
+    const saveTimer = setTimeout(() => {
+      saveChatMessages(chatId, messages).catch(console.warn);
+    }, 500);
+
+    return () => clearTimeout(saveTimer);
+  }, [messages, currentProject?.id]);
+
+  // Handle project changes - transfer or load chat messages
+  useEffect(() => {
+    const prevProjectId = previousProjectIdRef.current;
+    const newProjectId = currentProject?.id;
+
+    // Skip if project hasn't changed
+    if (prevProjectId === newProjectId) return;
+
+    // Update ref for next comparison
+    previousProjectIdRef.current = newProjectId;
+
+    const handleProjectChange = async () => {
+      // Case 1: Created new project from scratch mode (null -> projectId)
+      // Current messages are in state, transfer them to the new project
+      if (!prevProjectId && newProjectId) {
+        // Get current messages from storage (the save effect may not have run yet)
+        const scratchMessages = await getChatMessages(SCRATCH_WIP_ID);
+        if (scratchMessages.length > 0) {
+          console.log('[ControlPanel] Transferring chat from scratch to new project:', newProjectId);
+          await saveChatMessages(newProjectId, scratchMessages);
+          await clearChatMessages(SCRATCH_WIP_ID);
+          // Don't change state - messages are already there
+        }
+        return;
+      }
+
+      // Case 2: Switched to a different project (projectId -> different projectId)
+      if (prevProjectId && newProjectId && prevProjectId !== newProjectId) {
+        console.log('[ControlPanel] Loading chat for project:', newProjectId);
+        // Load messages for the new project
+        const projectMessages = await getChatMessages(newProjectId);
+        setMessages(projectMessages);
+        lastSavedMessagesRef.current = JSON.stringify(projectMessages);
+        return;
+      }
+
+      // Case 3: Closed project (projectId -> null)
+      if (prevProjectId && !newProjectId) {
+        console.log('[ControlPanel] Project closed, loading scratch chat');
+        // Load scratch messages
+        const scratchMessages = await getChatMessages(SCRATCH_WIP_ID);
+        setMessages(scratchMessages);
+        lastSavedMessagesRef.current = JSON.stringify(scratchMessages);
+      }
+    };
+
+    handleProjectChange().catch(console.warn);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject?.id]);
 
   // Modal state management (extracted to hook)
   const modals = useControlPanelModals();
@@ -453,8 +552,11 @@ Fix the error in src/App.tsx.`;
       console.warn('[ControlPanel] Failed to stop runners:', err);
     });
 
-    // Clear chat messages
+    // Clear chat messages (both state and storage)
     setMessages([]);
+    lastSavedMessagesRef.current = '';
+    const chatId = currentProject?.id || SCRATCH_WIP_ID;
+    clearChatMessages(chatId).catch(console.warn);
 
     // Clear ALL AI contexts (main-chat, prompt-improver, git-commit, quick-edit, etc.)
     contextManager.clearAllContexts();
