@@ -90,6 +90,7 @@ ${changedFilesContext}`;
       const response = await manager.generate({
         prompt,
         systemInstruction: 'You are a helpful assistant that generates git commit messages. Output only the commit message text, no explanations or markdown.',
+        debugCategory: 'git-commit', // Skip prompt confirmation for auto-generated messages
       });
 
       const message = response.text?.trim() || '';

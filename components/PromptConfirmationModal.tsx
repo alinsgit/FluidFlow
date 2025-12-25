@@ -19,7 +19,12 @@ import {
   Sparkles,
   AlertCircle,
   Paperclip,
-  Zap
+  Zap,
+  FolderCode,
+  FilePlus,
+  FileEdit,
+  FileX,
+  Files,
 } from 'lucide-react';
 import { usePromptConfirmation } from '../contexts/PromptConfirmationContext';
 
@@ -115,6 +120,24 @@ export const PromptConfirmationModal: React.FC = () => {
               </div>
             </>
           )}
+
+          {/* File Context Summary */}
+          {details.fileContext && (
+            <>
+              <div className="w-px h-4 bg-white/10" />
+              <div className="flex items-center gap-1.5">
+                <FolderCode className="w-4 h-4 text-purple-400" />
+                <span className="text-slate-300">
+                  {details.fileContext.filesInPrompt}/{details.fileContext.totalFiles} files
+                </span>
+                {details.fileContext.tokensSaved > 0 && (
+                  <span className="text-purple-400 text-xs">
+                    (-{details.fileContext.tokensSaved.toLocaleString()} tok)
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Content */}
@@ -206,6 +229,109 @@ export const PromptConfirmationModal: React.FC = () => {
                         </span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* File Context Section */}
+          {details.fileContext && (
+            <div className="border-b border-white/5">
+              <button
+                onClick={() => toggleSection('fileContext')}
+                className="w-full flex items-center gap-2 px-6 py-3 hover:bg-white/5 transition-colors"
+              >
+                {expandedSections.has('fileContext') ? (
+                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                )}
+                <FolderCode className="w-4 h-4 text-purple-400" />
+                <span className="text-sm font-medium text-slate-300">File Context</span>
+                <span className="text-xs text-slate-500 ml-auto">
+                  {details.fileContext.isFirstTurn ? 'First turn' : 'Delta mode'} • {details.fileContext.filesInPrompt} file(s) in prompt
+                </span>
+              </button>
+              {expandedSections.has('fileContext') && (
+                <div className="px-6 pb-4">
+                  <div className="bg-purple-950/20 border border-purple-800/30 rounded-lg p-4">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {/* Total Files */}
+                      <div className="flex items-center gap-2">
+                        <Files className="w-4 h-4 text-slate-400" />
+                        <span className="text-slate-400">Total project files:</span>
+                        <span className="text-white font-medium">{details.fileContext.totalFiles}</span>
+                      </div>
+
+                      {/* Files in Prompt */}
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-blue-400" />
+                        <span className="text-slate-400">Files in this prompt:</span>
+                        <span className="text-blue-400 font-medium">{details.fileContext.filesInPrompt}</span>
+                      </div>
+
+                      {/* Files in Context */}
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400" />
+                        <span className="text-slate-400">AI already knows:</span>
+                        <span className="text-purple-400 font-medium">{details.fileContext.filesInContext}</span>
+                      </div>
+
+                      {/* Tokens Saved */}
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-green-400" />
+                        <span className="text-slate-400">Tokens saved:</span>
+                        <span className="text-green-400 font-medium">
+                          {details.fileContext.tokensSaved > 0 ? `-${details.fileContext.tokensSaved.toLocaleString()}` : '0'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Delta Details */}
+                    {!details.fileContext.isFirstTurn && (
+                      <div className="mt-4 pt-3 border-t border-purple-800/30">
+                        <div className="text-xs text-slate-400 mb-2">Changes in this prompt:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {details.fileContext.newFiles > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/20 rounded text-xs text-emerald-400">
+                              <FilePlus className="w-3 h-3" />
+                              {details.fileContext.newFiles} new
+                            </div>
+                          )}
+                          {details.fileContext.modifiedFiles > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-500/20 rounded text-xs text-amber-400">
+                              <FileEdit className="w-3 h-3" />
+                              {details.fileContext.modifiedFiles} modified
+                            </div>
+                          )}
+                          {details.fileContext.deletedFiles > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-red-500/20 rounded text-xs text-red-400">
+                              <FileX className="w-3 h-3" />
+                              {details.fileContext.deletedFiles} deleted
+                            </div>
+                          )}
+                          {details.fileContext.newFiles === 0 && details.fileContext.modifiedFiles === 0 && details.fileContext.deletedFiles === 0 && (
+                            <span className="text-xs text-slate-500">No file changes detected</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* First Turn Info */}
+                    {details.fileContext.isFirstTurn && (
+                      <div className="mt-3 text-xs text-slate-400">
+                        <span className="text-purple-400">First turn:</span> All files will be summarized for the AI context.
+                      </div>
+                    )}
+
+                    {/* Delta Mode Status */}
+                    {!details.fileContext.deltaEnabled && (
+                      <div className="mt-3 text-xs text-amber-400">
+                        Delta mode is disabled. Enable it in Settings to save tokens.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -230,6 +230,7 @@ export default function App() {
           showActivityBar={true}
           showTitleBar={true}
           showStatusBar={true}
+          isAutoCommitting={isAutoCommitting}
         >
           <div className="flex flex-col md:flex-row h-full w-full overflow-hidden">
           {/* ControlPanel - CSS-based hiding to preserve state during hide/show */}

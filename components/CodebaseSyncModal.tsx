@@ -3,6 +3,7 @@ import { X, Upload, FileCode, AlertTriangle, ChevronDown, ChevronRight, Loader2 
 import type { FileSystem } from '@/types';
 import { generateCodeMap, generateContextForPrompt } from '../utils/codemap';
 import { estimateTokenCount } from '../services/ai/capabilities';
+import { getFileContextTracker, CONTEXT_IDS } from '../services/context';
 
 interface SyncPayload {
   displayMessage: string;  // Short summary for chat UI
@@ -232,6 +233,18 @@ ${batches.length === 1 || i === batches.length - 1
           await new Promise(r => setTimeout(r, 500));
         }
       }
+
+      // Mark synced files as shared in file context tracker
+      // This ensures the AI context knows about these files
+      const tracker = getFileContextTracker(CONTEXT_IDS.MAIN_CHAT);
+      const syncedFiles: FileSystem = {};
+      for (const path of selectedFiles) {
+        if (files[path]) {
+          syncedFiles[path] = files[path];
+        }
+      }
+      tracker.markFilesAsShared(syncedFiles);
+      console.log(`[CodebaseSync] Marked ${Object.keys(syncedFiles).length} files as shared in context`);
 
       onClose();
     } catch (error) {

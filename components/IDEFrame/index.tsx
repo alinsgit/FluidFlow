@@ -25,6 +25,7 @@ interface IDEFrameProps {
   onOpenHistoryPanel?: () => void;
   onOpenCredits?: () => void;
   chatUnread?: number;
+  isAutoCommitting?: boolean;
 }
 
 export const IDEFrame = memo(function IDEFrame({
@@ -40,6 +41,7 @@ export const IDEFrame = memo(function IDEFrame({
   onOpenHistoryPanel,
   onOpenCredits,
   chatUnread = 0,
+  isAutoCommitting = false,
 }: IDEFrameProps) {
   return (
     <div className="flex flex-col h-full w-full bg-slate-950 overflow-hidden">
@@ -74,6 +76,7 @@ export const IDEFrame = memo(function IDEFrame({
           onOpenProjectsTab={onOpenProjectsTab}
           onOpenHistoryPanel={onOpenHistoryPanel}
           onOpenCredits={onOpenCredits}
+          isAutoCommitting={isAutoCommitting}
         />
       )}
     </div>

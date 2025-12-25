@@ -4,6 +4,7 @@ import { ConfirmModal } from '../../ContextIndicator/ConfirmModal';
 import { SettingsSection, SettingsToggle, SettingsSlider } from '../shared';
 import { getFluidFlowConfig, ContextSettings, CompactionLog } from '../../../services/fluidflowConfig';
 import { getContextManager } from '../../../services/conversationContext';
+import { clearAllFileTrackers } from '../../../services/context/fileContextTracker';
 
 export const ContextManagerPanel: React.FC = () => {
   const [contextSettings, setContextSettings] = useState<ContextSettings>({
@@ -60,6 +61,8 @@ export const ContextManagerPanel: React.FC = () => {
   const performDeleteAllContexts = () => {
     const contextManager = getContextManager();
     contextManager.clearAllContexts();
+    // Also clear file context trackers (AI no longer knows about files)
+    clearAllFileTrackers();
     setShowDeleteAllContextsConfirm(false);
     loadContextStats();
   };

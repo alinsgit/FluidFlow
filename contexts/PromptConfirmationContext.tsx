@@ -12,6 +12,27 @@ import { STORAGE_KEYS } from '../constants/storage';
 // Types
 // ============================================================================
 
+export interface FileContextInfo {
+  /** Total number of files in the project */
+  totalFiles: number;
+  /** Files included in this prompt (with full content) */
+  filesInPrompt: number;
+  /** Files already known to AI context (unchanged) */
+  filesInContext: number;
+  /** New files being shared for the first time */
+  newFiles: number;
+  /** Modified files being re-sent */
+  modifiedFiles: number;
+  /** Deleted files being notified */
+  deletedFiles: number;
+  /** Estimated tokens saved by not re-sending unchanged files */
+  tokensSaved: number;
+  /** Whether this is the first turn (no prior context) */
+  isFirstTurn: boolean;
+  /** Whether delta mode is enabled */
+  deltaEnabled: boolean;
+}
+
 export interface PromptDetails {
   prompt: string;
   systemInstruction?: string;
@@ -21,6 +42,8 @@ export interface PromptDetails {
   contextTokens?: number;
   estimatedTokens?: number;
   attachments?: Array<{ type: string; size: number }>;
+  /** File context information */
+  fileContext?: FileContextInfo;
 }
 
 export interface PromptConfirmationRequest {
@@ -81,12 +104,22 @@ export function setPromptConfirmationEnabled(enabled: boolean): void {
   isConfirmationEnabled = enabled;
 }
 
+// Categories that should skip confirmation (auto-generated prompts)
+const AUTO_CATEGORIES = ['git-commit', 'auto-commit', 'prompt-improver'];
+
 /**
  * Request prompt confirmation (called from ProviderManager)
  * Returns true if confirmed, false if cancelled
  * If confirmation is disabled or no interceptor, returns true immediately
+ * Auto-generated prompts (git commit, etc.) skip confirmation
  */
 export async function requestPromptConfirmation(details: PromptDetails): Promise<boolean> {
+  // Skip confirmation for auto-generated categories
+  if (details.category && AUTO_CATEGORIES.includes(details.category)) {
+    console.log('[PromptConfirmation] Auto category, skipping:', details.category);
+    return true;
+  }
+
   console.log('[PromptConfirmation] Request received:', {
     enabled: isConfirmationEnabled,
     hasInterceptor: !!globalInterceptor,

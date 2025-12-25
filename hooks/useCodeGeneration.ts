@@ -25,7 +25,7 @@ import { useResponseParser } from './useResponseParser';
 import { useContinuationHandler } from './useContinuationHandler';
 import { useTruncationRecovery } from './useTruncationRecovery';
 import { useGenerationSuccess } from './useGenerationSuccess';
-import { buildSystemInstruction, buildPromptParts } from '../utils/generationUtils';
+import { buildSystemInstruction, buildPromptParts, markFilesAsShared } from '../utils/generationUtils';
 import { getFluidFlowConfig } from '../services/fluidflowConfig';
 import { activityLogger } from '../services/activityLogger';
 
@@ -191,8 +191,11 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
         responseFormat
       );
 
-      // Build prompt parts
-      const { promptParts, images } = buildPromptParts(prompt, attachments, files, !!existingApp);
+      // Build prompt parts with smart file context tracking
+      const { promptParts, images, fileContext } = buildPromptParts(prompt, attachments, files, !!existingApp);
+      if (fileContext && fileContext.tokensSaved > 0) {
+        activityLogger.info('generation', `Smart context: saved ~${fileContext.tokensSaved} tokens`, 'Only changed files included');
+      }
 
       const request: GenerationRequest = {
         prompt: promptParts.join('\n\n'),
@@ -205,6 +208,8 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
             : undefined,
         conversationHistory:
           conversationHistory && conversationHistory.length > 0 ? conversationHistory : undefined,
+        // Pass file context for prompt confirmation modal
+        fileContext: fileContext || undefined,
       };
 
       // Initialize streaming state
@@ -359,6 +364,9 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
         const fileCount = Object.keys(newFiles).length;
         const duration = Date.now() - genStartTime;
         activityLogger.success('generation', `Generated ${fileCount} file${fileCount !== 1 ? 's' : ''}`, `${duration}ms`);
+
+        // Mark files as shared for next turn's delta tracking
+        markFilesAsShared(mergedFiles);
 
         return { success: true, continuationStarted: false };
       } catch (e) {

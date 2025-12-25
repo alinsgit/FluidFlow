@@ -11,7 +11,7 @@
  *
  * Uses StatusBarContext for shared state from PreviewPanel and CodeEditor.
  */
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import {
   GitBranch,
   Wifi,
@@ -31,16 +31,20 @@ import {
   Redo2,
   History,
   Info,
+  GitCommitHorizontal,
+  Sparkles,
 } from 'lucide-react';
 import { useAppContext } from '../../contexts/AppContext';
 import { useUI } from '../../contexts/UIContext';
 import { useStatusBar } from '../../contexts/StatusBarContext';
+import { getTokenSavings } from '../../services/context';
 
 interface StatusBarProps {
   onOpenGitTab?: () => void;
   onOpenProjectsTab?: () => void;
   onOpenHistoryPanel?: () => void;
   onOpenCredits?: () => void;
+  isAutoCommitting?: boolean;
 }
 
 export const StatusBar = memo(function StatusBar({
@@ -48,11 +52,15 @@ export const StatusBar = memo(function StatusBar({
   onOpenProjectsTab,
   onOpenHistoryPanel,
   onOpenCredits,
+  isAutoCommitting = false,
 }: StatusBarProps) {
   // Get state from contexts
   const ctx = useAppContext();
   const ui = useUI();
   const statusBar = useStatusBar();
+
+  // Auto-commit state
+  const { autoCommitEnabled, setAutoCommitEnabled } = ui;
 
   // Destructure status bar state
   const {
@@ -110,6 +118,21 @@ export const StatusBar = memo(function StatusBar({
   // Project info
   const projectName = ctx.currentProject?.name;
 
+  // File context token savings
+  const tokensSaved = useMemo(() => {
+    const files = ctx.files;
+    if (!files || Object.keys(files).length === 0) return 0;
+    return getTokenSavings(files);
+  }, [ctx.files]);
+
+  // Format token savings for display
+  const formatTokens = (tokens: number): string => {
+    if (tokens >= 1000) {
+      return `${(tokens / 1000).toFixed(1)}k`;
+    }
+    return String(tokens);
+  };
+
   return (
     <footer
       className="h-8 bg-slate-900/80 backdrop-blur-sm border-t border-white/5 text-slate-400 flex items-center justify-between px-2 text-xs font-mono select-none shrink-0"
@@ -152,6 +175,34 @@ export const StatusBar = memo(function StatusBar({
             <GitBranch className="w-3 h-3" />
             <span className="italic text-[10px]">no git</span>
           </div>
+        )}
+
+        {/* Auto-commit toggle - next to git branch */}
+        {gitInitialized && (
+          <button
+            onClick={() => setAutoCommitEnabled(!autoCommitEnabled)}
+            className={`flex items-center gap-1 px-1.5 h-full rounded transition-colors ${
+              autoCommitEnabled
+                ? isAutoCommitting
+                  ? 'text-amber-400 bg-amber-500/10'
+                  : 'text-emerald-400 hover:bg-emerald-500/10'
+                : 'text-slate-500 hover:text-slate-400 hover:bg-white/5'
+            }`}
+            title={
+              isAutoCommitting
+                ? 'Auto-committing...'
+                : autoCommitEnabled
+                  ? 'Auto-commit ON: Commits when preview is error-free'
+                  : 'Auto-commit OFF: Click to enable'
+            }
+          >
+            {isAutoCommitting ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <GitCommitHorizontal className="w-3 h-3" />
+            )}
+            <span className="text-[10px]">Auto</span>
+          </button>
         )}
 
         {/* Separator */}
@@ -199,6 +250,20 @@ export const StatusBar = memo(function StatusBar({
             <span>{warningCount}</span>
           </div>
         </button>
+
+        {/* Token Savings Indicator */}
+        {tokensSaved > 0 && (
+          <>
+            <div className="w-px h-3 bg-white/10 mx-1" />
+            <div
+              className="flex items-center gap-1 px-2 h-full text-purple-400"
+              title={`Smart context: ${tokensSaved.toLocaleString()} tokens saved by not re-sending unchanged files`}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span className="text-[10px]">-{formatTokens(tokensSaved)}</span>
+            </div>
+          </>
+        )}
 
         {/* Runner Status */}
         {isRunnerActive && (

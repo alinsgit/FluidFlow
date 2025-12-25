@@ -23,6 +23,7 @@ export const STORAGE_KEYS = {
   THEME: 'theme',
   CONTEXTS: 'fluidflow_contexts',
   PROMPT_CONFIRMATION: 'prompt-confirmation-enabled',
+  FILE_CONTEXT_ENABLED: 'file-context-delta-enabled',
 } as const;
 
 // Context IDs

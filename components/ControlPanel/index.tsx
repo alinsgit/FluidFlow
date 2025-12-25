@@ -5,6 +5,7 @@ import { estimateTokenCount } from './utils';
 import { restoreFromHistoryEntries, getEntriesUpToTimestamp, restoreFromSingleEntry } from './utils/restoreHistory';
 import { executeConsultantMode } from './utils/consultantMode';
 import { debugLog, resetDebugState } from '../../hooks/useDebugStore';
+import { clearAllFileTrackers } from '../../services/context/fileContextTracker';
 import { useTechStack } from '../../hooks/useTechStack';
 import { useGenerationState } from '../../hooks/useGenerationState';
 import { useContinuationGeneration } from '../../hooks/useContinuationGeneration';
@@ -568,6 +569,9 @@ Fix the error in src/App.tsx.`;
 
     // Clear ALL AI contexts (main-chat, prompt-improver, git-commit, quick-edit, etc.)
     contextManager.clearAllContexts();
+
+    // Clear file context trackers (smart delta tracking)
+    clearAllFileTrackers();
 
     // Clear debug logs
     resetDebugState();

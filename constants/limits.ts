@@ -30,3 +30,7 @@ export const MAX_NETWORK_LOGS = 500;
 // Runner port range
 export const RUNNER_PORT_MIN = 3_300;
 export const RUNNER_PORT_MAX = 3_399;
+
+// File context tracking
+export const FILE_CONTEXT_PREVIEW_LENGTH = 300; // Characters for first-turn file previews
+export const FILE_CONTEXT_MAX_FILES_FULL = 20; // Max files to include full content per prompt

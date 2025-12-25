@@ -152,7 +152,7 @@ export interface DebugLogEntry {
   id: string;
   timestamp: number;
   type: 'request' | 'response' | 'stream' | 'error' | 'info';
-  category: 'generation' | 'accessibility' | 'quick-edit' | 'auto-fix' | 'other';
+  category: 'generation' | 'accessibility' | 'quick-edit' | 'auto-fix' | 'git-commit' | 'auto-commit' | 'prompt-improver' | 'other';
   model?: string;
   provider?: string;
   duration?: number;

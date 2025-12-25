@@ -92,6 +92,21 @@ export interface ConversationMessage {
   content: string;
 }
 
+/**
+ * File context information for prompt confirmation modal
+ */
+export interface FileContextInfo {
+  totalFiles: number;
+  filesInPrompt: number;
+  filesInContext: number;
+  newFiles: number;
+  modifiedFiles: number;
+  deletedFiles: number;
+  tokensSaved: number;
+  isFirstTurn: boolean;
+  deltaEnabled: boolean;
+}
+
 export interface GenerationRequest {
   prompt: string;
   systemInstruction?: string;
@@ -104,10 +119,13 @@ export interface GenerationRequest {
   // When provided with responseFormat: 'json', ensures response conforms to schema
   responseSchema?: Record<string, unknown>;
   // Debug category for logging (optional, defaults to 'generation')
-  debugCategory?: 'generation' | 'accessibility' | 'quick-edit' | 'auto-fix' | 'other';
+  // Note: 'git-commit', 'auto-commit', 'prompt-improver' skip prompt confirmation modal
+  debugCategory?: 'generation' | 'accessibility' | 'quick-edit' | 'auto-fix' | 'git-commit' | 'auto-commit' | 'prompt-improver' | 'other';
   // Conversation history for multi-turn conversations
   // Messages are sent before the current prompt
   conversationHistory?: ConversationMessage[];
+  // File context info for prompt confirmation modal (optional)
+  fileContext?: FileContextInfo;
 }
 
 export interface GenerationResponse {

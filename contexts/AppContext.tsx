@@ -19,6 +19,7 @@ import { useVersionHistory, HistoryEntry } from '../hooks/useVersionHistory';
 import { safeJsonParse } from '../utils/safeJson';
 import { gitApi, projectApi } from '../services/projectApi';
 import { getWIP, saveWIP, clearWIP, WIPData, SCRATCH_WIP_ID } from '../services/wipStorage';
+import { clearFileTracker } from '../services/context/fileContextTracker';
 import { isIgnoredPath } from '../utils/filePathUtils';
 import { useUI } from './UIContext';
 // Note: UIContext is used internally for operations that need UI state,
@@ -436,6 +437,9 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
       return { success: false, files: {} };
     }
     isSwitchingProjectRef.current = true;
+
+    // Clear file context tracker for new project (AI doesn't know files yet)
+    clearFileTracker('main-chat');
 
     try {
       // Save current context

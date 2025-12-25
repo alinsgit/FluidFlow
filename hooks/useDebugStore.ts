@@ -5,7 +5,8 @@ const MAX_LOGS = 500;
 const DEBUG_ENABLED_KEY = 'fluidflow_debug_enabled';
 
 // BUG-034 FIX: Define valid categories as a const array for validation
-const VALID_CATEGORIES = ['generation', 'accessibility', 'quick-edit', 'auto-fix', 'other'] as const;
+// Note: 'git-commit', 'auto-commit', 'prompt-improver' skip prompt confirmation modal
+const VALID_CATEGORIES = ['generation', 'accessibility', 'quick-edit', 'auto-fix', 'git-commit', 'auto-commit', 'prompt-improver', 'other'] as const;
 type ValidCategory = typeof VALID_CATEGORIES[number];
 
 // BUG-034 FIX: Validate category and fallback to 'other' if invalid
@@ -34,7 +35,7 @@ const initialState: DebugState = {
   maxLogs: MAX_LOGS,
   filter: {
     types: ['request', 'response', 'stream', 'error', 'info'],
-    categories: ['generation', 'accessibility', 'quick-edit', 'auto-fix', 'other'],
+    categories: ['generation', 'accessibility', 'quick-edit', 'auto-fix', 'git-commit', 'auto-commit', 'prompt-improver', 'other'],
     searchQuery: '',
   },
 };

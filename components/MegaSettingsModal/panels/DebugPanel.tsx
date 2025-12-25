@@ -1,16 +1,58 @@
-import React, { useState, useEffect } from 'react';
-import { Bug, Trash2, AlertTriangle, Info, Eye } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Bug, Trash2, AlertTriangle, Info, Eye, Sparkles, RefreshCw } from 'lucide-react';
 import { ConfirmModal } from '../../ContextIndicator/ConfirmModal';
 import { SettingsSection, SettingsToggle, SettingsSelect, SettingsSlider } from '../shared';
 import { DebugSettings, DEFAULT_DEBUG_SETTINGS, STORAGE_KEYS } from '../types';
 import { useDebugStore } from '../../../hooks/useDebugStore';
 import { usePromptConfirmation } from '../../../contexts/PromptConfirmationContext';
+import { useAppContext } from '../../../contexts/AppContext';
+import {
+  getFileContextTracker,
+  clearFileTracker,
+  getTokenSavings,
+  CONTEXT_IDS,
+} from '../../../services/context';
+import { STORAGE_KEYS as GLOBAL_STORAGE_KEYS } from '../../../constants';
 
 export const DebugPanel: React.FC = () => {
   const [settings, setSettings] = useState<DebugSettings>(DEFAULT_DEBUG_SETTINGS);
   const debugState = useDebugStore();
   const promptConfirmation = usePromptConfirmation();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showClearFileContextConfirm, setShowClearFileContextConfirm] = useState(false);
+  const { files } = useAppContext();
+
+  // File context delta mode state
+  const [fileContextEnabled, setFileContextEnabled] = useState(() => {
+    return localStorage.getItem(GLOBAL_STORAGE_KEYS.FILE_CONTEXT_ENABLED) !== 'false';
+  });
+
+  // File context stats
+  const fileContextStats = useMemo(() => {
+    if (!files || Object.keys(files).length === 0) {
+      return { trackedFiles: 0, tokensSaved: 0, currentTurn: 0 };
+    }
+    const tracker = getFileContextTracker(CONTEXT_IDS.MAIN_CHAT);
+    return {
+      trackedFiles: tracker.getTrackedPaths().length,
+      tokensSaved: getTokenSavings(files, CONTEXT_IDS.MAIN_CHAT),
+      currentTurn: tracker.getCurrentTurn(),
+    };
+  }, [files]);
+
+  const updateFileContextEnabled = (enabled: boolean) => {
+    setFileContextEnabled(enabled);
+    if (enabled) {
+      localStorage.removeItem(GLOBAL_STORAGE_KEYS.FILE_CONTEXT_ENABLED);
+    } else {
+      localStorage.setItem(GLOBAL_STORAGE_KEYS.FILE_CONTEXT_ENABLED, 'false');
+    }
+  };
+
+  const clearFileContext = () => {
+    clearFileTracker(CONTEXT_IDS.MAIN_CHAT);
+    setShowClearFileContextConfirm(false);
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.DEBUG_SETTINGS);
@@ -107,6 +149,51 @@ export const DebugPanel: React.FC = () => {
             When enabled, you'll see the exact prompt, system instruction, model, and token
             estimate before any request is sent to the AI provider. Useful for debugging
             and understanding what data is being shared.
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Smart File Context */}
+      <SettingsSection
+        title="Smart File Context"
+        description="Optimize token usage by tracking file changes"
+      >
+        <SettingsToggle
+          label="Delta Mode"
+          description="Only send changed files in subsequent prompts (saves tokens)"
+          checked={fileContextEnabled}
+          onChange={updateFileContextEnabled}
+        />
+
+        {/* Stats */}
+        <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg mt-3">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <div>
+              <div className="text-sm text-white">
+                {fileContextStats.trackedFiles} files tracked
+              </div>
+              <div className="text-xs text-slate-500">
+                Turn {fileContextStats.currentTurn} • {fileContextStats.tokensSaved.toLocaleString()} tokens saved
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowClearFileContextConfirm(true)}
+            disabled={fileContextStats.trackedFiles === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        </div>
+
+        <div className="flex items-start gap-3 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg mt-3">
+          <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-slate-400">
+            When delta mode is enabled, the first prompt sends file summaries, and subsequent
+            prompts only include files that have changed. This significantly reduces token
+            usage for iterative conversations.
           </div>
         </div>
       </SettingsSection>
@@ -216,7 +303,7 @@ export const DebugPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Clear Confirmation Modal */}
+      {/* Clear Debug Logs Confirmation Modal */}
       <ConfirmModal
         isOpen={showClearConfirm}
         onClose={() => setShowClearConfirm(false)}
@@ -225,6 +312,17 @@ export const DebugPanel: React.FC = () => {
         message="This will permanently delete all debug logs. This action cannot be undone."
         confirmText="Clear Logs"
         confirmVariant="danger"
+      />
+
+      {/* Clear File Context Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showClearFileContextConfirm}
+        onClose={() => setShowClearFileContextConfirm(false)}
+        onConfirm={clearFileContext}
+        title="Reset File Context"
+        message="This will clear file tracking data. The next prompt will send all file summaries again as if starting fresh."
+        confirmText="Reset"
+        confirmVariant="warning"
       />
     </div>
   );

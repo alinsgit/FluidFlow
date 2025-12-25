@@ -318,6 +318,7 @@ export class ProviderManager {
         type: img.mimeType,
         size: Math.ceil(img.data.length * 0.75),
       })),
+      fileContext: request.fileContext,
     };
 
     const confirmed = await requestPromptConfirmation(confirmationDetails);
@@ -403,6 +404,7 @@ export class ProviderManager {
         type: img.mimeType,
         size: Math.ceil(img.data.length * 0.75),
       })),
+      fileContext: request.fileContext,
     };
 
     const confirmed = await requestPromptConfirmation(confirmationDetails);
