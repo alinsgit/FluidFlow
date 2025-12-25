@@ -60,7 +60,7 @@ export default function App() {
 
   // Centralized modal state management
   const modals = useModalManager();
-  const [megaSettingsInitialCategory, setMegaSettingsInitialCategory] = useState<'ai-providers' | 'ai-usage' | 'context-manager' | 'tech-stack' | 'projects' | 'editor' | 'appearance' | 'debug' | 'shortcuts' | 'advanced'>('ai-providers');
+  const [megaSettingsInitialCategory, setMegaSettingsInitialCategory] = useState<'ai-providers' | 'ai-usage' | 'context-manager' | 'tech-stack' | 'projects' | 'editor' | 'appearance' | 'debug' | 'advanced'>('ai-providers');
 
   // Resizable panel divider (drag to resize, double-click to reset)
   const { panelWidth, isDragging, dividerProps } = usePanelResize();

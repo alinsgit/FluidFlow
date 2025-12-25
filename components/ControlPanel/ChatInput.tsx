@@ -115,11 +115,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       e.preventDefault();
       handleSend();
     }
-    // Ctrl+Shift+E to expand
-    if (e.key === 'e' && e.ctrlKey && e.shiftKey) {
-      e.preventDefault();
-      setShowExpandedModal(true);
-    }
   };
 
   const openFileDialog = (type: 'sketch' | 'brand') => {
@@ -344,7 +339,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             onClick={() => setShowExpandedModal(true)}
             className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="Expand editor (Ctrl+Shift+E)"
+            title="Expand editor"
           >
             <Maximize2 className="w-4 h-4" />
           </button>

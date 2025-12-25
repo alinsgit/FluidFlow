@@ -116,8 +116,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ files, setFiles, activeF
     });
   };
 
-  // Handle Ctrl+S save
-  const handleEditorMount: OnMount = (editor, monaco) => {
+  const handleEditorMount: OnMount = (editor, _monaco) => {
     editorRef.current = editor;
 
     // Track cursor position for StatusBar
@@ -133,21 +132,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ files, setFiles, activeF
 
     // Listen for cursor position changes
     editor.onDidChangeCursorPosition(updateCursorPosition);
-
-    // Add Ctrl+S save action
-    editor.addAction({
-      id: 'save-file',
-      label: 'Save File',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-      run: () => {
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-        }
-        setIsSaved(true);
-        setShowSaveIndicator(true);
-        setTimeout(() => setShowSaveIndicator(false), 1500);
-      }
-    });
   };
 
   if (!files[activeFile]) {

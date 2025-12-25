@@ -13,7 +13,6 @@ export type SettingsCategory =
   | 'appearance'
   | 'github'
   | 'debug'
-  | 'shortcuts'
   | 'advanced'
   | 'about';
 

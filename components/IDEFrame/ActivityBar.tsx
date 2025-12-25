@@ -33,7 +33,6 @@ interface ActivityBarItem {
   icon: React.ElementType;
   label: string;
   description?: string;
-  shortcut?: string;
   tab?: TabType;
   action?: 'chat' | 'settings';
   badge?: number;
@@ -49,7 +48,7 @@ interface ActivityBarProps {
 // Development Core - Main workflow
 const DEV_ITEMS: ActivityBarItem[] = [
   { id: 'preview', icon: Eye, label: 'Preview', description: 'Live preview of your app with device simulation', tab: 'preview' },
-  { id: 'code', icon: Code2, label: 'Code Editor', description: 'Edit source files with Monaco editor', shortcut: 'Ctrl+E', tab: 'code' },
+  { id: 'code', icon: Code2, label: 'Code Editor', description: 'Edit source files with Monaco editor', tab: 'code' },
   { id: 'run', icon: Play, label: 'Dev Server', description: 'Run your app in WebContainer environment', tab: 'run', hasIndicator: true },
 ];
 
@@ -82,7 +81,7 @@ const DEBUG_ITEMS: ActivityBarItem[] = [
 // Bottom settings
 const BOTTOM_ITEMS: ActivityBarItem[] = [
   { id: 'ai', icon: Bot, label: 'AI Settings', description: 'Configure AI providers and models', action: 'settings' },
-  { id: 'settings', icon: Settings, label: 'Settings', description: 'App preferences and configuration', shortcut: 'Ctrl+,', action: 'settings' },
+  { id: 'settings', icon: Settings, label: 'Settings', description: 'App preferences and configuration', action: 'settings' },
 ];
 
 export const ActivityBar = memo(function ActivityBar({
@@ -118,7 +117,6 @@ export const ActivityBar = memo(function ActivityBar({
       key={item.id}
       label={item.label}
       description={item.description}
-      shortcut={item.shortcut}
     >
       <button
         onClick={() => handleClick(item)}
@@ -169,7 +167,6 @@ export const ActivityBar = memo(function ActivityBar({
         <ActivityBarTooltip
           label={leftPanelVisible ? 'Hide Panel' : 'Show Panel'}
           description={leftPanelVisible ? 'Collapse the chat panel' : 'Expand the chat panel'}
-          shortcut="Ctrl+B"
         >
           <button
             onClick={onChatClick}
@@ -188,7 +185,6 @@ export const ActivityBar = memo(function ActivityBar({
       <ActivityBarTooltip
         label="Chat"
         description={leftPanelVisible ? 'Hide the AI chat panel' : 'Open AI chat to describe your app'}
-        shortcut="Ctrl+B"
       >
         <button
           onClick={onChatClick}
@@ -256,7 +252,6 @@ export const ActivityBar = memo(function ActivityBar({
             key={item.id}
             label={item.label}
             description={item.description}
-            shortcut={item.shortcut}
           >
             <button
               onClick={() => handleClick(item)}

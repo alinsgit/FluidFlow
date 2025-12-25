@@ -629,7 +629,7 @@ Fix the error in src/App.tsx.`;
           <button
             onClick={onOpenMegaSettings}
             className="p-2 hover:bg-blue-500/10 rounded-lg text-slate-500 hover:text-blue-400 transition-colors"
-            title="Settings (Ctrl+,)"
+            title="Settings"
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
@@ -739,7 +739,7 @@ Fix the error in src/App.tsx.`;
             const successMessage: ChatMessage = {
               id: crypto.randomUUID(),
               role: 'assistant',
-              explanation: `✅ **Checkpoint saved!** Saved ${Object.keys(files).length} files. You can restore this checkpoint from the History Timeline (Ctrl+Shift+H).`,
+              explanation: `✅ **Checkpoint saved!** Saved ${Object.keys(files).length} files. You can restore this checkpoint from the History Timeline.`,
               timestamp: Date.now()
             };
             setMessages(prev => [...prev, successMessage]);

@@ -122,10 +122,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       <span className="text-[10px] text-slate-500">AI, Editor, Appearance & more</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">Ctrl+,</kbd>
-                    <ChevronRight className="w-4 h-4 text-slate-500" />
-                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
                 </button>
               )}
 

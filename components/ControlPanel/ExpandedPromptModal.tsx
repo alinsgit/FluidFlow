@@ -276,7 +276,7 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
                 <h2 className="font-semibold text-white">
                   {hasExistingApp ? 'Describe Changes' : 'Describe Your App'}
                 </h2>
-                <p className="text-xs text-slate-500">Ctrl+Enter to send • Escape to close</p>
+                <p className="text-xs text-slate-500">Enter to send</p>
               </div>
             </div>
             <button

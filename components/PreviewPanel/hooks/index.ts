@@ -24,11 +24,6 @@ export type {
   UsePropsInspectorReturn,
   NodeDetails,
 } from './usePropsInspector';
-export { useDevToolsKeyboard } from './useDevToolsKeyboard';
-export type {
-  UseDevToolsKeyboardOptions,
-  UseDevToolsKeyboardReturn,
-} from './useDevToolsKeyboard';
 export { useComponentTree } from './useComponentTree';
 export type {
   UseComponentTreeOptions,

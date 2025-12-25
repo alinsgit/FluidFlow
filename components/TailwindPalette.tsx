@@ -330,7 +330,7 @@ export const TailwindPalette: React.FC<TailwindPaletteProps> = ({ isOpen, onClos
         {/* Footer */}
         <div className="px-4 py-2 border-t border-white/5 bg-slate-950/50">
           <p className="text-[10px] text-slate-600 text-center">
-            Click to insert • Double-click to copy • Ctrl+T to open
+            Click to insert • Double-click to copy
           </p>
         </div>
       </div>

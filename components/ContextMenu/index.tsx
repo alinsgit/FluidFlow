@@ -15,7 +15,6 @@ export interface ContextMenuItem {
   icon?: React.ReactNode;
   action: () => void;
   danger?: boolean;
-  shortcut?: string;
   separator?: boolean;
   disabled?: boolean;
 }
@@ -157,13 +156,9 @@ export function ContextMenuProvider({ children }: ContextMenuProviderProps) {
                       ? 'text-red-400 hover:bg-red-500/10'
                       : 'text-slate-300 hover:bg-white/5'
                   } ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={item.shortcut}
                 >
                   {item.icon && <span className="w-4 h-4 flex-shrink-0">{item.icon}</span>}
                   <span className="flex-1 text-left">{item.label}</span>
-                  {item.shortcut && (
-                    <span className="text-xs text-slate-500">{item.shortcut}</span>
-                  )}
                 </button>
               </React.Fragment>
             ))}
@@ -199,7 +194,6 @@ export const MenuItems = {
       navigator.clipboard.writeText(message);
       onCopy?.();
     },
-    shortcut: 'Ctrl+C',
   }),
 
   regenerate: (onRegenerate: () => void): ContextMenuItem => ({
@@ -207,7 +201,6 @@ export const MenuItems = {
     label: 'Regenerate',
     icon: <RotateCcw className="w-4 h-4" />,
     action: onRegenerate,
-    shortcut: 'Ctrl+R',
   }),
 
   delete: (onDelete: () => void, label: string = 'Delete'): ContextMenuItem => ({
@@ -216,7 +209,6 @@ export const MenuItems = {
     icon: <Trash2 className="w-4 h-4" />,
     action: onDelete,
     danger: true,
-    shortcut: 'Del',
   }),
 
   download: (content: string, filename: string): ContextMenuItem => ({
@@ -241,7 +233,6 @@ export const MenuItems = {
     id: 'rename-file',
     label: 'Rename',
     action: onRename,
-    shortcut: 'F2',
   }),
 
   deleteFile: (filePath: string, onDelete: (path: string) => void): ContextMenuItem => ({
@@ -258,14 +249,12 @@ export const MenuItems = {
     label: 'Format Code',
     icon: <Code className="w-4 h-4" />,
     action: onFormat,
-    shortcut: 'Shift+Alt+F',
   }),
 
   insertSnippet: (onInsert: () => void): ContextMenuItem => ({
     id: 'insert-snippet',
     label: 'Insert Snippet',
     action: onInsert,
-    shortcut: 'Ctrl+Space',
   }),
 
   // Image-specific items
@@ -369,7 +358,6 @@ export function useFileContextMenu(
             onRename(filePath, '');
           }
         },
-        shortcut: 'F2',
       });
     }
 

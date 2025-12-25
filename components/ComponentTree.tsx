@@ -370,7 +370,7 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
         {/* Footer */}
         <div className="px-4 py-2 border-t border-white/5 bg-slate-950/50">
           <p className="text-[10px] text-slate-600 text-center">
-            Click component to open file • Ctrl+Shift+T to open
+            Click component to open file
           </p>
         </div>
       </div>

@@ -8,7 +8,6 @@ interface ActivityBarTooltipProps {
   children: React.ReactNode;
   label: string;
   description?: string;
-  shortcut?: string;
   side?: 'right' | 'left';
   delay?: number;
 }
@@ -17,7 +16,6 @@ export const ActivityBarTooltip: React.FC<ActivityBarTooltipProps> = ({
   children,
   label,
   description,
-  shortcut,
   side = 'right',
   delay = 400,
 }) => {
@@ -87,16 +85,9 @@ export const ActivityBarTooltip: React.FC<ActivityBarTooltipProps> = ({
           <div
             className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl animate-in fade-in slide-in-from-left-2 duration-150"
           >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-white whitespace-nowrap">
-                {label}
-              </span>
-              {shortcut && (
-                <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-900 text-slate-400 rounded border border-slate-700">
-                  {shortcut}
-                </kbd>
-              )}
-            </div>
+            <span className="text-sm font-medium text-white whitespace-nowrap">
+              {label}
+            </span>
             {description && (
               <p className="text-xs text-slate-400 mt-0.5 max-w-[200px]">
                 {description}
