@@ -12,8 +12,10 @@ import { tryLocalFix, tryFixBareSpecifierMultiFile } from './localFixes';
 import { isCodeValid } from './validation';
 import { fixState } from './state';
 import { fixAnalytics } from './analytics';
+import { autoFixLogger } from './debugLogger';
+import { buildPromptForStrategy } from './prompts';
 import { cleanGeneratedCode, isValidCode } from '../../utils/cleanCode';
-import { buildAutoFixPrompt, getRelatedFiles } from '../../utils/errorContext';
+import { getRelatedFiles } from '../../utils/errorContext';
 import { getProviderManager } from '../ai';
 
 // ============================================================================
@@ -75,9 +77,15 @@ export class FixEngine {
     this.startTime = Date.now();
     this.abortController = new AbortController();
 
+    // Start logging session
+    autoFixLogger.startSession(this.options.errorMessage, this.options.targetFile);
+
     // Check if we should skip this error
     const skipCheck = fixState.shouldSkip(this.options.errorMessage);
     if (skipCheck.skip) {
+      autoFixLogger.log('info', 'analyze', 'Skipping Error', {
+        message: skipCheck.reason || 'Previously failed',
+      });
       return this.noFix(`Skipped: ${skipCheck.reason}`);
     }
 
@@ -88,24 +96,48 @@ export class FixEngine {
       this.options.files
     );
 
+    // Log analysis results
+    autoFixLogger.logAnalysis({
+      type: parsed.type,
+      category: parsed.category,
+      confidence: parsed.confidence,
+      isAutoFixable: parsed.isAutoFixable,
+      suggestedFix: parsed.suggestedFix,
+    });
+
     if (parsed.isIgnorable) {
+      autoFixLogger.log('info', 'analyze', 'Ignorable Error', {
+        message: 'This error type is transient/ignorable',
+      });
       return this.noFix('Ignorable error');
     }
 
     const category = parsed.category;
     const strategies = this.selectStrategies(category);
 
+    autoFixLogger.log('info', 'strategy', 'Strategy Plan', {
+      message: `Will try: ${strategies.join(' → ')}`,
+      details: { strategies, category },
+    });
+
     // Try each strategy
     for (const strategy of strategies) {
-      if (this.isTimedOut()) break;
+      if (this.isTimedOut()) {
+        autoFixLogger.log('warn', 'timing', 'Timeout', {
+          message: `Exceeded ${this.options.timeout}ms timeout`,
+        });
+        break;
+      }
       if (this.options.skipStrategies.includes(strategy)) continue;
 
       this.currentStrategy = strategy;
       this.options.onStrategyChange(strategy);
       this.options.onProgress(this.getLabel(strategy), this.getProgress());
 
+      autoFixLogger.logStrategy(strategy, 'start', `Attempting ${this.getLabel(strategy)}`);
+
       try {
-        const result = await this.runStrategy(strategy);
+        const result = await this.runStrategy(strategy, parsed);
 
         if (result.success && Object.keys(result.fixedFiles).length > 0) {
           const timeMs = Date.now() - this.startTime;
@@ -114,15 +146,24 @@ export class FixEngine {
           fixState.recordAttempt(this.options.errorMessage, strategy, true);
           fixAnalytics.record(this.options.errorMessage, category, strategy, true, timeMs);
 
+          autoFixLogger.logStrategy(strategy, 'success', result.description);
+          autoFixLogger.logApply(Object.keys(result.fixedFiles), result.description);
+          autoFixLogger.endSession(true, `Fixed with ${strategy} in ${(timeMs / 1000).toFixed(2)}s`);
+
           return {
             ...result,
             strategy,
             attempts: this.attempts,
             timeMs,
           };
+        } else {
+          autoFixLogger.logStrategy(strategy, 'fail', result.error || 'No fix found');
         }
       } catch (e) {
-        console.error(`[FixEngine] ${strategy} failed:`, e);
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        autoFixLogger.log('error', 'strategy', `${strategy} Exception`, {
+          message: errorMsg,
+        });
       }
     }
 
@@ -130,6 +171,8 @@ export class FixEngine {
     const timeMs = Date.now() - this.startTime;
     fixState.recordAttempt(this.options.errorMessage, null, false);
     fixAnalytics.record(this.options.errorMessage, category, 'local-simple', false, timeMs);
+
+    autoFixLogger.endSession(false, `All ${strategies.length} strategies exhausted`);
 
     return this.noFix('All strategies exhausted');
   }
@@ -165,7 +208,7 @@ export class FixEngine {
   // Strategy Runners
   // ============================================================================
 
-  private async runStrategy(strategy: FixStrategy): Promise<FixResult> {
+  private async runStrategy(strategy: FixStrategy, parsed?: import('./types').ParsedError): Promise<FixResult> {
     this.attempts++;
 
     switch (strategy) {
@@ -176,13 +219,13 @@ export class FixEngine {
       case 'local-proactive':
         return this.runLocalProactive();
       case 'ai-quick':
-        return this.runAIQuick();
+        return this.runAIQuick(parsed);
       case 'ai-full':
-        return this.runAIFull();
+        return this.runAIFull(parsed);
       case 'ai-iterative':
-        return this.runAIIterative();
+        return this.runAIIterative(parsed);
       case 'ai-regenerate':
-        return this.runAIRegenerate();
+        return this.runAIRegenerate(parsed);
       default:
         return this.noFix('Unknown strategy');
     }
@@ -192,19 +235,29 @@ export class FixEngine {
     this.options.onProgress('Trying local fix...', 10);
 
     const code = this.options.files[this.options.targetFile] || this.options.appCode;
-    if (!code) return this.noFix('No code found');
+    if (!code) {
+      autoFixLogger.logLocalFix('simple', false, 'No code found for target file');
+      return this.noFix('No code found');
+    }
 
-    const result = tryLocalFix(this.options.errorMessage, code);
+    const result = tryLocalFix(this.options.errorMessage, code, this.options.files);
 
     if (result.success && result.fixedFiles['current']) {
       const fixedCode = result.fixedFiles['current'];
       if (isCodeValid(fixedCode)) {
+        autoFixLogger.logLocalFix(result.fixType, true, result.description);
+        autoFixLogger.logValidation('syntax', true, 'Fixed code passes syntax check');
         return this.success(
           { [this.options.targetFile]: fixedCode },
           result.description,
           'local-simple'
         );
+      } else {
+        autoFixLogger.logLocalFix(result.fixType, false, 'Fix generated invalid code');
+        autoFixLogger.logValidation('syntax', false, 'Fixed code has syntax errors');
       }
+    } else {
+      autoFixLogger.logLocalFix('simple', false, 'No matching pattern found');
     }
 
     return this.noFix('Local fix failed');
@@ -234,7 +287,7 @@ export class FixEngine {
     return this.noFix('No proactive fixes found');
   }
 
-  private async runAIQuick(): Promise<FixResult> {
+  private async runAIQuick(parsed?: import('./types').ParsedError): Promise<FixResult> {
     this.options.onProgress('Quick AI fix...', 30);
 
     const code = this.options.files[this.options.targetFile] || this.options.appCode;
@@ -244,34 +297,69 @@ export class FixEngine {
     const config = manager.getActiveConfig();
     if (!config) return this.noFix('No AI provider');
 
-    const prompt = this.buildQuickPrompt(code);
+    // Build prompt using new system
+    const { systemInstruction, prompt } = buildPromptForStrategy('quick', {
+      errorMessage: this.options.errorMessage,
+      errorStack: this.options.errorStack,
+      targetFile: this.options.targetFile,
+      targetFileContent: code,
+      parsedError: parsed,
+      techStackContext: this.options.systemInstruction,
+    });
+
+    // Log AI request
+    const requestId = autoFixLogger.logAIRequest({
+      strategy: 'ai-quick',
+      prompt,
+      systemInstruction,
+      model: config.defaultModel,
+      targetFile: this.options.targetFile,
+      errorMessage: this.options.errorMessage,
+    });
+
+    const startTime = Date.now();
 
     try {
       const response = await Promise.race([
-        manager.generate({ prompt, responseFormat: 'text' }, config.defaultModel),
+        manager.generate({
+          prompt,
+          systemInstruction,
+          responseFormat: 'text'
+        }, config.defaultModel),
         this.createTimeout(CONFIG.AI_QUICK_TIMEOUT),
       ]);
 
+      const duration = Date.now() - startTime;
+
       if (!response || typeof response === 'symbol') {
+        autoFixLogger.logAIResponse(requestId, false, 'Request timed out', duration);
         return this.noFix('AI timeout');
       }
 
+      autoFixLogger.logAIResponse(requestId, true, response.text || '', duration);
+
       const fixedCode = cleanGeneratedCode(response.text || '');
+
       if (fixedCode && isValidCode(fixedCode) && fixedCode !== code) {
+        autoFixLogger.logValidation('syntax', true, 'AI response is valid code');
         return this.success(
           { [this.options.targetFile]: fixedCode },
           'Quick AI fix',
           'ai-quick'
         );
+      } else {
+        autoFixLogger.logValidation('syntax', false, fixedCode ? 'Code unchanged or invalid' : 'Empty response');
       }
     } catch (e) {
+      const duration = Date.now() - startTime;
+      autoFixLogger.logAIResponse(requestId, false, String(e), duration);
       return this.noFix(String(e));
     }
 
     return this.noFix('AI fix invalid');
   }
 
-  private async runAIFull(): Promise<FixResult> {
+  private async runAIFull(parsed?: import('./types').ParsedError): Promise<FixResult> {
     this.options.onProgress('Full AI analysis...', 50);
 
     const code = this.options.files[this.options.targetFile] || this.options.appCode;
@@ -281,41 +369,76 @@ export class FixEngine {
     const config = manager.getActiveConfig();
     if (!config) return this.noFix('No AI provider');
 
-    const prompt = buildAutoFixPrompt({
+    // Get related files for context
+    const relatedFiles = getRelatedFiles(this.options.errorMessage, code, this.options.files);
+    const contextFiles = Object.keys(relatedFiles);
+
+    // Build prompt using new system
+    const { systemInstruction, prompt } = buildPromptForStrategy('full', {
       errorMessage: this.options.errorMessage,
+      errorStack: this.options.errorStack,
       targetFile: this.options.targetFile,
       targetFileContent: code,
-      files: this.options.files,
-      techStackContext: this.options.systemInstruction,
+      parsedError: parsed,
+      relatedFiles,
       logs: this.options.logs,
+      techStackContext: this.options.systemInstruction,
     });
+
+    // Log AI request
+    const requestId = autoFixLogger.logAIRequest({
+      strategy: 'ai-full',
+      prompt,
+      systemInstruction,
+      model: config.defaultModel,
+      targetFile: this.options.targetFile,
+      errorMessage: this.options.errorMessage,
+      contextFiles,
+    });
+
+    const startTime = Date.now();
 
     try {
       const response = await Promise.race([
-        manager.generate({ prompt, responseFormat: 'text' }, config.defaultModel),
+        manager.generate({
+          prompt,
+          systemInstruction,
+          responseFormat: 'text'
+        }, config.defaultModel),
         this.createTimeout(CONFIG.AI_FULL_TIMEOUT),
       ]);
 
+      const duration = Date.now() - startTime;
+
       if (!response || typeof response === 'symbol') {
+        autoFixLogger.logAIResponse(requestId, false, 'Request timed out', duration);
         return this.noFix('AI timeout');
       }
 
+      autoFixLogger.logAIResponse(requestId, true, response.text || '', duration);
+
       const fixedCode = cleanGeneratedCode(response.text || '');
+
       if (fixedCode && isValidCode(fixedCode) && fixedCode !== code) {
+        autoFixLogger.logValidation('syntax', true, 'AI response is valid code');
         return this.success(
           { [this.options.targetFile]: fixedCode },
           'AI fix with full context',
           'ai-full'
         );
+      } else {
+        autoFixLogger.logValidation('syntax', false, fixedCode ? 'Code unchanged or invalid' : 'Empty response');
       }
     } catch (e) {
+      const duration = Date.now() - startTime;
+      autoFixLogger.logAIResponse(requestId, false, String(e), duration);
       return this.noFix(String(e));
     }
 
     return this.noFix('AI fix invalid');
   }
 
-  private async runAIIterative(): Promise<FixResult> {
+  private async runAIIterative(parsed?: import('./types').ParsedError): Promise<FixResult> {
     this.options.onProgress('Iterative AI...', 70);
 
     const code = this.options.files[this.options.targetFile] || this.options.appCode;
@@ -325,57 +448,95 @@ export class FixEngine {
     const config = manager.getActiveConfig();
     if (!config) return this.noFix('No AI provider');
 
-    const feedback: string[] = [];
+    const previousAttempts: string[] = [];
 
     for (let round = 0; round < CONFIG.MAX_ITERATIVE_ROUNDS; round++) {
       if (this.isTimedOut()) break;
 
       this.options.onProgress(`AI attempt ${round + 1}/${CONFIG.MAX_ITERATIVE_ROUNDS}...`, 70 + round * 10);
 
-      const prompt = this.buildIterativePrompt(code, feedback, round);
+      autoFixLogger.log('info', 'strategy', `Iterative Round ${round + 1}`, {
+        message: previousAttempts.length > 0 ? `Previous issues: ${previousAttempts.join(', ')}` : 'First attempt',
+        details: { round: round + 1, previousAttempts },
+      });
+
+      // Build prompt with feedback
+      const { systemInstruction, prompt } = buildPromptForStrategy('iterative', {
+        errorMessage: this.options.errorMessage,
+        errorStack: this.options.errorStack,
+        targetFile: this.options.targetFile,
+        targetFileContent: code,
+        parsedError: parsed,
+        previousAttempts,
+        techStackContext: this.options.systemInstruction,
+      });
+
+      const requestId = autoFixLogger.logAIRequest({
+        strategy: `ai-iterative-${round + 1}`,
+        prompt,
+        systemInstruction,
+        model: config.defaultModel,
+        targetFile: this.options.targetFile,
+        errorMessage: this.options.errorMessage,
+      });
+
+      const startTime = Date.now();
 
       try {
         const response = await Promise.race([
-          manager.generate({ prompt, responseFormat: 'text' }, config.defaultModel),
+          manager.generate({
+            prompt,
+            systemInstruction,
+            responseFormat: 'text'
+          }, config.defaultModel),
           this.createTimeout(CONFIG.AI_FULL_TIMEOUT),
         ]);
 
+        const duration = Date.now() - startTime;
+
         if (!response || typeof response === 'symbol') {
-          feedback.push('Timeout');
+          autoFixLogger.logAIResponse(requestId, false, 'Request timed out', duration);
+          previousAttempts.push('Timeout');
           continue;
         }
+
+        autoFixLogger.logAIResponse(requestId, true, response.text || '', duration);
 
         const fixedCode = cleanGeneratedCode(response.text || '');
 
         if (!fixedCode) {
-          feedback.push('Empty response');
+          previousAttempts.push('Empty response');
           continue;
         }
 
         if (!isValidCode(fixedCode)) {
-          feedback.push('Invalid syntax');
+          autoFixLogger.logValidation('syntax', false, 'Generated code has syntax errors');
+          previousAttempts.push('Invalid syntax');
           continue;
         }
 
         if (fixedCode === code) {
-          feedback.push('No changes');
+          previousAttempts.push('No changes made');
           continue;
         }
 
+        autoFixLogger.logValidation('syntax', true, 'Valid code after iteration');
         return this.success(
           { [this.options.targetFile]: fixedCode },
           `Fixed after ${round + 1} iterations`,
           'ai-iterative'
         );
       } catch (e) {
-        feedback.push(String(e));
+        const duration = Date.now() - startTime;
+        autoFixLogger.logAIResponse(requestId, false, String(e), duration);
+        previousAttempts.push(String(e));
       }
     }
 
     return this.noFix(`Failed after ${CONFIG.MAX_ITERATIVE_ROUNDS} rounds`);
   }
 
-  private async runAIRegenerate(): Promise<FixResult> {
+  private async runAIRegenerate(parsed?: import('./types').ParsedError): Promise<FixResult> {
     this.options.onProgress('Regenerating...', 90);
 
     const code = this.options.files[this.options.targetFile] || this.options.appCode;
@@ -387,110 +548,75 @@ export class FixEngine {
 
     const componentName = this.extractComponentName(code);
     const relatedFiles = getRelatedFiles(this.options.errorMessage, code, this.options.files);
+    const contextFiles = Object.keys(relatedFiles);
 
-    const prompt = this.buildRegenerationPrompt(code, componentName, relatedFiles);
+    autoFixLogger.log('info', 'strategy', 'Regeneration Mode', {
+      message: `Regenerating ${componentName || 'component'} from scratch`,
+      details: { componentName, contextFiles },
+    });
+
+    // Build prompt using new system
+    const { systemInstruction, prompt } = buildPromptForStrategy('regenerate', {
+      errorMessage: this.options.errorMessage,
+      errorStack: this.options.errorStack,
+      targetFile: this.options.targetFile,
+      targetFileContent: code,
+      parsedError: parsed,
+      relatedFiles,
+      techStackContext: this.options.systemInstruction,
+    });
+
+    // Log AI request
+    const requestId = autoFixLogger.logAIRequest({
+      strategy: 'ai-regenerate',
+      prompt,
+      systemInstruction,
+      model: config.defaultModel,
+      targetFile: this.options.targetFile,
+      errorMessage: this.options.errorMessage,
+      contextFiles,
+    });
+
+    const startTime = Date.now();
 
     try {
       const response = await Promise.race([
-        manager.generate({ prompt, responseFormat: 'text' }, config.defaultModel),
+        manager.generate({
+          prompt,
+          systemInstruction,
+          responseFormat: 'text'
+        }, config.defaultModel),
         this.createTimeout(CONFIG.AI_ITERATIVE_TIMEOUT),
       ]);
 
+      const duration = Date.now() - startTime;
+
       if (!response || typeof response === 'symbol') {
+        autoFixLogger.logAIResponse(requestId, false, 'Request timed out', duration);
         return this.noFix('AI timeout');
       }
 
+      autoFixLogger.logAIResponse(requestId, true, response.text || '', duration);
+
       const fixedCode = cleanGeneratedCode(response.text || '');
+
       if (fixedCode && isValidCode(fixedCode)) {
+        autoFixLogger.logValidation('syntax', true, 'Regenerated code is valid');
         return this.success(
           { [this.options.targetFile]: fixedCode },
           `Regenerated ${componentName || 'component'}`,
           'ai-regenerate'
         );
+      } else {
+        autoFixLogger.logValidation('syntax', false, fixedCode ? 'Invalid regenerated code' : 'Empty response');
       }
     } catch (e) {
+      const duration = Date.now() - startTime;
+      autoFixLogger.logAIResponse(requestId, false, String(e), duration);
       return this.noFix(String(e));
     }
 
     return this.noFix('Regeneration failed');
-  }
-
-  // ============================================================================
-  // Prompt Builders
-  // ============================================================================
-
-  private buildQuickPrompt(code: string): string {
-    const parsed = errorAnalyzer.analyze(this.options.errorMessage);
-
-    return `Fix this ${parsed.category} error in React/TypeScript code.
-
-ERROR: ${this.options.errorMessage}
-${parsed.suggestedFix ? `HINT: ${parsed.suggestedFix}` : ''}
-
-CODE:
-\`\`\`tsx
-${code.slice(0, 10000)}
-\`\`\`
-
-Return ONLY the complete fixed code. No explanations.`;
-  }
-
-  private buildIterativePrompt(code: string, feedback: string[], _round: number): string {
-    let prompt = `Fix this error in React/TypeScript code.
-
-ERROR: ${this.options.errorMessage}
-
-`;
-
-    if (feedback.length > 0) {
-      prompt += `PREVIOUS ATTEMPTS FAILED:
-${feedback.map((f, i) => `${i + 1}. ${f}`).join('\n')}
-
-Try a DIFFERENT approach.
-
-`;
-    }
-
-    prompt += `CODE:
-\`\`\`tsx
-${code}
-\`\`\`
-
-Return ONLY the complete fixed code.`;
-
-    return prompt;
-  }
-
-  private buildRegenerationPrompt(
-    code: string,
-    componentName: string | null,
-    relatedFiles: Record<string, string>
-  ): string {
-    const imports = code.match(/^import\s+.*$/gm) || [];
-    const jsxMatch = code.match(/return\s*\(\s*([\s\S]*?)\s*\);?\s*(?:}|$)/);
-    const jsx = jsxMatch ? jsxMatch[1] : '';
-
-    let related = '';
-    if (Object.keys(relatedFiles).length > 0) {
-      related = '\n\nRELATED FILES:\n';
-      for (const [path, content] of Object.entries(relatedFiles).slice(0, 3)) {
-        related += `\n// ${path}\n${content.slice(0, 2000)}\n`;
-      }
-    }
-
-    return `Regenerate this React component fixing all errors.
-
-ERROR: ${this.options.errorMessage}
-COMPONENT: ${componentName || 'App'}
-
-IMPORTS:
-${imports.join('\n')}
-
-JSX:
-${jsx.slice(0, 3000)}
-${related}
-
-Return ONLY the complete fixed component.`;
   }
 
   // ============================================================================

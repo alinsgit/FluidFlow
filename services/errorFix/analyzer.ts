@@ -245,17 +245,82 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     }),
   },
 
-  // Export errors
+  // Export errors - with smart suggestions for common libraries
   {
-    pattern: /does not provide an export named ['"](\w+)['"]/i,
-    type: 'module-not-found',
+    pattern: /(?:module\s+['"]([^'"]+)['"]\s+)?does(?:n't| not) provide an export named[:\s]+['"]?(\w+)['"]?/i,
+    type: 'missing-export',
     category: 'import',
-    priority: 4,
-    extract: (match) => ({
-      identifier: match[1],
-      isAutoFixable: false,
-      confidence: 0.8,
-    }),
+    priority: 5,
+    extract: (match) => {
+      const modulePath = match[1] || '';
+      const wrongExport = match[2];
+
+      // Common wrong export -> correct export mappings
+      const EXPORT_FIXES: Record<string, Record<string, string>> = {
+        // @react-three/drei
+        '@react-three/drei': {
+          'TextView': 'Text',
+          'Text3d': 'Text3D',
+          'OrbitControl': 'OrbitControls',
+          'TransformControl': 'TransformControls',
+          'PerspectiveCamera': 'PerspectiveCamera',
+          'Enviroment': 'Environment',
+          'Enviroments': 'Environment',
+        },
+        // lucide-react common typos
+        'lucide-react': {
+          'Icon': 'LucideIcon',
+          'Icons': 'icons',
+          'ArrowUp': 'ArrowUp',
+          'Settings': 'Settings',
+        },
+        // motion/framer-motion
+        'motion/react': {
+          'Motion': 'motion',
+          'AnimatePresence': 'AnimatePresence',
+        },
+        'framer-motion': {
+          'Motion': 'motion',
+        },
+        // react-router
+        'react-router': {
+          'Router': 'BrowserRouter',
+          'Switch': 'Routes',
+          'Redirect': 'Navigate',
+          'useHistory': 'useNavigate',
+        },
+        'react-router-dom': {
+          'Router': 'BrowserRouter',
+          'Switch': 'Routes',
+          'Redirect': 'Navigate',
+          'useHistory': 'useNavigate',
+        },
+      };
+
+      // Find the library from module path
+      let correctExport: string | undefined;
+      let libraryName: string | undefined;
+
+      for (const [lib, fixes] of Object.entries(EXPORT_FIXES)) {
+        if (modulePath.includes(lib)) {
+          libraryName = lib;
+          correctExport = fixes[wrongExport];
+          break;
+        }
+      }
+
+      return {
+        identifier: wrongExport,
+        importPath: modulePath,
+        correctExport,
+        libraryName,
+        suggestedFix: correctExport
+          ? `Replace "${wrongExport}" with "${correctExport}"`
+          : `"${wrongExport}" doesn't exist in this module`,
+        isAutoFixable: !!correctExport,
+        confidence: correctExport ? 0.95 : 0.7,
+      };
+    },
   },
 
   // Network errors

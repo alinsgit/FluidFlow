@@ -22,6 +22,7 @@ export const STORAGE_KEYS = {
   DEBUG_MODE: 'debug-mode',
   THEME: 'theme',
   CONTEXTS: 'fluidflow_contexts',
+  PROMPT_CONFIRMATION: 'prompt-confirmation-enabled',
 } as const;
 
 // Context IDs

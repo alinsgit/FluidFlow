@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Bug, Trash2, AlertTriangle, Info } from 'lucide-react';
+import { Bug, Trash2, AlertTriangle, Info, Eye } from 'lucide-react';
 import { ConfirmModal } from '../../ContextIndicator/ConfirmModal';
 import { SettingsSection, SettingsToggle, SettingsSelect, SettingsSlider } from '../shared';
 import { DebugSettings, DEFAULT_DEBUG_SETTINGS, STORAGE_KEYS } from '../types';
 import { useDebugStore } from '../../../hooks/useDebugStore';
+import { usePromptConfirmation } from '../../../contexts/PromptConfirmationContext';
 
 export const DebugPanel: React.FC = () => {
   const [settings, setSettings] = useState<DebugSettings>(DEFAULT_DEBUG_SETTINGS);
   const debugState = useDebugStore();
+  const promptConfirmation = usePromptConfirmation();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
@@ -86,6 +88,27 @@ export const DebugPanel: React.FC = () => {
           checked={settings.enabled}
           onChange={(checked) => updateSettings({ enabled: checked })}
         />
+      </SettingsSection>
+
+      {/* Prompt Confirmation */}
+      <SettingsSection
+        title="Prompt Confirmation"
+        description="Review prompts before sending to AI"
+      >
+        <SettingsToggle
+          label="Confirm Before Sending"
+          description="Show a modal with prompt details before every AI request"
+          checked={promptConfirmation.isEnabled}
+          onChange={(checked) => promptConfirmation.setEnabled(checked)}
+        />
+        <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg mt-3">
+          <Eye className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-slate-400">
+            When enabled, you'll see the exact prompt, system instruction, model, and token
+            estimate before any request is sent to the AI provider. Useful for debugging
+            and understanding what data is being shared.
+          </div>
+        </div>
       </SettingsSection>
 
       {/* Log Settings */}

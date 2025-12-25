@@ -35,6 +35,8 @@ import { getContextManager } from './services/conversationContext';
 import { ToastProvider } from './components/Toast';
 import { ContextMenuProvider } from './components/ContextMenu';
 import { IDEFrame } from './components/IDEFrame';
+import { PromptConfirmationProvider } from './contexts/PromptConfirmationContext';
+import { PromptConfirmationModal } from './components/PromptConfirmationModal';
 
 // Lazy-loaded modals for better initial bundle size (~80KB savings)
 import {
@@ -206,9 +208,10 @@ export default function App() {
   }, [ctx]);
 
   return (
-    <ContextMenuProvider>
-      <ToastProvider>
-        <div className="fixed inset-0 flex flex-col bg-[#020617] text-white overflow-hidden selection:bg-blue-500/30 selection:text-blue-50 max-h-screen">
+    <PromptConfirmationProvider>
+      <ContextMenuProvider>
+        <ToastProvider>
+          <div className="fixed inset-0 flex flex-col bg-[#020617] text-white overflow-hidden selection:bg-blue-500/30 selection:text-blue-50 max-h-screen">
       {/* Background Ambient Effects */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
@@ -404,8 +407,12 @@ export default function App() {
           setHistoryPrompt(selectedPrompt);
         }}
       />
-      </div>
-    </ToastProvider>
-    </ContextMenuProvider>
+
+      {/* Prompt Confirmation Modal (intercepts all AI calls when enabled) */}
+      <PromptConfirmationModal />
+          </div>
+        </ToastProvider>
+      </ContextMenuProvider>
+    </PromptConfirmationProvider>
   );
 }

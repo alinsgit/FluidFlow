@@ -196,6 +196,14 @@ export function tryLocalFix(
   const varFix = tryFixUndefinedVariable(errorMessage, code);
   if (varFix.success) return varFix;
 
+  // 9. Missing exports (non-existent icons, etc.)
+  const exportFix = tryFixMissingExport(errorMessage, code);
+  if (exportFix.success) return exportFix;
+
+  // 10. Missing arrow in arrow functions (e.g., .map(f { → .map(f => {)
+  const arrowFix = tryFixMissingArrow(errorMessage, code);
+  if (arrowFix.success) return arrowFix;
+
   return noFix();
 }
 
@@ -510,6 +518,232 @@ function tryFixUndefinedVariable(errorMessage: string, code: string): LocalFixRe
         fixType: 'typo',
       };
     }
+  }
+
+  return noFix();
+}
+
+// Known export corrections for common libraries
+const EXPORT_CORRECTIONS: Record<string, Record<string, string>> = {
+  // @react-three/drei
+  '@react-three/drei': {
+    'TextView': 'Text',
+    'Text3d': 'Text3D',
+    'OrbitControl': 'OrbitControls',
+    'TransformControl': 'TransformControls',
+    'Enviroment': 'Environment',
+    'Enviroments': 'Environment',
+  },
+  // motion/framer-motion
+  'motion/react': {
+    'Motion': 'motion',
+  },
+  'framer-motion': {
+    'Motion': 'motion',
+  },
+  // react-router
+  'react-router': {
+    'Router': 'BrowserRouter',
+    'Switch': 'Routes',
+    'Redirect': 'Navigate',
+    'useHistory': 'useNavigate',
+  },
+  'react-router-dom': {
+    'Router': 'BrowserRouter',
+    'Switch': 'Routes',
+    'Redirect': 'Navigate',
+    'useHistory': 'useNavigate',
+  },
+};
+
+// Fallback icon for non-existent lucide-react icons
+const LUCIDE_FALLBACK_ICON = 'CircleHelp';
+
+// Known valid lucide icons (partial list for quick validation)
+const KNOWN_LUCIDE_ICONS = new Set([
+  'Search', 'X', 'Check', 'ChevronDown', 'ChevronUp', 'ChevronLeft', 'ChevronRight',
+  'Menu', 'Settings', 'User', 'Home', 'Plus', 'Minus', 'Edit', 'Trash', 'Trash2',
+  'Download', 'Upload', 'Eye', 'EyeOff', 'Lock', 'Info', 'AlertCircle', 'AlertTriangle',
+  'Loader2', 'RefreshCw', 'Copy', 'ExternalLink', 'Send', 'Play', 'Pause', 'Save',
+  'Undo', 'Redo', 'Bot', 'Sparkles', 'Code', 'Terminal', 'Heart', 'Star', 'Mail',
+  'Phone', 'Calendar', 'Clock', 'MapPin', 'Image', 'File', 'Folder', 'Link', 'Share',
+  'Filter', 'MoreHorizontal', 'MoreVertical', 'ArrowUp', 'ArrowDown', 'ArrowLeft',
+  'ArrowRight', 'LogIn', 'LogOut', 'Bell', 'Sun', 'Moon', 'Zap', 'Coffee', 'Music',
+  'Camera', 'Video', 'Mic', 'Volume2', 'VolumeX', 'Wifi', 'Battery', 'Power',
+  'CircleHelp', 'HelpCircle', 'CircleAlert', 'CircleCheck', 'CircleX', 'Circle',
+  'Square', 'Triangle', 'Hexagon', 'Octagon', 'Diamond', 'Shield', 'Flag',
+  'Bookmark', 'Tag', 'Hash', 'AtSign', 'Globe', 'Languages', 'Palette', 'Wand2',
+  'Wrench', 'Hammer', 'Scissors', 'Pen', 'Pencil', 'Eraser', 'Lightbulb', 'Target',
+  'Award', 'Trophy', 'Crown', 'Gift', 'Package', 'ShoppingCart', 'ShoppingBag',
+  'CreditCard', 'Wallet', 'DollarSign', 'Euro', 'Bitcoin', 'TrendingUp', 'TrendingDown',
+  'BarChart', 'PieChart', 'LineChart', 'Activity', 'Cpu', 'Database', 'Server',
+  'HardDrive', 'Monitor', 'Smartphone', 'Tablet', 'Laptop', 'Watch', 'Headphones',
+  'Speaker', 'Printer', 'Keyboard', 'Mouse', 'Gamepad', 'Github', 'Twitter', 'Facebook',
+  'Instagram', 'Linkedin', 'Youtube', 'Twitch', 'MessageSquare', 'MessageCircle',
+  'Megaphone', 'Rss', 'Radio', 'Podcast', 'Tv', 'Film', 'Clapperboard', 'Popcorn',
+  'Car', 'Bus', 'Train', 'Plane', 'Rocket', 'Ship', 'Bike', 'Footprints',
+]);
+
+function tryFixMissingExport(errorMessage: string, code: string): LocalFixResult {
+  // Pattern: doesn't provide an export named: 'IconName'
+  const match = errorMessage.match(
+    /(?:module\s+['"]([^'"]+)['"]\s+)?does(?:n't| not) provide an export named[:\s]+['"]?(\w+)['"]?/i
+  );
+
+  if (!match) return noFix();
+
+  const modulePath = match[1] || '';
+  const wrongExport = match[2];
+
+  // Detect library from module path or import in code
+  let libraryName = '';
+  for (const lib of Object.keys(EXPORT_CORRECTIONS)) {
+    if (modulePath.includes(lib)) {
+      libraryName = lib;
+      break;
+    }
+  }
+
+  // Check for lucide-react
+  const isLucide = modulePath.includes('lucide-react') ||
+    /import\s*{[^}]*\b${wrongExport}\b[^}]*}\s*from\s*['"]lucide-react['"]/.test(code);
+
+  // If it's lucide-react and the icon doesn't exist, replace with fallback
+  if (isLucide || modulePath.includes('lucide-react')) {
+    if (!KNOWN_LUCIDE_ICONS.has(wrongExport)) {
+      // Replace the non-existent icon with fallback in imports and usages
+      const importRegex = new RegExp(
+        `(import\\s*{[^}]*)\\b${wrongExport}\\b([^}]*}\\s*from\\s*['"]lucide-react['"])`,
+        'g'
+      );
+
+      let newCode = code.replace(importRegex, (match, before, after) => {
+        // Check if fallback is already imported
+        if (before.includes(LUCIDE_FALLBACK_ICON)) {
+          // Just remove the non-existent icon
+          return before.replace(new RegExp(`,?\\s*${wrongExport}\\s*,?`), '') + after;
+        }
+        // Replace with fallback
+        return before.replace(wrongExport, LUCIDE_FALLBACK_ICON) + after;
+      });
+
+      // Also replace usages in JSX
+      const usageRegex = new RegExp(`<${wrongExport}(\\s|\\/)`, 'g');
+      newCode = newCode.replace(usageRegex, `<${LUCIDE_FALLBACK_ICON}$1`);
+
+      // Replace closing tags if any
+      const closingRegex = new RegExp(`</${wrongExport}>`, 'g');
+      newCode = newCode.replace(closingRegex, `</${LUCIDE_FALLBACK_ICON}>`);
+
+      if (newCode !== code) {
+        return {
+          success: true,
+          fixedFiles: { 'current': newCode },
+          description: `Replaced non-existent icon "${wrongExport}" with "${LUCIDE_FALLBACK_ICON}"`,
+          fixType: 'missing-export',
+        };
+      }
+    }
+  }
+
+  // Check for known corrections in other libraries
+  if (libraryName && EXPORT_CORRECTIONS[libraryName]?.[wrongExport]) {
+    const correctExport = EXPORT_CORRECTIONS[libraryName][wrongExport];
+
+    // Replace in imports
+    const importRegex = new RegExp(
+      `(import\\s*{[^}]*)\\b${wrongExport}\\b([^}]*}\\s*from\\s*['"]${libraryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"])`,
+      'g'
+    );
+
+    let newCode = code.replace(importRegex, `$1${correctExport}$2`);
+
+    // Replace usages
+    const usageRegex = new RegExp(`\\b${wrongExport}\\b`, 'g');
+    newCode = newCode.replace(usageRegex, correctExport);
+
+    if (newCode !== code) {
+      return {
+        success: true,
+        fixedFiles: { 'current': newCode },
+        description: `Fixed export: "${wrongExport}" → "${correctExport}"`,
+        fixType: 'missing-export',
+      };
+    }
+  }
+
+  return noFix();
+}
+
+function tryFixMissingArrow(errorMessage: string, code: string): LocalFixResult {
+  const errorLower = errorMessage.toLowerCase();
+
+  // Check for syntax errors that might indicate missing arrow
+  if (
+    !errorLower.includes('unexpected token') &&
+    !errorLower.includes('expected') &&
+    !errorLower.includes('did not expect')
+  ) {
+    return noFix();
+  }
+
+  // Fix patterns like: .map(f { → .map(f => {
+  let newCode = code;
+  let fixed = false;
+
+  // Fix arrow function declaration missing arrow: (params): type { → (params): type => {
+  // Pattern: const foo = (x: type): returnType { → const foo = (x: type): returnType => {
+  newCode = newCode.replace(
+    /(\w+\s*=\s*\([^)]*\)\s*:\s*\w+(?:\[\])?)\s*(\{)/g,
+    (match, signature, brace) => {
+      if (match.includes('=>')) return match;
+      fixed = true;
+      return `${signature} =>${brace}`;
+    }
+  );
+
+  // Fix single param pattern: .map(f { → .map(f => {
+  newCode = newCode.replace(
+    /(\.\w+\s*\(\s*)(\w+)(\s*\{)/g,
+    (match, before, param, brace) => {
+      // Skip if it's already an arrow function or object destructuring in params
+      if (match.includes('=>')) return match;
+      fixed = true;
+      return `${before}${param} =>${brace}`;
+    }
+  );
+
+  // Fix multi-param pattern: .reduce((acc, val) { → .reduce((acc, val) => {
+  newCode = newCode.replace(
+    /(\.\w+\s*\(\s*\([^)]+\))(\s*\{)/g,
+    (match, params, brace) => {
+      if (match.includes('=>')) return match;
+      fixed = true;
+      return `${params} =>${brace}`;
+    }
+  );
+
+  // Fix destructured param: .map(({ id }) { → .map(({ id }) => {
+  newCode = newCode.replace(
+    /(\.\w+\s*\(\s*)(\{[^}]+\})(\s*\{)/g,
+    (match, before, destructure, brace) => {
+      if (match.includes('=>')) return match;
+      // Make sure it's a destructured param, not an object literal
+      if (/^\.\w+\s*\(\s*\{/.test(match)) {
+        fixed = true;
+        return `${before}(${destructure}) =>${brace}`;
+      }
+      return match;
+    }
+  );
+
+  if (fixed && newCode !== code) {
+    return {
+      success: true,
+      fixedFiles: { 'current': newCode },
+      description: 'Fixed missing arrow (=>) in arrow function',
+      fixType: 'syntax',
+    };
   }
 
   return noFix();

@@ -17,6 +17,7 @@ import { FileSystem, LogEntry } from '../../types';
 export type ErrorType =
   | 'bare-specifier'
   | 'module-not-found'
+  | 'missing-export'
   | 'undefined-variable'
   | 'type-error'
   | 'syntax-error'
@@ -58,6 +59,8 @@ export interface ParsedError {
   expectedType?: string;
   actualType?: string;
   missingProperty?: string;
+  correctExport?: string; // For missing-export errors
+  libraryName?: string; // The library the export should come from
   relatedFiles: string[];
   suggestedFix?: string;
   isAutoFixable: boolean;
@@ -88,6 +91,7 @@ export type FixStrategy =
 export type LocalFixType =
   | 'bare-specifier'
   | 'missing-import'
+  | 'missing-export'
   | 'syntax'
   | 'undefined-var'
   | 'jsx'

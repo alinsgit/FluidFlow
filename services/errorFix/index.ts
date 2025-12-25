@@ -105,6 +105,31 @@ export {
 } from './analytics';
 
 // ============================================================================
+// Debug Logger
+// ============================================================================
+export {
+  autoFixLogger,
+  type LogLevel,
+  type LogCategory,
+  type AutoFixLogEntry,
+  type AIRequestLog,
+  type AIResponseLog,
+} from './debugLogger';
+
+// ============================================================================
+// Prompts
+// ============================================================================
+export {
+  buildPromptForStrategy,
+  buildQuickFixPrompt,
+  buildFullContextPrompt,
+  buildIterativePrompt,
+  buildRegenerationPrompt,
+  AUTOFIX_SYSTEM_INSTRUCTION,
+  type PromptContext,
+} from './prompts';
+
+// ============================================================================
 // Backward Compatibility Aliases
 // ============================================================================
 

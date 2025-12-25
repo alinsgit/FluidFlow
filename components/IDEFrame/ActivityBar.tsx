@@ -23,12 +23,15 @@ import {
 } from 'lucide-react';
 import { useUI } from '../../contexts/UIContext';
 import { useStatusBar } from '../../contexts/StatusBarContext';
+import { ActivityBarTooltip } from './ActivityBarTooltip';
 import type { TabType } from '../../types';
 
 interface ActivityBarItem {
   id: string;
   icon: React.ElementType;
   label: string;
+  description?: string;
+  shortcut?: string;
   tab?: TabType;
   action?: 'chat' | 'settings';
   badge?: number;
@@ -43,41 +46,41 @@ interface ActivityBarProps {
 
 // Development Core - Main workflow
 const DEV_ITEMS: ActivityBarItem[] = [
-  { id: 'preview', icon: Eye, label: 'Preview', tab: 'preview' },
-  { id: 'code', icon: Code2, label: 'Code Editor', tab: 'code' },
-  { id: 'run', icon: Play, label: 'Run Dev Server', tab: 'run', hasIndicator: true },
+  { id: 'preview', icon: Eye, label: 'Preview', description: 'Live preview of your app with device simulation', tab: 'preview' },
+  { id: 'code', icon: Code2, label: 'Code Editor', description: 'Edit source files with Monaco editor', shortcut: 'Ctrl+E', tab: 'code' },
+  { id: 'run', icon: Play, label: 'Dev Server', description: 'Run your app in WebContainer environment', tab: 'run', hasIndicator: true },
 ];
 
 // Project & Version Control
 const PROJECT_ITEMS: ActivityBarItem[] = [
-  { id: 'projects', icon: FolderOpen, label: 'Projects', tab: 'projects' },
-  { id: 'git', icon: GitBranch, label: 'Git', tab: 'git' },
-  { id: 'activity', icon: Activity, label: 'Activity Log', tab: 'activity' },
+  { id: 'projects', icon: FolderOpen, label: 'Projects', description: 'Manage and switch between projects', tab: 'projects' },
+  { id: 'git', icon: GitBranch, label: 'Git', description: 'Version control, commits, and GitHub sync', tab: 'git' },
+  { id: 'activity', icon: Activity, label: 'Activity Log', description: 'View all AI interactions and changes', tab: 'activity' },
 ];
 
 // Code Analysis & Quality
 const ANALYSIS_ITEMS: ActivityBarItem[] = [
-  { id: 'codemap', icon: Map, label: 'CodeMap', tab: 'codemap' },
-  { id: 'quality', icon: ShieldCheck, label: 'Code Quality', tab: 'quality' },
-  { id: 'errorfix', icon: Wrench, label: 'Error Fix', tab: 'errorfix' },
+  { id: 'codemap', icon: Map, label: 'CodeMap', description: 'Visual map of components and dependencies', tab: 'codemap' },
+  { id: 'quality', icon: ShieldCheck, label: 'Code Quality', description: 'Analyze code for issues and improvements', tab: 'quality' },
+  { id: 'errorfix', icon: Wrench, label: 'Error Fix', description: 'AI-powered automatic error fixing agent', tab: 'errorfix' },
 ];
 
 // Data & Documentation
 const DATA_ITEMS: ActivityBarItem[] = [
-  { id: 'database', icon: Database, label: 'DB Studio', tab: 'database' },
-  { id: 'docs', icon: FileText, label: 'Documentation', tab: 'docs' },
+  { id: 'database', icon: Database, label: 'DB Studio', description: 'Manage SQLite database and run queries', tab: 'database' },
+  { id: 'docs', icon: FileText, label: 'Documentation', description: 'View and generate project documentation', tab: 'docs' },
 ];
 
 // Debug & Configuration
 const DEBUG_ITEMS: ActivityBarItem[] = [
-  { id: 'env', icon: Lock, label: 'Environment', tab: 'env' },
-  { id: 'debug', icon: Bug, label: 'Debug', tab: 'debug' },
+  { id: 'env', icon: Lock, label: 'Environment', description: 'Manage environment variables and secrets', tab: 'env' },
+  { id: 'debug', icon: Bug, label: 'Debug', description: 'Debug panel with console and network logs', tab: 'debug' },
 ];
 
 // Bottom settings
 const BOTTOM_ITEMS: ActivityBarItem[] = [
-  { id: 'ai', icon: Bot, label: 'AI Settings', action: 'settings' },
-  { id: 'settings', icon: Settings, label: 'Settings', action: 'settings' },
+  { id: 'ai', icon: Bot, label: 'AI Settings', description: 'Configure AI providers and models', action: 'settings' },
+  { id: 'settings', icon: Settings, label: 'Settings', description: 'App preferences and configuration', shortcut: 'Ctrl+,', action: 'settings' },
 ];
 
 export const ActivityBar = memo(function ActivityBar({
@@ -108,35 +111,40 @@ export const ActivityBar = memo(function ActivityBar({
   };
 
   const renderItem = (item: ActivityBarItem) => (
-    <button
+    <ActivityBarTooltip
       key={item.id}
-      onClick={() => handleClick(item)}
-      className={`relative p-2 rounded-md transition-all ${
-        isActive(item)
-          ? 'text-white bg-white/10'
-          : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-      } ${item.hasIndicator && isRunnerActive ? 'text-emerald-400' : ''}`}
-      title={item.label}
+      label={item.label}
+      description={item.description}
+      shortcut={item.shortcut}
     >
-      <item.icon className="w-[18px] h-[18px]" />
+      <button
+        onClick={() => handleClick(item)}
+        className={`relative p-2 rounded-md transition-all ${
+          isActive(item)
+            ? 'text-white bg-white/10'
+            : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+        } ${item.hasIndicator && isRunnerActive ? 'text-emerald-400' : ''}`}
+      >
+        <item.icon className="w-[18px] h-[18px]" />
 
-      {/* Active indicator */}
-      {isActive(item) && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-r" />
-      )}
+        {/* Active indicator */}
+        {isActive(item) && (
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-r" />
+        )}
 
-      {/* Runner indicator */}
-      {item.hasIndicator && isRunnerActive && (
-        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-      )}
+        {/* Runner indicator */}
+        {item.hasIndicator && isRunnerActive && (
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+        )}
 
-      {/* Badge for unread messages */}
-      {item.id === 'chat' && chatUnread > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-          {chatUnread > 9 ? '9+' : chatUnread}
-        </span>
-      )}
-    </button>
+        {/* Badge for unread messages */}
+        {item.id === 'chat' && chatUnread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+            {chatUnread > 9 ? '9+' : chatUnread}
+          </span>
+        )}
+      </button>
+    </ActivityBarTooltip>
   );
 
   const renderDivider = () => (
@@ -146,26 +154,31 @@ export const ActivityBar = memo(function ActivityBar({
   return (
     <aside className="w-11 bg-slate-950 border-r border-white/10 flex flex-col items-center py-2 shrink-0">
       {/* Chat - Toggle left panel */}
-      <button
-        onClick={onChatClick}
-        className={`relative p-2 rounded-md transition-all mb-1 ${
-          leftPanelVisible
-            ? 'text-white bg-white/10'
-            : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-        }`}
-        title={leftPanelVisible ? 'Hide Chat Panel' : 'Show Chat Panel'}
+      <ActivityBarTooltip
+        label="Chat"
+        description={leftPanelVisible ? 'Hide the AI chat panel' : 'Open AI chat to describe your app'}
+        shortcut="Ctrl+B"
       >
-        <MessageSquare className="w-[18px] h-[18px]" />
-        {/* Active indicator */}
-        {leftPanelVisible && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-r" />
-        )}
-        {chatUnread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-            {chatUnread > 9 ? '9+' : chatUnread}
-          </span>
-        )}
-      </button>
+        <button
+          onClick={onChatClick}
+          className={`relative p-2 rounded-md transition-all mb-1 ${
+            leftPanelVisible
+              ? 'text-white bg-white/10'
+              : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <MessageSquare className="w-[18px] h-[18px]" />
+          {/* Active indicator */}
+          {leftPanelVisible && (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-r" />
+          )}
+          {chatUnread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+              {chatUnread > 9 ? '9+' : chatUnread}
+            </span>
+          )}
+        </button>
+      </ActivityBarTooltip>
 
       {renderDivider()}
 
@@ -208,14 +221,19 @@ export const ActivityBar = memo(function ActivityBar({
       {/* Bottom items */}
       <div className="flex flex-col items-center gap-0.5">
         {BOTTOM_ITEMS.map((item) => (
-          <button
+          <ActivityBarTooltip
             key={item.id}
-            onClick={() => handleClick(item)}
-            className="p-2 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
-            title={item.label}
+            label={item.label}
+            description={item.description}
+            shortcut={item.shortcut}
           >
-            <item.icon className="w-[18px] h-[18px]" />
-          </button>
+            <button
+              onClick={() => handleClick(item)}
+              className="p-2 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+            >
+              <item.icon className="w-[18px] h-[18px]" />
+            </button>
+          </ActivityBarTooltip>
         ))}
       </div>
     </aside>

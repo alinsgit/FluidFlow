@@ -20,6 +20,7 @@ import {
 } from './providerStorage';
 import { settingsApi } from '../projectApi';
 import { debugLog } from '../../hooks/useDebugStore';
+import { requestPromptConfirmation, type PromptDetails } from '../../contexts/PromptConfirmationContext';
 
 /**
  * ProviderManager class for managing AI provider state.
@@ -304,6 +305,26 @@ export class ProviderManager {
     const config = this.getActiveConfig();
     const model = modelId || config?.defaultModel || '';
     const category = request.debugCategory || 'generation';
+
+    // Request user confirmation before sending (if enabled)
+    const confirmationDetails: PromptDetails = {
+      prompt: request.prompt,
+      systemInstruction: request.systemInstruction,
+      model,
+      provider: config?.name,
+      category,
+      estimatedTokens: Math.ceil((request.prompt.length + (request.systemInstruction?.length || 0)) / 4),
+      attachments: request.images?.map((img) => ({
+        type: img.mimeType,
+        size: Math.ceil(img.data.length * 0.75),
+      })),
+    };
+
+    const confirmed = await requestPromptConfirmation(confirmationDetails);
+    if (!confirmed) {
+      throw new Error('Request cancelled by user');
+    }
+
     const startTime = Date.now();
 
     // Log request
@@ -369,6 +390,26 @@ export class ProviderManager {
     const config = this.getActiveConfig();
     const model = modelId || config?.defaultModel || '';
     const category = request.debugCategory || 'generation';
+
+    // Request user confirmation before sending (if enabled)
+    const confirmationDetails: PromptDetails = {
+      prompt: request.prompt,
+      systemInstruction: request.systemInstruction,
+      model,
+      provider: config?.name,
+      category,
+      estimatedTokens: Math.ceil((request.prompt.length + (request.systemInstruction?.length || 0)) / 4),
+      attachments: request.images?.map((img) => ({
+        type: img.mimeType,
+        size: Math.ceil(img.data.length * 0.75),
+      })),
+    };
+
+    const confirmed = await requestPromptConfirmation(confirmationDetails);
+    if (!confirmed) {
+      throw new Error('Request cancelled by user');
+    }
+
     const startTime = Date.now();
 
     // Log request
