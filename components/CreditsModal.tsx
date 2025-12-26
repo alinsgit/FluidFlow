@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X as XIcon, Github, Mail, Star, ExternalLink, Heart, Sparkles, Code, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { APP_VERSION } from '../services/version';
 
 interface Project {
   id: string;
@@ -362,7 +363,7 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
             {/* Footer - Simple */}
             <div className="text-center text-xs text-white/50">
               <p className="flex items-center justify-center gap-3">
-                <span>v1.0.0</span>
+                <span>v{APP_VERSION}</span>
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   Made with
