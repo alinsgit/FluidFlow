@@ -18,11 +18,63 @@ import { FileSystem } from '../types';
 // ============================================================================
 
 export interface StyleGuide {
-  colors: Record<string, string>;
-  typography: string;
-  patterns: string[];
-  conventions: string[];
-  components: string[];
+  // Color System
+  colors: {
+    primary?: string;
+    secondary?: string;
+    accent?: string;
+    background?: string;
+    surface?: string;
+    text?: string;
+    textMuted?: string;
+    border?: string;
+    success?: string;
+    warning?: string;
+    error?: string;
+  };
+
+  // Typography
+  typography: {
+    fontFamily: string;           // e.g., "font-sans", "Inter, sans-serif"
+    headingStyle: string;         // e.g., "font-bold text-xl"
+    bodyStyle: string;            // e.g., "text-sm text-slate-300"
+    fontSizes: string[];          // e.g., ["text-xs", "text-sm", "text-base", "text-lg"]
+  };
+
+  // Spacing & Layout
+  spacing: {
+    containerPadding: string;     // e.g., "p-4", "px-6 py-4"
+    elementGap: string;           // e.g., "gap-2", "gap-4"
+    sectionSpacing: string;       // e.g., "space-y-6", "mb-8"
+  };
+
+  // Border & Radius
+  borders: {
+    radius: string;               // e.g., "rounded-lg", "rounded-xl", "rounded-2xl"
+    width: string;                // e.g., "border", "border-2"
+    style: string;                // e.g., "border-white/10", "border-slate-700"
+  };
+
+  // Effects
+  effects: {
+    shadow: string;               // e.g., "shadow-lg", "shadow-xl shadow-black/20"
+    blur: string;                 // e.g., "backdrop-blur-sm", "backdrop-blur-xl"
+    opacity: string;              // e.g., "bg-opacity-50", "bg-white/10"
+  };
+
+  // Interactive Elements
+  buttons: {
+    primary: string;              // Full class string for primary button
+    secondary: string;            // Full class string for secondary button
+    icon: string;                 // Icon button style
+  };
+
+  // Components Patterns
+  patterns: string[];             // Visual patterns like "Glass morphism", "Dark theme"
+  conventions: string[];          // Code patterns
+  components: string[];           // Reusable component names
+
+  // Summary
   summary: string;
 }
 
@@ -82,28 +134,62 @@ export function deleteProjectContext(projectId: string): void {
 // System Instructions for Generation
 // ============================================================================
 
-const STYLE_GUIDE_SYSTEM = `You are analyzing a React/TypeScript codebase to extract design patterns.
+const STYLE_GUIDE_SYSTEM = `You are analyzing a React/TypeScript codebase to extract a comprehensive design system.
 
-Respond with ONLY a valid JSON object:
+Respond with ONLY a valid JSON object matching this exact structure:
 {
   "colors": {
-    "primary": "#hex or tailwind class",
-    "secondary": "#hex or tailwind class",
-    "background": "#hex or tailwind class",
-    "text": "#hex or tailwind class"
+    "primary": "primary color (hex or tailwind, e.g., '#3b82f6' or 'blue-500')",
+    "secondary": "secondary color",
+    "accent": "accent/highlight color",
+    "background": "main background (e.g., 'slate-900', '#0f172a')",
+    "surface": "card/panel background (e.g., 'slate-800/50')",
+    "text": "main text color (e.g., 'white', 'slate-100')",
+    "textMuted": "secondary text (e.g., 'slate-400', 'white/60')",
+    "border": "border color (e.g., 'white/10', 'slate-700')",
+    "success": "success color (e.g., 'green-500')",
+    "warning": "warning color (e.g., 'amber-500')",
+    "error": "error color (e.g., 'red-500')"
   },
-  "typography": "Font family and text sizing approach",
-  "patterns": ["3-5 key visual patterns, e.g., 'Glass morphism', 'Rounded corners'"],
-  "conventions": ["3-5 code patterns, e.g., 'React.FC with interfaces'"],
-  "components": ["List of reusable components found"],
-  "summary": "2-3 sentence design summary"
+  "typography": {
+    "fontFamily": "font family (e.g., 'font-sans', 'Inter, system-ui')",
+    "headingStyle": "heading classes (e.g., 'font-semibold text-lg text-white')",
+    "bodyStyle": "body text classes (e.g., 'text-sm text-slate-300')",
+    "fontSizes": ["text sizes used, e.g., 'text-xs', 'text-sm', 'text-base'"]
+  },
+  "spacing": {
+    "containerPadding": "container padding (e.g., 'p-4', 'px-6 py-4')",
+    "elementGap": "common gap between elements (e.g., 'gap-2', 'gap-4')",
+    "sectionSpacing": "spacing between sections (e.g., 'space-y-4', 'mb-6')"
+  },
+  "borders": {
+    "radius": "border radius (e.g., 'rounded-lg', 'rounded-xl', 'rounded-2xl')",
+    "width": "border width (e.g., 'border', 'border-2')",
+    "style": "border style classes (e.g., 'border-white/10', 'border border-slate-700')"
+  },
+  "effects": {
+    "shadow": "shadow style (e.g., 'shadow-lg', 'shadow-xl shadow-black/50')",
+    "blur": "backdrop blur (e.g., 'backdrop-blur-sm', 'backdrop-blur-xl')",
+    "opacity": "opacity patterns (e.g., 'bg-white/10', 'bg-slate-800/50')"
+  },
+  "buttons": {
+    "primary": "full primary button classes (e.g., 'px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg')",
+    "secondary": "full secondary button classes",
+    "icon": "icon button classes (e.g., 'p-2 hover:bg-white/10 rounded-lg')"
+  },
+  "patterns": ["3-5 visual patterns, e.g., 'Glass morphism cards', 'Gradient accents'"],
+  "conventions": ["3-5 code patterns, e.g., 'React.FC with interfaces', 'Tailwind for all styling'"],
+  "components": ["List of reusable components found in the codebase"],
+  "summary": "2-3 sentence design summary describing the overall visual style"
 }
 
 RULES:
-- Extract ACTUAL values from code, don't invent
-- Focus on Tailwind classes and hex colors actually used
-- Keep arrays to 3-5 items max
-- JSON only, no markdown`;
+- Extract ACTUAL values from the code - do NOT invent or guess
+- Use exact Tailwind classes found in the code
+- For colors, prefer Tailwind classes (e.g., "blue-500") over hex when Tailwind is used
+- If a value is not found, use empty string "" or empty array []
+- Keep arrays to 3-5 items max for conciseness
+- JSON only, no markdown or explanation`;
 
 const PROJECT_SUMMARY_SYSTEM = `You are analyzing a React/TypeScript codebase to understand its purpose and architecture.
 
@@ -218,8 +304,45 @@ export async function generateStyleGuide(
   onProgress?.('Style guide complete!');
 
   return {
-    colors: parsed.colors || {},
-    typography: parsed.typography || '',
+    colors: {
+      primary: parsed.colors?.primary || '',
+      secondary: parsed.colors?.secondary || '',
+      accent: parsed.colors?.accent || '',
+      background: parsed.colors?.background || '',
+      surface: parsed.colors?.surface || '',
+      text: parsed.colors?.text || '',
+      textMuted: parsed.colors?.textMuted || '',
+      border: parsed.colors?.border || '',
+      success: parsed.colors?.success || '',
+      warning: parsed.colors?.warning || '',
+      error: parsed.colors?.error || '',
+    },
+    typography: {
+      fontFamily: parsed.typography?.fontFamily || '',
+      headingStyle: parsed.typography?.headingStyle || '',
+      bodyStyle: parsed.typography?.bodyStyle || '',
+      fontSizes: parsed.typography?.fontSizes || [],
+    },
+    spacing: {
+      containerPadding: parsed.spacing?.containerPadding || '',
+      elementGap: parsed.spacing?.elementGap || '',
+      sectionSpacing: parsed.spacing?.sectionSpacing || '',
+    },
+    borders: {
+      radius: parsed.borders?.radius || '',
+      width: parsed.borders?.width || '',
+      style: parsed.borders?.style || '',
+    },
+    effects: {
+      shadow: parsed.effects?.shadow || '',
+      blur: parsed.effects?.blur || '',
+      opacity: parsed.effects?.opacity || '',
+    },
+    buttons: {
+      primary: parsed.buttons?.primary || '',
+      secondary: parsed.buttons?.secondary || '',
+      icon: parsed.buttons?.icon || '',
+    },
     patterns: parsed.patterns || [],
     conventions: parsed.conventions || [],
     components: parsed.components || [],
@@ -302,14 +425,51 @@ export async function generateProjectContext(
 // ============================================================================
 
 function formatContextForPrompt(style: StyleGuide, project: ProjectSummary): string {
-  const colorsList = Object.entries(style.colors)
+  const keyFilesList = Object.entries(project.keyFiles)
+    .map(([path, desc]) => `  ${path}: ${desc}`)
+    .join('\n');
+
+  // Build color section
+  const colorEntries = Object.entries(style.colors)
     .filter(([_, v]) => v)
     .map(([k, v]) => `  ${k}: ${v}`)
     .join('\n');
 
-  const keyFilesList = Object.entries(project.keyFiles)
-    .map(([path, desc]) => `  ${path}: ${desc}`)
-    .join('\n');
+  // Build typography section
+  const typographySection = [
+    style.typography.fontFamily && `Font: ${style.typography.fontFamily}`,
+    style.typography.headingStyle && `Headings: ${style.typography.headingStyle}`,
+    style.typography.bodyStyle && `Body: ${style.typography.bodyStyle}`,
+    style.typography.fontSizes.length && `Sizes: ${style.typography.fontSizes.join(', ')}`,
+  ].filter(Boolean).join('\n  ');
+
+  // Build spacing section
+  const spacingSection = [
+    style.spacing.containerPadding && `Padding: ${style.spacing.containerPadding}`,
+    style.spacing.elementGap && `Gap: ${style.spacing.elementGap}`,
+    style.spacing.sectionSpacing && `Sections: ${style.spacing.sectionSpacing}`,
+  ].filter(Boolean).join(', ');
+
+  // Build borders section
+  const bordersSection = [
+    style.borders.radius && `Radius: ${style.borders.radius}`,
+    style.borders.width && `Width: ${style.borders.width}`,
+    style.borders.style && `Style: ${style.borders.style}`,
+  ].filter(Boolean).join(', ');
+
+  // Build effects section
+  const effectsSection = [
+    style.effects.shadow && `Shadow: ${style.effects.shadow}`,
+    style.effects.blur && `Blur: ${style.effects.blur}`,
+    style.effects.opacity && `Opacity: ${style.effects.opacity}`,
+  ].filter(Boolean).join(', ');
+
+  // Build buttons section
+  const buttonsSection = [
+    style.buttons.primary && `Primary: ${style.buttons.primary}`,
+    style.buttons.secondary && `Secondary: ${style.buttons.secondary}`,
+    style.buttons.icon && `Icon: ${style.buttons.icon}`,
+  ].filter(Boolean).join('\n  ');
 
   return `
 ## PROJECT CONTEXT
@@ -328,18 +488,31 @@ ${keyFilesList}
 ${style.summary}
 
 **Colors:**
-${colorsList}
+${colorEntries}
 
-**Visual Patterns:**
-${style.patterns.map(p => `- ${p}`).join('\n')}
+**Typography:**
+  ${typographySection}
 
-**Code Conventions:**
-${style.conventions.map(c => `- ${c}`).join('\n')}
+**Spacing:** ${spacingSection}
+
+**Borders:** ${bordersSection}
+
+**Effects:** ${effectsSection}
+
+**Buttons:**
+  ${buttonsSection}
+
+**Visual Patterns:** ${style.patterns.join(', ')}
+
+**Code Conventions:** ${style.conventions.join(', ')}
 
 **Key Components:** ${style.components.join(', ')}
 
 ---
-**IMPORTANT:** Follow this project's existing patterns, colors, and conventions exactly. Maintain visual and code consistency.
+**CRITICAL:** You MUST follow this project's design system exactly:
+- Use the exact colors, border-radius, shadows, and spacing defined above
+- Match button styles, typography, and visual patterns
+- Maintain consistency with existing components
 `.trim();
 }
 
@@ -363,13 +536,20 @@ export function getStyleGuide(projectId: string): StyleGuide | null {
 
 export function formatStyleGuideForPrompt(style: StyleGuide): string {
   // Minimal format for backward compatibility
+  const colors = Object.entries(style.colors)
+    .filter(([_, v]) => v)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
+
   return `
 ## STYLE GUIDE
 ${style.summary}
 
-Colors: ${Object.entries(style.colors).map(([k, v]) => `${k}=${v}`).join(', ')}
+Colors: ${colors}
+Typography: ${style.typography.fontFamily}, ${style.typography.headingStyle}
+Borders: ${style.borders.radius}, ${style.borders.style}
+Effects: ${style.effects.shadow}, ${style.effects.blur}
 Patterns: ${style.patterns.join(', ')}
-Conventions: ${style.conventions.join(', ')}
 Components: ${style.components.join(', ')}
 `.trim();
 }

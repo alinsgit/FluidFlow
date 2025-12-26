@@ -360,31 +360,66 @@ export const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
                   </div>
 
                   {/* Style Guide Preview */}
-                  <div className="bg-slate-800/50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-purple-400 mb-2">
+                  <div className="bg-slate-800/50 rounded-lg p-3 space-y-3">
+                    <div className="flex items-center gap-2 text-purple-400">
                       <Palette className="w-4 h-4" />
                       <span className="text-sm font-medium">Style Guide</span>
                     </div>
-                    <p className="text-xs text-slate-300 mb-2">{projectContext.styleGuide.summary}</p>
-                    {Object.keys(projectContext.styleGuide.colors).length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {Object.entries(projectContext.styleGuide.colors)
-                          .filter(([_, v]) => v)
-                          .slice(0, 4)
-                          .map(([name, value]) => (
-                            <span
-                              key={name}
-                              className="flex items-center gap-1 px-1.5 py-0.5 bg-black/30 rounded text-[10px]"
-                            >
+                    <p className="text-xs text-slate-300">{projectContext.styleGuide.summary}</p>
+
+                    {/* Colors */}
+                    {Object.values(projectContext.styleGuide.colors).some(v => v) && (
+                      <div>
+                        <div className="text-[10px] text-slate-500 mb-1">Colors</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(projectContext.styleGuide.colors)
+                            .filter(([_, v]) => v)
+                            .slice(0, 6)
+                            .map(([name, value]) => (
                               <span
-                                className="w-2.5 h-2.5 rounded-full border border-white/20"
-                                style={{ backgroundColor: value?.startsWith('#') ? value : undefined }}
-                              />
-                              <span className="text-slate-400">{name}</span>
-                            </span>
-                          ))}
+                                key={name}
+                                className="flex items-center gap-1 px-1.5 py-0.5 bg-black/30 rounded text-[10px]"
+                              >
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full border border-white/20"
+                                  style={{ backgroundColor: value?.startsWith('#') ? value : undefined }}
+                                />
+                                <span className="text-slate-400">{name}</span>
+                              </span>
+                            ))}
+                        </div>
                       </div>
                     )}
+
+                    {/* Typography & Borders */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      {projectContext.styleGuide.typography.fontFamily && (
+                        <div>
+                          <span className="text-slate-500">Font:</span>
+                          <span className="text-slate-300 ml-1">{projectContext.styleGuide.typography.fontFamily}</span>
+                        </div>
+                      )}
+                      {projectContext.styleGuide.borders.radius && (
+                        <div>
+                          <span className="text-slate-500">Radius:</span>
+                          <span className="text-slate-300 ml-1">{projectContext.styleGuide.borders.radius}</span>
+                        </div>
+                      )}
+                      {projectContext.styleGuide.effects.shadow && (
+                        <div>
+                          <span className="text-slate-500">Shadow:</span>
+                          <span className="text-slate-300 ml-1">{projectContext.styleGuide.effects.shadow}</span>
+                        </div>
+                      )}
+                      {projectContext.styleGuide.spacing.elementGap && (
+                        <div>
+                          <span className="text-slate-500">Gap:</span>
+                          <span className="text-slate-300 ml-1">{projectContext.styleGuide.spacing.elementGap}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Patterns */}
                     {projectContext.styleGuide.patterns.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {projectContext.styleGuide.patterns.slice(0, 3).map((pattern, i) => (
