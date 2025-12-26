@@ -270,14 +270,14 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
                 {/* Typography, Borders, Effects Grid */}
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   {/* Typography */}
-                  {context.styleGuide.typography.fontFamily && (
+                  {context.styleGuide.typography?.fontFamily && (
                     <div className="p-2 bg-black/20 rounded">
                       <div className="text-xs text-white/50 mb-1">Typography</div>
                       <div className="text-xs text-white/70 space-y-0.5">
-                        {context.styleGuide.typography.fontFamily && (
+                        {context.styleGuide.typography?.fontFamily && (
                           <div>Font: {context.styleGuide.typography.fontFamily}</div>
                         )}
-                        {context.styleGuide.typography.headingStyle && (
+                        {context.styleGuide.typography?.headingStyle && (
                           <div className="truncate" title={context.styleGuide.typography.headingStyle}>
                             H: {context.styleGuide.typography.headingStyle}
                           </div>
@@ -287,14 +287,14 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
                   )}
 
                   {/* Borders */}
-                  {context.styleGuide.borders.radius && (
+                  {context.styleGuide.borders?.radius && (
                     <div className="p-2 bg-black/20 rounded">
                       <div className="text-xs text-white/50 mb-1">Borders</div>
                       <div className="text-xs text-white/70 space-y-0.5">
-                        {context.styleGuide.borders.radius && (
+                        {context.styleGuide.borders?.radius && (
                           <div>Radius: {context.styleGuide.borders.radius}</div>
                         )}
-                        {context.styleGuide.borders.style && (
+                        {context.styleGuide.borders?.style && (
                           <div className="truncate" title={context.styleGuide.borders.style}>
                             Style: {context.styleGuide.borders.style}
                           </div>
@@ -304,16 +304,16 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
                   )}
 
                   {/* Effects */}
-                  {(context.styleGuide.effects.shadow || context.styleGuide.effects.blur) && (
+                  {(context.styleGuide.effects?.shadow || context.styleGuide.effects?.blur) && (
                     <div className="p-2 bg-black/20 rounded">
                       <div className="text-xs text-white/50 mb-1">Effects</div>
                       <div className="text-xs text-white/70 space-y-0.5">
-                        {context.styleGuide.effects.shadow && (
+                        {context.styleGuide.effects?.shadow && (
                           <div className="truncate" title={context.styleGuide.effects.shadow}>
                             Shadow: {context.styleGuide.effects.shadow}
                           </div>
                         )}
-                        {context.styleGuide.effects.blur && (
+                        {context.styleGuide.effects?.blur && (
                           <div className="truncate" title={context.styleGuide.effects.blur}>
                             Blur: {context.styleGuide.effects.blur}
                           </div>
@@ -324,21 +324,21 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
                 </div>
 
                 {/* Spacing */}
-                {(context.styleGuide.spacing.containerPadding || context.styleGuide.spacing.elementGap) && (
+                {(context.styleGuide.spacing?.containerPadding || context.styleGuide.spacing?.elementGap) && (
                   <div className="mb-3">
                     <div className="text-xs text-white/50 mb-1">Spacing</div>
                     <div className="flex flex-wrap gap-2 text-xs">
-                      {context.styleGuide.spacing.containerPadding && (
+                      {context.styleGuide.spacing?.containerPadding && (
                         <span className="px-2 py-0.5 bg-black/30 rounded text-white/70">
                           Padding: {context.styleGuide.spacing.containerPadding}
                         </span>
                       )}
-                      {context.styleGuide.spacing.elementGap && (
+                      {context.styleGuide.spacing?.elementGap && (
                         <span className="px-2 py-0.5 bg-black/30 rounded text-white/70">
                           Gap: {context.styleGuide.spacing.elementGap}
                         </span>
                       )}
-                      {context.styleGuide.spacing.sectionSpacing && (
+                      {context.styleGuide.spacing?.sectionSpacing && (
                         <span className="px-2 py-0.5 bg-black/30 rounded text-white/70">
                           Sections: {context.styleGuide.spacing.sectionSpacing}
                         </span>
@@ -348,7 +348,7 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
                 )}
 
                 {/* Patterns */}
-                {context.styleGuide.patterns.length > 0 && (
+                {context.styleGuide.patterns?.length > 0 && (
                   <div className="mb-3">
                     <div className="text-xs text-white/50 mb-1">Design Patterns</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -365,7 +365,7 @@ export const CodebaseSyncModal: React.FC<CodebaseSyncModalProps> = ({
                 )}
 
                 {/* Components */}
-                {context.styleGuide.components.length > 0 && (
+                {context.styleGuide.components?.length > 0 && (
                   <div>
                     <div className="text-xs text-white/50 mb-1">Components</div>
                     <div className="text-xs text-white/60">

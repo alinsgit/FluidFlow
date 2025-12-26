@@ -61,13 +61,18 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
 
   if (!stats) {
     // Initialize with default stats while loading
+    const aiContextTokens = projectContextInfo?.tokens || 0;
+    const initialPercent = Math.min(100, (aiContextTokens / modelContextSize) * 100);
     return (
       <div className={`flex items-center gap-3 px-3 py-2 rounded-lg ${className}`}>
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-slate-600 rounded-full w-0" />
+            <div
+              className="h-full bg-purple-500 rounded-full transition-all duration-300"
+              style={{ width: `${initialPercent}%` }}
+            />
           </div>
-          <span className="text-xs font-mono text-slate-500 whitespace-nowrap">0%</span>
+          <span className="text-xs font-mono text-slate-500 whitespace-nowrap">{Math.round(initialPercent)}%</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-500 font-mono whitespace-nowrap">
           <span className="flex items-center gap-1.5">
@@ -78,7 +83,7 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
           <span className="flex items-center gap-1.5">
             <Zap className="w-4 h-4" />
             <span className="text-slate-400">Tok:</span>
-            0k
+            {aiContextTokens > 0 ? `${Math.round(aiContextTokens / 1000)}k` : '0k'}
           </span>
         </div>
         <div className="w-4 h-4" /> {/* Spacer for clear button */}
@@ -86,10 +91,14 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
     );
   }
 
-  // Calculate usage and remaining context
-  const usagePercent = Math.min(100, (stats.tokens / modelContextSize) * 100);
-  const remainingTokens = getRemainingContext(stats.tokens);
-  const needsCompact = needsCompaction(stats.tokens);
+  // Calculate total tokens including AI Context
+  const aiContextTokens = projectContextInfo?.exists ? (projectContextInfo.tokens || 0) : 0;
+  const totalTokens = stats.tokens + aiContextTokens;
+
+  // Calculate usage and remaining context based on TOTAL tokens
+  const usagePercent = Math.min(100, (totalTokens / modelContextSize) * 100);
+  const remainingTokens = getRemainingContext(totalTokens);
+  const needsCompact = needsCompaction(totalTokens);
 
   // Warning levels based on remaining context (not usage percentage)
   // Warning when remaining is less than 2x minimum
@@ -109,22 +118,38 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
     return 'bg-emerald-500';
   };
 
+  // Build tooltip with breakdown
+  const tooltipParts = [
+    `${totalTokens.toLocaleString()} tokens used`,
+    aiContextTokens > 0 ? `(${aiContextTokens.toLocaleString()} AI Context + ${stats.tokens.toLocaleString()} chat)` : '',
+    `• ${remainingTokens.toLocaleString()} remaining`,
+    `• ${modelContextSize.toLocaleString()} total`
+  ].filter(Boolean).join(' ');
+
   return (
     <>
       {/* Compact Indicator */}
       <div
         className={`flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors ${className}`}
-        title={`${stats.tokens.toLocaleString()} tokens used • ${remainingTokens.toLocaleString()} remaining (min: ${minRemainingTokens.toLocaleString()}) • ${modelContextSize.toLocaleString()} total context - Click for details`}
+        title={tooltipParts}
       >
-        {/* Mini progress bar */}
+        {/* Mini progress bar - segmented for AI Context + Chat */}
         <button
           onClick={() => setShowModal(true)}
           className="flex items-center gap-2 flex-1 min-w-0"
         >
-          <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden flex">
+            {/* AI Context segment (purple) */}
+            {aiContextTokens > 0 && (
+              <div
+                className="h-full bg-purple-500 transition-all duration-300"
+                style={{ width: `${(aiContextTokens / modelContextSize) * 100}%` }}
+              />
+            )}
+            {/* Chat segment (color based on status) */}
             <div
-              className={`h-full ${getBgColor()} rounded-full transition-all duration-300`}
-              style={{ width: `${usagePercent}%` }}
+              className={`h-full ${getBgColor()} transition-all duration-300`}
+              style={{ width: `${(stats.tokens / modelContextSize) * 100}%` }}
             />
           </div>
 
@@ -166,7 +191,7 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({
           <span className="flex items-center gap-1.5">
             <Zap className="w-4 h-4" />
             <span className="text-slate-400">Tok:</span>
-            {Math.round(stats.tokens / 1000)}k
+            {Math.round(totalTokens / 1000)}k
           </span>
         </div>
 

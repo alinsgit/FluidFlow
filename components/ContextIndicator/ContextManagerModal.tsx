@@ -368,7 +368,7 @@ export const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
                     <p className="text-xs text-slate-300">{projectContext.styleGuide.summary}</p>
 
                     {/* Colors */}
-                    {Object.values(projectContext.styleGuide.colors).some(v => v) && (
+                    {projectContext.styleGuide.colors && Object.values(projectContext.styleGuide.colors).some(v => v) && (
                       <div>
                         <div className="text-[10px] text-slate-500 mb-1">Colors</div>
                         <div className="flex flex-wrap gap-1.5">
@@ -393,25 +393,25 @@ export const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
 
                     {/* Typography & Borders */}
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
-                      {projectContext.styleGuide.typography.fontFamily && (
+                      {projectContext.styleGuide.typography?.fontFamily && (
                         <div>
                           <span className="text-slate-500">Font:</span>
                           <span className="text-slate-300 ml-1">{projectContext.styleGuide.typography.fontFamily}</span>
                         </div>
                       )}
-                      {projectContext.styleGuide.borders.radius && (
+                      {projectContext.styleGuide.borders?.radius && (
                         <div>
                           <span className="text-slate-500">Radius:</span>
                           <span className="text-slate-300 ml-1">{projectContext.styleGuide.borders.radius}</span>
                         </div>
                       )}
-                      {projectContext.styleGuide.effects.shadow && (
+                      {projectContext.styleGuide.effects?.shadow && (
                         <div>
                           <span className="text-slate-500">Shadow:</span>
                           <span className="text-slate-300 ml-1">{projectContext.styleGuide.effects.shadow}</span>
                         </div>
                       )}
-                      {projectContext.styleGuide.spacing.elementGap && (
+                      {projectContext.styleGuide.spacing?.elementGap && (
                         <div>
                           <span className="text-slate-500">Gap:</span>
                           <span className="text-slate-300 ml-1">{projectContext.styleGuide.spacing.elementGap}</span>
@@ -420,7 +420,7 @@ export const ContextManagerModal: React.FC<ContextManagerModalProps> = ({
                     </div>
 
                     {/* Patterns */}
-                    {projectContext.styleGuide.patterns.length > 0 && (
+                    {projectContext.styleGuide.patterns?.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {projectContext.styleGuide.patterns.slice(0, 3).map((pattern, i) => (
                           <span key={i} className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px]">
