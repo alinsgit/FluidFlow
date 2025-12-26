@@ -39,6 +39,7 @@ import { IDEFrame } from './components/IDEFrame';
 import { PromptConfirmationProvider } from './contexts/PromptConfirmationContext';
 import { PromptConfirmationModal } from './components/PromptConfirmationModal';
 import { ProjectHealthModal } from './components/ProjectHealthModal';
+import type { SettingsCategory } from './components/MegaSettingsModal/types';
 
 // Lazy-loaded modals for better initial bundle size (~80KB savings)
 import {
@@ -60,7 +61,7 @@ export default function App() {
 
   // Centralized modal state management
   const modals = useModalManager();
-  const [megaSettingsInitialCategory, setMegaSettingsInitialCategory] = useState<'ai-providers' | 'ai-usage' | 'context-manager' | 'tech-stack' | 'projects' | 'editor' | 'appearance' | 'debug' | 'advanced'>('ai-providers');
+  const [megaSettingsInitialCategory, setMegaSettingsInitialCategory] = useState<SettingsCategory>('ai-providers');
 
   // Resizable panel divider (drag to resize, double-click to reset)
   const { panelWidth, isDragging, dividerProps } = usePanelResize();
@@ -231,7 +232,10 @@ export default function App() {
           onOpenGitTab={() => ui.setActiveTab('git')}
           onOpenProjectsTab={() => ui.setActiveTab('projects')}
           onOpenHistoryPanel={() => modals.toggle('history')}
-          onOpenCredits={() => modals.open('credits')}
+          onOpenCredits={() => {
+            setMegaSettingsInitialCategory('about');
+            modals.open('megaSettings');
+          }}
           onOpenHealthCheck={() => modals.open('projectHealth')}
           onOpenAIUsage={() => {
             setMegaSettingsInitialCategory('ai-usage');
