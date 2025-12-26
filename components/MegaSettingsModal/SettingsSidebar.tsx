@@ -90,9 +90,23 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onCategoryChange
 }) => {
   return (
-    <div className="w-56 bg-slate-950/50 border-r border-white/5 flex flex-col">
-      <div className="p-3 border-b border-white/5">
-        <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">Settings</h3>
+    <div
+      className="w-56 flex flex-col transition-colors"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--theme-background) 50%, transparent)',
+        borderRight: '1px solid var(--theme-border)'
+      }}
+    >
+      <div
+        className="p-3"
+        style={{ borderBottom: '1px solid var(--theme-border)' }}
+      >
+        <h3
+          className="text-xs font-medium uppercase tracking-wider"
+          style={{ color: 'var(--theme-text-muted)' }}
+        >
+          Settings
+        </h3>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {SETTINGS_CATEGORIES.map(category => {

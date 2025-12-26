@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppProvider } from './contexts/AppContext';
 import { UIProvider } from './contexts/UIContext';
 import { StatusBarProvider } from './contexts/StatusBarContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { DEFAULT_FILES } from './constants/defaultFiles';
 import './style.css';
 
@@ -22,13 +23,15 @@ root.render(
         // Here you could send the error to a service like Sentry
       }}
     >
-      <UIProvider>
-        <StatusBarProvider>
-          <AppProvider defaultFiles={DEFAULT_FILES}>
-            <App />
-          </AppProvider>
-        </StatusBarProvider>
-      </UIProvider>
+      <ThemeProvider>
+        <UIProvider>
+          <StatusBarProvider>
+            <AppProvider defaultFiles={DEFAULT_FILES}>
+              <App />
+            </AppProvider>
+          </StatusBarProvider>
+        </UIProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -631,7 +631,13 @@ Fix the error in src/App.tsx.`;
   };
 
   return (
-    <aside className="w-full h-full self-stretch min-h-0 flex flex-col bg-slate-900/60 backdrop-blur-xl border-r border-white/10 overflow-hidden relative z-20">
+    <aside
+      className="w-full h-full self-stretch min-h-0 flex flex-col backdrop-blur-xl overflow-hidden relative z-20 transition-colors duration-300"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--theme-surface) 60%, transparent)',
+        borderRight: '1px solid var(--theme-border)'
+      }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/5 flex-shrink-0">
         <div className="flex items-center gap-3">

@@ -654,9 +654,20 @@ export const PreviewPanel = memo(function PreviewPanel({
   };
 
   return (
-    <section className="flex-1 min-w-0 min-h-0 h-full self-stretch flex flex-col bg-slate-900/60 backdrop-blur-xl overflow-hidden transition-all duration-300">
+    <section
+      className="flex-1 min-w-0 min-h-0 h-full self-stretch flex flex-col backdrop-blur-xl overflow-hidden transition-all duration-300"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--theme-surface) 60%, transparent)'
+      }}
+    >
       {/* Toolbar */}
-      <div className="h-12 flex-none border-b border-white/10 flex items-center justify-between px-4 bg-slate-950/50">
+      <div
+        className="h-12 flex-none flex items-center justify-between px-4 transition-colors duration-300"
+        style={{
+          borderBottom: '1px solid var(--theme-border)',
+          backgroundColor: 'color-mix(in srgb, var(--theme-background) 50%, transparent)'
+        }}
+      >
         <div className="flex items-center gap-4">
           {/* Active Panel Title */}
           {(() => {

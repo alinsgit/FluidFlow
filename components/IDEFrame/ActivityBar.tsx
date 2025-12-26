@@ -154,7 +154,11 @@ export const ActivityBar = memo(function ActivityBar({
 
   return (
     <aside
-      className="relative w-11 bg-slate-950 border-r border-white/10 flex flex-col items-center py-2 shrink-0"
+      className="relative w-11 flex flex-col items-center py-2 shrink-0 transition-colors duration-300"
+      style={{
+        backgroundColor: 'var(--theme-background)',
+        borderRight: '1px solid var(--theme-border)'
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

@@ -33,7 +33,13 @@ export const TitleBar = memo(function TitleBar({
   };
 
   return (
-    <header className="h-10 bg-slate-950 border-b border-white/5 flex items-center px-4 justify-between select-none shrink-0">
+    <header
+      className="h-10 flex items-center px-4 justify-between select-none shrink-0 transition-colors duration-300"
+      style={{
+        backgroundColor: 'var(--theme-background)',
+        borderBottom: '1px solid var(--theme-border)'
+      }}
+    >
       {/* Left section: Traffic lights + Breadcrumb */}
       <div className="flex items-center gap-4">
         <TrafficLights />

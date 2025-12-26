@@ -93,4 +93,5 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
 export const STORAGE_KEYS = {
   EDITOR_SETTINGS: 'fluidflow_editor_settings',
   DEBUG_SETTINGS: 'fluidflow_debug_settings',
+  THEME: 'fluidflow_theme',
 } as const;

@@ -48,7 +48,10 @@ export const IDEFrame = memo(function IDEFrame({
   isAutoCommitting = false,
 }: IDEFrameProps) {
   return (
-    <div className="flex flex-col h-full w-full bg-slate-950 overflow-hidden">
+    <div
+      className="flex flex-col h-full w-full overflow-hidden transition-colors duration-300"
+      style={{ backgroundColor: 'var(--theme-background)' }}
+    >
       {/* Title Bar */}
       {showTitleBar && (
         <TitleBar

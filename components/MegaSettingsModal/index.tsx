@@ -15,6 +15,7 @@ import { GitHubPanel } from './panels/GitHubPanel';
 import { DebugPanel } from './panels/DebugPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import { AboutPanel } from './panels/AboutPanel';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
   MegaSettingsModalProps,
   SettingsCategory,
@@ -32,6 +33,9 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>(initialCategory);
   const [importExportMessage, setImportExportMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Theme context for reset functionality
+  const { resetTheme } = useTheme();
 
   // Update active category when initialCategory changes
   useEffect(() => {
@@ -134,8 +138,8 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
 
   // Reset current section to defaults
   const handleResetSection = () => {
-    // Only editor and debug have resettable settings
-    if (activeCategory !== 'editor' && activeCategory !== 'debug') {
+    // Only editor, debug, and appearance have resettable settings
+    if (activeCategory !== 'editor' && activeCategory !== 'debug' && activeCategory !== 'appearance') {
       return;
     }
 
@@ -151,6 +155,9 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
       case 'debug':
         localStorage.setItem(STORAGE_KEYS.DEBUG_SETTINGS, JSON.stringify(DEFAULT_DEBUG_SETTINGS));
         break;
+      case 'appearance':
+        resetTheme();
+        break;
       default:
         return;
     }
@@ -164,7 +171,7 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
   };
 
   // Check if current panel has resettable settings
-  const canResetSection = activeCategory === 'editor' || activeCategory === 'debug';
+  const canResetSection = activeCategory === 'editor' || activeCategory === 'debug' || activeCategory === 'appearance';
 
   const renderPanel = () => {
     switch (activeCategory) {
@@ -200,10 +207,25 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
   if (!isOpen) return null;
 
   const modalContent = (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-[90vw] max-w-6xl h-[85vh] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300">
+    <div
+      className="fixed inset-0 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      style={{ backgroundColor: 'color-mix(in srgb, var(--theme-background) 80%, transparent)' }}
+    >
+      <div
+        className="w-[90vw] max-w-6xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300 transition-colors"
+        style={{
+          backgroundColor: 'var(--theme-surface)',
+          border: '1px solid var(--theme-border)'
+        }}
+      >
         {/* Header */}
-        <div className="p-4 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-purple-500/10">
+        <div
+          className="p-4 flex items-center justify-between transition-colors"
+          style={{
+            borderBottom: '1px solid var(--theme-border)',
+            background: `linear-gradient(to right, var(--theme-gradient-from), var(--theme-gradient-to))`
+          }}
+        >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/20 rounded-lg">
               <Settings2 className="w-5 h-5 text-blue-400" />
@@ -263,7 +285,13 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-white/5 bg-slate-950/50 flex items-center justify-between">
+            <div
+              className="p-3 flex items-center justify-between transition-colors"
+              style={{
+                borderTop: '1px solid var(--theme-border)',
+                backgroundColor: 'color-mix(in srgb, var(--theme-background) 50%, transparent)'
+              }}
+            >
               {canResetSection ? (
                 <button
                   onClick={handleResetSection}
