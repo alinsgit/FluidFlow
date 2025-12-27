@@ -9,11 +9,15 @@ type TechCategory = keyof TechStackConfig;
 const CATEGORY_INFO: Record<TechCategory, { label: string; description: string }> = {
   styling: { label: 'Styling', description: 'CSS framework or styling approach' },
   icons: { label: 'Icons', description: 'Icon library for UI elements' },
+  uiComponents: { label: 'UI Components', description: 'Pre-built component libraries' },
   stateManagement: { label: 'State Management', description: 'How to manage application state' },
   routing: { label: 'Routing', description: 'Navigation and URL handling' },
   dataFetching: { label: 'Data Fetching', description: 'HTTP client and data loading' },
   forms: { label: 'Forms', description: 'Form handling and validation' },
   animations: { label: 'Animations', description: 'Motion and transitions' },
+  charts: { label: 'Charts', description: 'Data visualization and graphs' },
+  dateTime: { label: 'Date & Time', description: 'Date manipulation utilities' },
+  media: { label: 'Media', description: 'File uploads and media handling' },
   testing: { label: 'Testing', description: 'Testing framework and utilities' }
 };
 

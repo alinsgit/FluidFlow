@@ -6,7 +6,7 @@
 
 // IndexedDB
 export const WIP_DB_NAME = 'fluidflow-wip';
-export const WIP_DB_VERSION = 2; // Bumped for chat store
+export const WIP_DB_VERSION = 3; // Bumped to fix missing chat store migration
 export const WIP_STORE_NAME = 'wip';
 export const CHAT_STORE_NAME = 'chat';
 

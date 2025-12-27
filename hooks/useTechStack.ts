@@ -26,11 +26,15 @@ export const useTechStack = () => {
           // Deep merge for nested objects
           styling: { ...DEFAULT_TECH_STACK.styling, ...parsedTechStack.styling },
           icons: { ...DEFAULT_TECH_STACK.icons, ...parsedTechStack.icons },
+          uiComponents: { ...DEFAULT_TECH_STACK.uiComponents, ...parsedTechStack.uiComponents },
           stateManagement: { ...DEFAULT_TECH_STACK.stateManagement, ...parsedTechStack.stateManagement },
           routing: { ...DEFAULT_TECH_STACK.routing, ...parsedTechStack.routing },
           dataFetching: { ...DEFAULT_TECH_STACK.dataFetching, ...parsedTechStack.dataFetching },
           forms: { ...DEFAULT_TECH_STACK.forms, ...parsedTechStack.forms },
           animations: { ...DEFAULT_TECH_STACK.animations, ...parsedTechStack.animations },
+          charts: { ...DEFAULT_TECH_STACK.charts, ...parsedTechStack.charts },
+          dateTime: { ...DEFAULT_TECH_STACK.dateTime, ...parsedTechStack.dateTime },
+          media: { ...DEFAULT_TECH_STACK.media, ...parsedTechStack.media },
           testing: { ...DEFAULT_TECH_STACK.testing, ...parsedTechStack.testing }
         });
       }
@@ -106,6 +110,23 @@ export const useTechStack = () => {
       }
     }
 
+    // UI Components
+    const uiInfo = getOptionInfo('uiComponents', techStack.uiComponents.library);
+    if (uiInfo && uiInfo.value !== 'none') {
+      instruction += `\n- **UI Components**: ${uiInfo.label} (${uiInfo.version})`;
+      if (uiInfo.value === 'shadcn-ui') {
+        instruction += '. Import from `@/components/ui/*`. Use existing components or generate new ones following shadcn patterns.';
+      } else if (uiInfo.value === 'radix-ui') {
+        instruction += '. Import primitives from `@radix-ui/react-*`. Build accessible components with unstyled primitives.';
+      } else if (uiInfo.value === 'headless-ui') {
+        instruction += '. Import from `@headlessui/react`. Use with Tailwind for styling.';
+      } else if (uiInfo.value === 'daisyui') {
+        instruction += '. Use daisyUI class names on Tailwind elements (e.g., `btn`, `card`, `modal`).';
+      } else if (uiInfo.value === 'flowbite') {
+        instruction += '. Import from `flowbite-react`. Tailwind-styled components ready to use.';
+      }
+    }
+
     // State Management
     const stateInfo = getOptionInfo('stateManagement', techStack.stateManagement.library);
     if (stateInfo && stateInfo.value !== 'none' && stateInfo.value !== 'context-api') {
@@ -173,6 +194,51 @@ export const useTechStack = () => {
       }
     } else {
       instruction += '\n- **Animations**: CSS transitions and keyframe animations';
+    }
+
+    // Charts & Data Visualization
+    const chartsInfo = getOptionInfo('charts', techStack.charts.library);
+    if (chartsInfo && chartsInfo.value !== 'none') {
+      instruction += `\n- **Charts**: ${chartsInfo.label} (${chartsInfo.version})`;
+      if (chartsInfo.value === 'recharts') {
+        instruction += '. Use composable components: `<LineChart>`, `<BarChart>`, `<PieChart>` with `<XAxis>`, `<YAxis>`, `<Tooltip>`.';
+      } else if (chartsInfo.value === 'visx') {
+        instruction += '. Low-level primitives from `@visx/*`. Full control over SVG rendering.';
+      } else if (chartsInfo.value === 'nivo') {
+        instruction += '. Import from `@nivo/line`, `@nivo/bar`, etc. Rich interactive charts.';
+      } else if (chartsInfo.value === 'chartjs') {
+        instruction += '. Import from `react-chartjs-2`. Register required components from `chart.js`.';
+      } else if (chartsInfo.value === 'tremor') {
+        instruction += '. Import from `@tremor/react`. Dashboard-ready components like `<AreaChart>`, `<Card>`.';
+      }
+    }
+
+    // Date & Time
+    const dateInfo = getOptionInfo('dateTime', techStack.dateTime.library);
+    if (dateInfo && dateInfo.value !== 'none') {
+      instruction += `\n- **Date/Time**: ${dateInfo.label} (${dateInfo.version})`;
+      if (dateInfo.value === 'date-fns') {
+        instruction += '. Import functions: `import { format, parseISO, differenceInDays } from "date-fns"`.';
+      } else if (dateInfo.value === 'dayjs') {
+        instruction += '. Import: `import dayjs from "dayjs"`. Chain methods: `dayjs().format("YYYY-MM-DD")`.';
+      } else if (dateInfo.value === 'luxon') {
+        instruction += '. Import: `import { DateTime } from "luxon"`. Use `DateTime.now()`, `.toFormat()`.';
+      } else if (dateInfo.value === 'moment') {
+        instruction += '. ⚠️ Legacy library. Consider migrating to date-fns or dayjs for new projects.';
+      }
+    }
+
+    // Media Handling
+    const mediaInfo = getOptionInfo('media', techStack.media.library);
+    if (mediaInfo && mediaInfo.value !== 'none') {
+      instruction += `\n- **Media**: ${mediaInfo.label} (${mediaInfo.version})`;
+      if (mediaInfo.value === 'react-dropzone') {
+        instruction += '. Use `useDropzone` hook for drag-and-drop file uploads with validation.';
+      } else if (mediaInfo.value === 'react-player') {
+        instruction += '. Use `<ReactPlayer url="..." />` for YouTube, Vimeo, SoundCloud, local files.';
+      } else if (mediaInfo.value === 'browser-image-compression') {
+        instruction += '. Use `imageCompression(file, options)` to compress images client-side before upload.';
+      }
     }
 
     // Note: Component Architecture, FluidFlow Element IDs, and Import Path rules

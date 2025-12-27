@@ -189,6 +189,10 @@ export interface TechStackConfig {
     library: 'lucide-react' | 'react-icons' | 'heroicons' | 'material-icons' | 'font-awesome';
     version: string;
   };
+  uiComponents: {
+    library: 'none' | 'shadcn-ui' | 'radix-ui' | 'headless-ui' | 'daisyui' | 'flowbite';
+    version: string;
+  };
   stateManagement: {
     library: 'none' | 'zustand' | 'redux-toolkit' | 'context-api' | 'recoil' | 'mobx';
     version: string;
@@ -207,6 +211,18 @@ export interface TechStackConfig {
   };
   animations: {
     library: 'none' | 'framer-motion' | 'react-spring' | 'react-transition-group';
+    version: string;
+  };
+  charts: {
+    library: 'none' | 'recharts' | 'visx' | 'nivo' | 'chartjs' | 'tremor';
+    version: string;
+  };
+  dateTime: {
+    library: 'none' | 'date-fns' | 'dayjs' | 'luxon' | 'moment';
+    version: string;
+  };
+  media: {
+    library: 'none' | 'react-dropzone' | 'react-player' | 'browser-image-compression';
     version: string;
   };
   testing: {
@@ -242,6 +258,14 @@ export const TECH_STACK_OPTIONS: Record<keyof TechStackConfig, TechStackOption[]
     { value: 'material-icons', label: 'Material Icons', description: 'Google Material icons', version: '^1.13' },
     { value: 'font-awesome', label: 'Font Awesome', description: 'The internet\'s icon library', version: '^6.7' }
   ],
+  uiComponents: [
+    { value: 'none', label: 'None', description: 'Build components from scratch', version: 'built-in' },
+    { value: 'shadcn-ui', label: 'shadcn/ui', description: 'Copy-paste components built on Radix', version: 'latest' },
+    { value: 'radix-ui', label: 'Radix UI', description: 'Unstyled accessible components', version: '^1.1' },
+    { value: 'headless-ui', label: 'Headless UI', description: 'Unstyled components by Tailwind', version: '^2.2' },
+    { value: 'daisyui', label: 'daisyUI', description: 'Tailwind CSS component library', version: '^4.12' },
+    { value: 'flowbite', label: 'Flowbite React', description: 'Tailwind UI components', version: '^0.10' }
+  ],
   stateManagement: [
     { value: 'none', label: 'None (React State)', description: 'Built-in React useState/useReducer', version: 'built-in' },
     { value: 'zustand', label: 'Zustand', description: 'Small, fast, scalable state management', version: '^5.0' },
@@ -276,6 +300,27 @@ export const TECH_STACK_OPTIONS: Record<keyof TechStackConfig, TechStackOption[]
     { value: 'react-spring', label: 'React Spring', description: 'Spring physics based animation', version: '^10.0' },
     { value: 'react-transition-group', label: 'React Transition Group', description: 'Animation components for React', version: '^4.4' }
   ],
+  charts: [
+    { value: 'none', label: 'None', description: 'No chart library needed', version: 'built-in' },
+    { value: 'recharts', label: 'Recharts', description: 'Composable charts built on D3', version: '^2.15' },
+    { value: 'visx', label: 'visx', description: 'Low-level visualization by Airbnb', version: '^3.12' },
+    { value: 'nivo', label: 'Nivo', description: 'Rich data visualization components', version: '^0.88' },
+    { value: 'chartjs', label: 'Chart.js + react-chartjs-2', description: 'Simple yet flexible charts', version: '^5.3' },
+    { value: 'tremor', label: 'Tremor', description: 'Dashboard components for React', version: '^3.18' }
+  ],
+  dateTime: [
+    { value: 'none', label: 'None (Native Date)', description: 'Native JavaScript Date API', version: 'built-in' },
+    { value: 'date-fns', label: 'date-fns', description: 'Modern date utility library', version: '^4.1' },
+    { value: 'dayjs', label: 'Day.js', description: 'Fast 2kB alternative to Moment', version: '^1.11' },
+    { value: 'luxon', label: 'Luxon', description: 'Powerful DateTime by Moment team', version: '^3.5' },
+    { value: 'moment', label: 'Moment.js ⚠️', description: 'Legacy - consider date-fns or dayjs', version: '^2.30' }
+  ],
+  media: [
+    { value: 'none', label: 'None', description: 'Native file/media handling', version: 'built-in' },
+    { value: 'react-dropzone', label: 'React Dropzone', description: 'Drag & drop file uploads', version: '^14.3' },
+    { value: 'react-player', label: 'React Player', description: 'Video/audio player component', version: '^2.16' },
+    { value: 'browser-image-compression', label: 'Image Compression', description: 'Client-side image compression', version: '^2.0' }
+  ],
   testing: [
     { value: 'none', label: 'None', description: 'No testing library', version: 'built-in' },
     { value: 'jest', label: 'Jest', description: 'JavaScript testing framework', version: '^29.7' },
@@ -288,11 +333,15 @@ export const TECH_STACK_OPTIONS: Record<keyof TechStackConfig, TechStackOption[]
 export const DEFAULT_TECH_STACK: TechStackConfig = {
   styling: { library: 'tailwind', version: 'latest' },
   icons: { library: 'lucide-react', version: 'latest' },
+  uiComponents: { library: 'none', version: 'built-in' },
   stateManagement: { library: 'none', version: 'built-in' },
   routing: { library: 'none', version: 'built-in' },
   dataFetching: { library: 'none', version: 'built-in' },
   forms: { library: 'none', version: 'built-in' },
   animations: { library: 'none', version: 'built-in' },
+  charts: { library: 'none', version: 'built-in' },
+  dateTime: { library: 'none', version: 'built-in' },
+  media: { library: 'none', version: 'built-in' },
   testing: { library: 'none', version: 'built-in' }
 };
 
