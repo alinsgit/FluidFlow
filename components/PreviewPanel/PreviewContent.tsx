@@ -522,7 +522,7 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
                   src={blobUrl}
                   title="Preview"
                   className={`bg-white transition-opacity duration-500 ${isGenerating ? 'opacity-40' : 'opacity-100'}`}
-                  sandbox="allow-scripts"
+                  sandbox="allow-scripts allow-same-origin"
                   onLoad={() => {
                     // Reset parent scroll when iframe loads - prevents jump
                     window.scrollTo(0, 0);
