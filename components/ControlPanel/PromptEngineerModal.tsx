@@ -296,15 +296,20 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
                   value={initialIdea}
                   onChange={(e) => setInitialIdea(e.target.value)}
                   placeholder="e.g., I want to build a task management app, or I need a contact form for my website..."
-                  className="w-full p-4 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  style={{ backgroundColor: 'var(--theme-glass-200)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                  className="w-full p-4 rounded-lg resize-none focus:outline-none focus:ring-2 focus:border-transparent"
+                  style={{
+                    backgroundColor: 'var(--theme-glass-200)',
+                    border: '1px solid var(--theme-border)',
+                    color: 'var(--theme-text-primary)',
+                    '--tw-ring-color': 'var(--theme-ai-accent)'
+                  } as React.CSSProperties}
                   rows={4}
                 />
                 <button
                   type="submit"
                   disabled={!initialIdea.trim()}
                   className="w-full py-3 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  style={{ background: 'linear-gradient(90deg, var(--color-feature), var(--color-error))', color: 'var(--theme-text-primary)' }}
+                  style={{ background: 'linear-gradient(90deg, var(--color-feature), var(--color-error))', color: 'var(--theme-text-on-accent)' }}
                 >
                   Start Refining
                   <ArrowRight className="w-4 h-4" />
@@ -367,8 +372,13 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
                   </label>
                   <textarea
                     placeholder="Type your answer here..."
-                    className="w-full p-4 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    style={{ backgroundColor: 'var(--theme-glass-200)', border: '1px solid var(--theme-border)', color: 'var(--theme-text-primary)' }}
+                    className="w-full p-4 rounded-lg resize-none focus:outline-none focus:ring-2 focus:border-transparent"
+                    style={{
+                      backgroundColor: 'var(--theme-glass-200)',
+                      border: '1px solid var(--theme-border)',
+                      color: 'var(--theme-text-primary)',
+                      '--tw-ring-color': 'var(--theme-ai-accent)'
+                    } as React.CSSProperties}
                     rows={3}
                     required
                   />
@@ -376,7 +386,7 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
                 <button
                   type="submit"
                   className="w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
-                  style={{ background: 'linear-gradient(90deg, var(--color-feature), var(--color-error))', color: 'var(--theme-text-primary)' }}
+                  style={{ background: 'linear-gradient(90deg, var(--color-feature), var(--color-error))', color: 'var(--theme-text-on-accent)' }}
                 >
                   {currentStep >= 2 ? 'Generate Prompt' : 'Next Question'}
                   <ArrowRight className="w-4 h-4" />
@@ -429,7 +439,7 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
                 <button
                   onClick={handleUsePrompt}
                   className="flex-1 py-3 rounded-lg font-medium transition-all"
-                  style={{ background: 'linear-gradient(90deg, var(--color-feature), var(--color-error))', color: 'var(--theme-text-primary)' }}
+                  style={{ background: 'linear-gradient(90deg, var(--color-feature), var(--color-error))', color: 'var(--theme-text-on-accent)' }}
                 >
                   Use This Prompt
                 </button>

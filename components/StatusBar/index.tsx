@@ -159,11 +159,11 @@ export const StatusBar = memo(function StatusBar({
 
   return (
     <footer
-      className="h-8 backdrop-blur-sm flex items-center justify-between px-2 text-xs font-mono select-none shrink-0 transition-colors duration-300"
+      className="h-8 flex items-center justify-between px-2 text-xs font-mono select-none shrink-0 transition-colors duration-300"
       style={{
-        backgroundColor: 'var(--theme-surface)',
-        borderTop: '1px solid var(--theme-border)',
-        color: 'var(--theme-text-secondary)'
+        backgroundColor: 'var(--theme-statusbar-bg)',
+        borderTop: '1px solid var(--theme-statusbar-border)',
+        color: 'var(--theme-statusbar-text)'
       }}
     >
       {/* Left Section */}

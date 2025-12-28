@@ -612,7 +612,7 @@ export const ProjectsPanel: React.FC = () => {
                         {/* Zoom overlay on hover */}
                         <div
                           className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
-                          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                          style={{ backgroundColor: 'color-mix(in srgb, var(--theme-background) 50%, transparent)' }}
                         >
                           <ZoomIn className="w-8 h-8" style={{ color: 'white' }} />
                         </div>
@@ -861,7 +861,7 @@ export const ProjectsPanel: React.FC = () => {
       {lightboxProject && lightboxProject.screenshots?.latest?.thumbnail && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-8"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
+          style={{ backgroundColor: 'color-mix(in srgb, var(--theme-background) 85%, transparent)' }}
           onClick={() => setLightboxProject(null)}
         >
           {/* Close button */}

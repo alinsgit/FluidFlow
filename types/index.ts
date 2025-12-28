@@ -104,7 +104,7 @@ export interface PushResult {
 }
 
 // Device types for preview
-export type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
+export type PreviewDevice = 'desktop' | 'tablet' | 'mobile' | 'multi';
 export type TabType = 'preview' | 'code' | 'codemap' | 'database' | 'docs' | 'env' | 'debug' | 'git' | 'run' | 'errorfix' | 'quality' | 'activity' | 'projects';
 export type TerminalTab = 'console' | 'network' | 'elements';
 

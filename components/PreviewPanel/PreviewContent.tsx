@@ -179,11 +179,14 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
 
   // Convert HTML string to blob URL for complete iframe isolation
   // This prevents any CSS/JS from the generated content affecting the parent layout
+  // Include iframeKey in dependencies to ensure fresh blob URLs on refresh
+  // This is critical because iframe destroy triggers pagehide which cleans up internal blob URLs
   const blobUrl = useMemo(() => {
     if (!iframeSrc) return '';
     const blob = new Blob([iframeSrc], { type: 'text/html' });
     return URL.createObjectURL(blob);
-  }, [iframeSrc]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iframeSrc, iframeKey]);
 
   // Clean up blob URL when it changes or component unmounts
   useEffect(() => {
@@ -272,7 +275,7 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
         className="absolute inset-0 opacity-[0.15] pointer-events-none z-0"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(148,163,184,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.1) 1px, transparent 1px)',
+            'linear-gradient(color-mix(in srgb, var(--theme-border) 10%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--theme-border) 10%, transparent) 1px, transparent 1px)',
           backgroundSize: '20px 20px',
         }}
       />
@@ -413,9 +416,9 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
           <div
             className={`relative z-10 transition-all duration-500 ease-in-out shadow-2xl flex flex-col min-h-0 ${
               previewDevice === 'mobile'
-                ? 'w-[375px] h-[667px] max-h-full rounded-[40px] border-[8px] ring-4 ring-black shadow-[0_0_50px_rgba(0,0,0,0.5)]'
+                ? 'w-[375px] h-[667px] max-h-full rounded-[40px] border-[8px] ring-4'
                 : previewDevice === 'tablet'
-                  ? 'w-[768px] h-[90%] max-h-[800px] rounded-[24px] border-[8px] ring-4 ring-black shadow-[0_0_50px_rgba(0,0,0,0.5)]'
+                  ? 'w-[768px] h-[90%] max-h-[800px] rounded-[24px] border-[8px] ring-4'
                   : 'w-full h-full rounded-none border-none'
             }`}
             style={{
@@ -426,6 +429,9 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
               isolation: 'isolate',
               backgroundColor: 'var(--theme-preview-bg)',
               borderColor: previewDevice !== 'desktop' ? 'var(--theme-preview-device-border)' : undefined,
+              ...(previewDevice !== 'desktop' ? {
+                boxShadow: '0 0 0 4px var(--theme-background), 0 0 50px color-mix(in srgb, var(--theme-background) 50%, transparent)'
+              } : {})
             }}
           >
             {previewDevice === 'mobile' && (

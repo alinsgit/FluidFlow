@@ -91,7 +91,13 @@ export const PromptLevelModal: React.FC<PromptLevelModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--theme-border-light)' }}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl" style={{ border: '1px solid var(--theme-border-light)' }}>
+            <div
+              className="p-2 rounded-xl"
+              style={{
+                background: 'linear-gradient(to bottom right, color-mix(in srgb, var(--theme-ai-accent) 20%, transparent), color-mix(in srgb, var(--theme-ai-secondary) 20%, transparent))',
+                border: '1px solid var(--theme-border-light)'
+              }}
+            >
               <Sparkles className="w-5 h-5" style={{ color: 'var(--color-feature)' }} />
             </div>
             <div>
@@ -196,8 +202,17 @@ export const PromptLevelModal: React.FC<PromptLevelModalProps> = ({
             </button>
             <button
               onClick={handleSelect}
-              className="px-5 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-sm font-medium rounded-lg transition-all"
-              style={{ color: 'var(--theme-text-primary)' }}
+              className="px-5 py-2 text-sm font-medium rounded-lg transition-all"
+              style={{
+                background: 'linear-gradient(to right, var(--theme-ai-accent), var(--theme-ai-secondary))',
+                color: 'var(--theme-text-on-accent)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to right, color-mix(in srgb, var(--theme-ai-accent) 90%, black), color-mix(in srgb, var(--theme-ai-secondary) 90%, black))';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to right, var(--theme-ai-accent), var(--theme-ai-secondary))';
+              }}
             >
               Use Prompt
             </button>

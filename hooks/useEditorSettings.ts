@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { EditorSettings, DEFAULT_EDITOR_SETTINGS, STORAGE_KEYS } from '../components/MegaSettingsModal/types';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function useEditorSettings() {
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
+  const { currentTheme } = useTheme();
 
   // Load settings from localStorage
   useEffect(() => {
@@ -10,10 +12,15 @@ export function useEditorSettings() {
       const saved = localStorage.getItem(STORAGE_KEYS.EDITOR_SETTINGS);
       if (saved) {
         try {
-          setSettings({ ...DEFAULT_EDITOR_SETTINGS, ...JSON.parse(saved) });
+          const parsedSettings = { ...DEFAULT_EDITOR_SETTINGS, ...JSON.parse(saved) };
+          // Auto-sync Monaco theme with current app theme
+          parsedSettings.theme = currentTheme.monacoTheme;
+          setSettings(parsedSettings);
         } catch {
-          setSettings(DEFAULT_EDITOR_SETTINGS);
+          setSettings({ ...DEFAULT_EDITOR_SETTINGS, theme: currentTheme.monacoTheme });
         }
+      } else {
+        setSettings({ ...DEFAULT_EDITOR_SETTINGS, theme: currentTheme.monacoTheme });
       }
     };
 
@@ -36,7 +43,7 @@ export function useEditorSettings() {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('editorSettingsChanged', handleSettingsChange);
     };
-  }, []);
+  }, [currentTheme]);
 
   const updateSettings = useCallback((updates: Partial<EditorSettings>) => {
     setSettings(prev => {

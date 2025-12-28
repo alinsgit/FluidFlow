@@ -93,3 +93,6 @@ export { getScrollUtilitiesScript } from './scrollUtilities';
 
 // Screenshot Capture (preview to image)
 export { getScreenshotCaptureScript } from './screenshotCapture';
+
+// State Preservation (HMR-like state capture/restore)
+export { getStatePreservationScript } from './statePreservation';

@@ -85,10 +85,10 @@ export const QuickStylesTab: React.FC<QuickStylesTabProps> = ({
       setActivePreview(presetId);
       // Apply preview styles based on preset
       const previewStyles: Record<string, Record<string, string>> = {
-        beautify: { boxShadow: '0 4px 20px rgba(139, 92, 246, 0.3)', borderRadius: '12px' },
+        beautify: { boxShadow: '0 4px 20px color-mix(in srgb, var(--theme-ai-accent) 30%, transparent)', borderRadius: '12px' },
         animate: { transform: 'scale(1.02)', transition: 'all 0.3s ease' },
-        darkmode: { backgroundColor: '#1e1e2e', color: '#cdd6f4' },
-        modern: { borderRadius: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' },
+        darkmode: { backgroundColor: 'var(--theme-surface-dark)', color: 'var(--theme-text-primary)' },
+        modern: { borderRadius: '16px', boxShadow: '0 2px 10px color-mix(in srgb, var(--theme-background) 10%, transparent)' },
       };
       if (previewStyles[presetId]) {
         onApplyTempStyle(previewStyles[presetId]);

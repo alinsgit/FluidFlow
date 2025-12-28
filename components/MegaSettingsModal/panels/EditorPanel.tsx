@@ -3,6 +3,13 @@ import { Code } from 'lucide-react';
 import { SettingsSection, SettingsToggle, SettingsSelect, SettingsSlider } from '../shared';
 import { EditorSettings, DEFAULT_EDITOR_SETTINGS, STORAGE_KEYS } from '../types';
 
+// Monaco Editor theme preview colors (official VS Code theme palettes)
+const MONACO_THEME_PREVIEWS = [
+  { value: 'vs-dark', label: 'Dark', colors: ['#1e1e1e', '#252526', '#3c3c3c'] },
+  { value: 'vs', label: 'Light', colors: ['#ffffff', '#f3f3f3', '#e8e8e8'] },
+  { value: 'hc-black', label: 'High Contrast', colors: ['#000000', '#0a0a0a', '#1a1a1a'] }
+] as const;
+
 export const EditorPanel: React.FC = () => {
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
 
@@ -172,22 +179,31 @@ export const EditorPanel: React.FC = () => {
       {/* Theme */}
       <SettingsSection
         title="Theme"
-        description="Editor color theme"
+        description="Editor theme automatically syncs with app theme"
       >
+        {/* Info message */}
+        <div
+          className="px-3 py-2 rounded-lg text-xs mb-3"
+          style={{
+            backgroundColor: 'var(--color-info-subtle)',
+            color: 'var(--color-info-text)',
+            border: '1px solid var(--color-info-border)'
+          }}
+        >
+          Editor theme is automatically set based on your selected app theme. Change the app theme in the Appearance panel to update the editor theme.
+        </div>
+
         <div className="grid grid-cols-3 gap-3">
-          {[
-            { value: 'vs-dark', label: 'Dark', colors: ['#1e1e1e', '#252526', '#3c3c3c'] },
-            { value: 'vs', label: 'Light', colors: ['#ffffff', '#f3f3f3', '#e8e8e8'] },
-            { value: 'hc-black', label: 'High Contrast', colors: ['#000000', '#0a0a0a', '#1a1a1a'] }
-          ].map(theme => (
-            <button
+          {MONACO_THEME_PREVIEWS.map(theme => (
+            <div
               key={theme.value}
-              onClick={() => updateSettings({ theme: theme.value as 'vs-dark' | 'vs' | 'hc-black' })}
-              className="p-3 rounded-lg border text-center transition-all"
+              className="p-3 rounded-lg border text-center opacity-75"
               style={{
                 borderColor: settings.theme === theme.value ? 'var(--theme-accent)' : 'var(--theme-border)',
-                backgroundColor: settings.theme === theme.value ? 'var(--theme-accent-subtle)' : 'transparent'
+                backgroundColor: settings.theme === theme.value ? 'var(--theme-accent-subtle)' : 'transparent',
+                cursor: 'not-allowed'
               }}
+              title="Theme syncs automatically with app theme"
             >
               <div className="flex gap-1 justify-center mb-2">
                 {theme.colors.map((color, i) => (
@@ -198,8 +214,15 @@ export const EditorPanel: React.FC = () => {
                   />
                 ))}
               </div>
-              <div className="text-sm" style={{ color: 'var(--theme-text-primary)' }}>{theme.label}</div>
-            </button>
+              <div className="text-sm flex items-center justify-center gap-1.5" style={{ color: 'var(--theme-text-primary)' }}>
+                {theme.label}
+                {settings.theme === theme.value && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--theme-accent)', color: 'var(--theme-text-on-accent)' }}>
+                    Active
+                  </span>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       </SettingsSection>

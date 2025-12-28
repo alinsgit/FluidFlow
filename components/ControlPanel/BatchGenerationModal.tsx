@@ -225,7 +225,7 @@ export const BatchGenerationModal: React.FC<BatchGenerationModalProps> = ({
               <button
                 onClick={handleStart}
                 className="flex-1 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(90deg, var(--color-info), var(--color-feature))', color: 'var(--theme-text-primary)' }}
+                style={{ background: 'linear-gradient(90deg, var(--color-info), var(--color-feature))', color: 'var(--theme-text-on-accent)' }}
               >
                 <Zap className="w-4 h-4" />
                 Start Batch Generation

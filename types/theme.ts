@@ -2369,9 +2369,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#94a3b8',
       scrollbarThumbHover: '#64748b',
       // Status Bar
-      statusBarBackground: '#f1f5f9',
-      statusBarBorder: '#e2e8f0',
-      statusBarText: '#64748b',
+      statusBarBackground: '#e2e8f0',
+      statusBarBorder: '#cbd5e1',
+      statusBarText: '#475569',
       // Divider
       divider: '#e2e8f0',
       dividerStrong: '#cbd5e1',
@@ -2493,9 +2493,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#bdbdbd',
       scrollbarThumbHover: '#9e9e9e',
       // Status Bar
-      statusBarBackground: '#f5f5f5',
-      statusBarBorder: '#e0e0e0',
-      statusBarText: '#757575',
+      statusBarBackground: '#e8e8e8',
+      statusBarBorder: '#d0d0d0',
+      statusBarText: '#404040',
       // Divider
       divider: '#e0e0e0',
       dividerStrong: '#bdbdbd',
@@ -2617,9 +2617,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#b0b0b0',
       scrollbarThumbHover: '#909090',
       // Status Bar
-      statusBarBackground: '#f0f0f0',
-      statusBarBorder: '#d8d8d8',
-      statusBarText: '#707070',
+      statusBarBackground: '#e0e0e0',
+      statusBarBorder: '#c0c0c0',
+      statusBarText: '#303030',
       // Divider
       divider: '#d8d8d8',
       dividerStrong: '#c0c0c0',
@@ -2741,9 +2741,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#b8a888',
       scrollbarThumbHover: '#a89870',
       // Status Bar
-      statusBarBackground: '#ece6d8',
-      statusBarBorder: '#d8d0bc',
-      statusBarText: '#7a6a58',
+      statusBarBackground: '#d8ceb8',
+      statusBarBorder: '#c8bc9c',
+      statusBarText: '#3a3428',
       // Divider
       divider: '#d8d0bc',
       dividerStrong: '#c8bc9c',
@@ -2865,9 +2865,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#98c0d0',
       scrollbarThumbHover: '#78a8b8',
       // Status Bar
-      statusBarBackground: '#e8f0f4',
-      statusBarBorder: '#d0e0e8',
-      statusBarText: '#587078',
+      statusBarBackground: '#cce0e8',
+      statusBarBorder: '#b8d0dc',
+      statusBarText: '#1a2830',
       // Divider
       divider: '#d0e0e8',
       dividerStrong: '#b8d0dc',
@@ -2989,9 +2989,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#c4b49a',
       scrollbarThumbHover: '#a08a68',
       // Status Bar
-      statusBarBackground: '#f5f0e6',
-      statusBarBorder: '#ebe3d5',
-      statusBarText: '#8b7a65',
+      statusBarBackground: '#d4c4a8',
+      statusBarBorder: '#c4b49a',
+      statusBarText: '#3a3028',
       // Divider
       divider: '#ebe3d5',
       dividerStrong: '#d4c4a8',
@@ -3113,9 +3113,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#60a5fa',
       scrollbarThumbHover: '#3b82f6',
       // Status Bar
-      statusBarBackground: '#e0f0ff',
-      statusBarBorder: '#bfdbfe',
-      statusBarText: '#3b82f6',
+      statusBarBackground: '#bfdbfe',
+      statusBarBorder: '#93c5fd',
+      statusBarText: '#1e40af',
       // Divider
       divider: '#bfdbfe',
       dividerStrong: '#93c5fd',
@@ -3237,9 +3237,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#34d399',
       scrollbarThumbHover: '#10b981',
       // Status Bar
-      statusBarBackground: '#d1fae5',
-      statusBarBorder: '#a7f3d0',
-      statusBarText: '#10b981',
+      statusBarBackground: '#a7f3d0',
+      statusBarBorder: '#6ee7b7',
+      statusBarText: '#065f46',
       // Divider
       divider: '#a7f3d0',
       dividerStrong: '#6ee7b7',
@@ -3361,9 +3361,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#a78bfa',
       scrollbarThumbHover: '#8b5cf6',
       // Status Bar
-      statusBarBackground: '#e9e5ff',
-      statusBarBorder: '#ddd6fe',
-      statusBarText: '#7c3aed',
+      statusBarBackground: '#ddd6fe',
+      statusBarBorder: '#c4b5fd',
+      statusBarText: '#5b21b6',
       // Divider
       divider: '#ddd6fe',
       dividerStrong: '#c4b5fd',
@@ -3485,9 +3485,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#fb923c',
       scrollbarThumbHover: '#ea580c',
       // Status Bar
-      statusBarBackground: '#ffeee5',
-      statusBarBorder: '#fed7c7',
-      statusBarText: '#c2410c',
+      statusBarBackground: '#fed7c7',
+      statusBarBorder: '#fdba9a',
+      statusBarText: '#7c2d12',
       // Divider
       divider: '#fed7c7',
       dividerStrong: '#fdba9a',
@@ -3609,9 +3609,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#8fc278',
       scrollbarThumbHover: '#5a9e3e',
       // Status Bar
-      statusBarBackground: '#e5eedf',
-      statusBarBorder: '#d4e3cc',
-      statusBarText: '#5a7a4d',
+      statusBarBackground: '#d4e3cc',
+      statusBarBorder: '#b8d4a8',
+      statusBarText: '#2a4020',
       // Divider
       divider: '#d4e3cc',
       dividerStrong: '#b8d4a8',
@@ -3733,9 +3733,9 @@ export const THEMES: Record<ThemeId, Theme> = {
       scrollbarThumb: '#6bb8e3',
       scrollbarThumbHover: '#2e9fd6',
       // Status Bar
-      statusBarBackground: '#e5f3fc',
-      statusBarBorder: '#cce7f8',
-      statusBarText: '#4a8aa8',
+      statusBarBackground: '#cce7f8',
+      statusBarBorder: '#a3d4f0',
+      statusBarText: '#1a4858',
       // Divider
       divider: '#cce7f8',
       dividerStrong: '#a3d4f0',

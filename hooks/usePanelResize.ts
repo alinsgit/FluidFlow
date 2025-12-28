@@ -132,12 +132,25 @@ export function usePanelResize(options: UsePanelResizeOptions = {}): UsePanelRes
     onDoubleClick: handleDoubleClick,
     style: {
       cursor: 'ew-resize',
+      backgroundColor: isDragging
+        ? 'color-mix(in srgb, var(--theme-accent) 70%, transparent)'
+        : 'transparent',
+      width: isDragging ? '0.5rem' : '0.375rem',
     } as React.CSSProperties,
     className: `
-      w-1.5 hover:w-2 bg-transparent hover:bg-blue-500/50
       transition-all duration-150 shrink-0
-      ${isDragging ? 'w-2 bg-blue-500/70' : ''}
+      hover:w-2
     `.trim(),
+    onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isDragging) {
+        e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--theme-accent) 50%, transparent)';
+      }
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isDragging) {
+        e.currentTarget.style.backgroundColor = 'transparent';
+      }
+    },
   };
 
   return {

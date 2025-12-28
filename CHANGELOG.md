@@ -5,6 +5,41 @@ All notable changes to FluidFlow will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2025-12-28
+
+### Added
+- Monaco Editor auto-sync with app theme (light/dark/high-contrast)
+- Editor theme automatically updates when app theme changes
+- Info message in Editor settings panel explaining auto-sync behavior
+
+### Changed
+- **Theme System: 100% hardcoded color elimination**
+  - All hardcoded hex colors (#ffffff, #000000, etc.) migrated to CSS custom properties
+  - Gradient button text colors now use `var(--theme-text-on-accent)` for proper contrast
+  - Panel resize divider colors migrated from hardcoded `blue-500` to theme accent
+  - Box shadow patterns now use theme variables (`var(--theme-shadow-strong)`)
+  - StatusBar uses dedicated CSS variables (`--theme-statusbar-bg`, `--theme-statusbar-text`, etc.)
+  - Removed `backdrop-blur-sm` from StatusBar to improve contrast
+- **Light theme contrast improvements**
+  - StatusBar background and text colors optimized for all 12 light themes
+  - Increased color contrast ratios for better readability
+  - Snow White, Marble, Parchment, Porcelain themes: darker backgrounds, stronger text
+  - Sky Blue, Mint Fresh, Lavender Mist themes: enhanced visibility
+- Editor theme selector now read-only with "Active" badge (auto-syncs with app theme)
+- Panel resize divider now uses theme-aware hover and drag states
+
+### Fixed
+- Gradient buttons unreadable on light themes (text color contrast issue)
+- StatusBar text difficult to read on light theme backgrounds
+- Panel resize divider hardcoded blue color conflicting with theme colors
+- Monaco Editor theme not updating when switching between light and dark app themes
+
+### Technical
+- `useEditorSettings` hook now integrates with `ThemeContext` for automatic theme sync
+- Added dependency on `currentTheme` to re-apply Monaco theme on app theme change
+- Intentional hardcoded colors documented (macOS Traffic Lights, Monaco theme previews)
+- All UI components now 100% theme-variable driven (except intentional constants)
+
 ## [0.8.0] - 2025-12-28
 
 ### Added

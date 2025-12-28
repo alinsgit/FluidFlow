@@ -97,7 +97,7 @@ export const BoxModelTab: React.FC<BoxModelTabProps> = ({ boxModel, isLoading })
           <BoxLayer
             label="border"
             color="var(--color-warning)"
-            bgColor="rgba(234, 179, 8, 0.1)"
+            bgColor="color-mix(in srgb, var(--color-warning) 10%, transparent)"
             values={border}
           >
             {/* Padding layer */}
@@ -125,7 +125,7 @@ export const BoxModelTab: React.FC<BoxModelTabProps> = ({ boxModel, isLoading })
           <span className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>Margin</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(234, 179, 8, 0.3)' }} />
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: 'color-mix(in srgb, var(--color-warning) 30%, transparent)' }} />
           <span className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>Border</span>
         </div>
         <div className="flex items-center gap-1.5">

@@ -171,7 +171,13 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
   const styles = getTypeStyles(current.type);
 
   return (
-    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-md" style={{ backgroundColor: 'var(--theme-overlay)' }}>
+    <div
+      className="absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-xl"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--theme-overlay) 95%, transparent)',
+        backdropFilter: 'blur(24px) saturate(180%)'
+      }}
+    >
       {/* Main spinner */}
       <div className="relative mb-8">
         <div className="w-20 h-20 rounded-full animate-spin" style={{ borderWidth: '4px', borderStyle: 'solid', borderColor: 'var(--theme-accent-subtle)', borderTopColor: 'var(--theme-accent)' }} />
@@ -184,7 +190,14 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
       </div>
 
       {/* Status text */}
-      <p className="text-lg font-medium mb-8 animate-pulse" style={{ color: 'var(--theme-accent)' }}>
+      <p
+        className="text-lg font-semibold mb-8 animate-pulse px-6 py-2 rounded-full"
+        style={{
+          color: 'var(--theme-accent)',
+          backgroundColor: 'color-mix(in srgb, var(--theme-accent) 15%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent)'
+        }}
+      >
         {isFixing ? 'Adapting Layout...' : 'Constructing Interface...'}
       </p>
 
@@ -193,8 +206,12 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
         {/* Previous button */}
         <button
           onClick={goToPrev}
-          className="p-2 rounded-full transition-all shrink-0"
-          style={{ backgroundColor: 'var(--theme-glass-100)', color: 'var(--theme-text-muted)' }}
+          className="p-2 rounded-full transition-all shrink-0 shadow-lg hover:scale-110 active:scale-95"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--theme-glass-300) 90%, transparent)',
+            color: 'var(--theme-text-primary)',
+            border: '1px solid var(--theme-border)'
+          }}
           title="Previous"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -202,14 +219,26 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
 
         {/* Card */}
         <div
-          className={`flex-1 p-5 rounded-xl transition-all duration-300 ${
+          className={`flex-1 p-5 rounded-xl transition-all duration-300 shadow-2xl ${
             isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
           }`}
-          style={{ ...styles.bg, ...styles.border }}
+          style={{
+            ...styles.bg,
+            ...styles.border,
+            boxShadow: '0 20px 50px -12px var(--theme-shadow-strong), 0 0 0 1px var(--theme-border-light)',
+            backdropFilter: 'blur(12px) saturate(150%)'
+          }}
         >
         {/* Badge */}
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={styles.badge}>
+          <span
+            className="text-[10px] font-semibold px-2.5 py-1 rounded-full shadow-sm"
+            style={{
+              ...styles.badge,
+              border: '1px solid currentColor',
+              opacity: 0.95
+            }}
+          >
             {styles.badgeText}
           </span>
           <div className="flex items-center gap-1">
@@ -218,8 +247,9 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
                 key={i}
                 className="w-1.5 h-1.5 rounded-full transition-all"
                 style={{
-                  backgroundColor: i === currentIndex ? 'var(--theme-text-secondary)' : 'var(--theme-glass-300)',
-                  transform: i === currentIndex ? 'scale(1.25)' : 'scale(1)',
+                  backgroundColor: i === currentIndex ? 'var(--theme-accent)' : 'var(--theme-glass-300)',
+                  transform: i === currentIndex ? 'scale(1.4)' : 'scale(1)',
+                  boxShadow: i === currentIndex ? '0 0 8px currentColor' : 'none'
                 }}
               />
             ))}
@@ -228,22 +258,29 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
 
         {/* Content */}
         <div className="flex gap-4">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={styles.bg}>
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-md"
+            style={{
+              ...styles.bg,
+              border: '1px solid color-mix(in srgb, currentColor 20%, transparent)',
+              backdropFilter: 'blur(8px)'
+            }}
+          >
             <IconComponent className="w-5 h-5" style={styles.icon} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold mb-1" style={styles.title}>{current.title}</h3>
-            <p className="text-sm leading-relaxed" style={{ color: 'var(--theme-text-muted)' }}>{current.description}</p>
+            <h3 className="font-bold mb-1.5 text-base" style={styles.title}>{current.title}</h3>
+            <p className="text-sm leading-relaxed font-medium" style={{ color: 'var(--theme-text-secondary)' }}>{current.description}</p>
             {current.link && (
               <a
                 href={current.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 mt-2 text-xs hover:underline"
+                className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold hover:underline transition-all hover:gap-2"
                 style={styles.icon}
               >
                 {current.linkText || 'Learn more'}
-                <Zap className="w-3 h-3" />
+                <Zap className="w-3.5 h-3.5" />
               </a>
             )}
           </div>
@@ -253,8 +290,12 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
         {/* Next button */}
         <button
           onClick={goToNext}
-          className="p-2 rounded-full transition-all shrink-0"
-          style={{ backgroundColor: 'var(--theme-glass-100)', color: 'var(--theme-text-muted)' }}
+          className="p-2 rounded-full transition-all shrink-0 shadow-lg hover:scale-110 active:scale-95"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--theme-glass-300) 90%, transparent)',
+            color: 'var(--theme-text-primary)',
+            border: '1px solid var(--theme-border)'
+          }}
           title="Next"
         >
           <ChevronRight className="w-5 h-5" />
@@ -262,7 +303,14 @@ export const GeneratingOverlay = memo(function GeneratingOverlay({
       </div>
 
       {/* Progress hint */}
-      <p className="mt-6 text-xs" style={{ color: 'var(--theme-text-dim)' }}>
+      <p
+        className="mt-6 text-xs font-medium px-4 py-2 rounded-full"
+        style={{
+          color: 'var(--theme-text-secondary)',
+          backgroundColor: 'color-mix(in srgb, var(--theme-glass-200) 80%, transparent)',
+          border: '1px solid var(--theme-border-light)'
+        }}
+      >
         AI is crafting your interface • This usually takes 10-30 seconds
       </p>
     </div>

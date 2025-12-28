@@ -420,7 +420,12 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--theme-border)' }}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl">
+            <div
+              className="p-2 rounded-xl"
+              style={{
+                background: 'linear-gradient(to bottom right, color-mix(in srgb, var(--theme-ai-accent) 20%, transparent), color-mix(in srgb, var(--theme-ai-secondary) 20%, transparent))'
+              }}
+            >
               <Wand2 className="w-5 h-5" style={{ color: 'var(--color-feature)' }} />
             </div>
             <div>
@@ -714,8 +719,18 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
               </button>
               <button
                 onClick={handleAccept}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 rounded-lg text-sm font-medium transition-all shadow-lg shadow-green-500/20"
-                style={{ color: 'var(--theme-text-primary)' }}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg"
+                style={{
+                  background: 'linear-gradient(to right, var(--color-success), color-mix(in srgb, var(--color-success) 92%, black))',
+                  color: 'var(--theme-text-on-accent)',
+                  boxShadow: '0 10px 15px -3px color-mix(in srgb, var(--color-success) 20%, transparent), 0 4px 6px -4px color-mix(in srgb, var(--color-success) 20%, transparent)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to right, color-mix(in srgb, var(--color-success) 90%, white), color-mix(in srgb, var(--color-success) 85%, black))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to right, var(--color-success), color-mix(in srgb, var(--color-success) 92%, black))';
+                }}
               >
                 <Check className="w-4 h-4" />
                 Use This Prompt

@@ -71,9 +71,20 @@ export const ProjectTemplateSelector: React.FC<ProjectTemplateSelectorProps> = (
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10" style={{ borderBottom: '1px solid var(--theme-border-light)' }}>
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{
+            borderBottom: '1px solid var(--theme-border-light)',
+            background: 'linear-gradient(to right, color-mix(in srgb, var(--theme-accent) 10%, transparent), color-mix(in srgb, var(--theme-ai-accent) 10%, transparent))'
+          }}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
+            <div
+              className="p-2.5 rounded-xl"
+              style={{
+                background: 'linear-gradient(to bottom right, var(--theme-accent), var(--theme-ai-accent))'
+              }}
+            >
               <Sparkles className="w-5 h-5" style={{ color: 'var(--theme-text-primary)' }} />
             </div>
             <div>

@@ -3,7 +3,7 @@ import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, FileText, Wrench, Package, Loader2, Camera,
   SplitSquareVertical, X, Zap, ZapOff, MousePointer2, Bug, Settings, ChevronDown,
-  Play, Bot, Map, GitBranch, Activity, FolderOpen
+  Play, Bot, Map, GitBranch, Activity, FolderOpen, LayoutGrid
 } from 'lucide-react';
 import { getProviderManager } from '../../services/ai';
 import { buildIframeHtml } from '../../utils/sandboxHtml';
@@ -38,6 +38,7 @@ import { CodeMapTab } from './CodeMapTab';
 import { EnvironmentPanel } from './EnvironmentPanel';
 import { GitPanel } from '../GitPanel';
 import { RunnerPanel } from './RunnerPanel';
+import { MultiDevicePreview } from './MultiDevicePreview';
 import { ErrorFixPanel } from './ErrorFixPanel';
 import { DocsPanel } from './DocsPanel';
 import { PreviewContent } from './PreviewContent';
@@ -664,9 +665,21 @@ export const PreviewPanel = memo(function PreviewPanel({
   };
 
   // Helper functions
-  const reloadPreview = () => {
-    setKey(prev => prev + 1);
-  };
+  const reloadPreview = useCallback(() => {
+    // Capture state before reload for HMR-like experience
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage({ type: 'CAPTURE_STATE' }, '*');
+        console.log('[Preview] State captured before reload');
+      } catch (e) {
+        // Ignore if iframe is not accessible
+      }
+    }
+    // Small delay to ensure state is captured before reload
+    setTimeout(() => {
+      setKey(prev => prev + 1);
+    }, 50);
+  }, []);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(files[activeFile] || '');
@@ -771,10 +784,11 @@ export const PreviewPanel = memo(function PreviewPanel({
               <div className="h-6 w-px mx-1 hidden sm:block" style={{ backgroundColor: 'var(--theme-border)' }} />
               <div className="hidden sm:flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--theme-glass-100)', border: '1px solid var(--theme-border)' }}>
                 {[
-                  { id: 'desktop', icon: Monitor },
-                  { id: 'tablet', icon: Tablet },
-                  { id: 'mobile', icon: Smartphone }
-                ].map(({ id, icon: Icon }) => (
+                  { id: 'desktop', icon: Monitor, title: 'Desktop' },
+                  { id: 'tablet', icon: Tablet, title: 'Tablet' },
+                  { id: 'mobile', icon: Smartphone, title: 'Mobile' },
+                  { id: 'multi', icon: LayoutGrid, title: 'Multi-Device' }
+                ].map(({ id, icon: Icon, title }) => (
                   <button
                     key={id}
                     onClick={() => setPreviewDevice(id as PreviewDevice)}
@@ -783,8 +797,8 @@ export const PreviewPanel = memo(function PreviewPanel({
                       backgroundColor: previewDevice === id ? 'var(--theme-glass-300)' : undefined,
                       color: previewDevice === id ? 'var(--theme-text-primary)' : 'var(--theme-text-muted)'
                     }}
-                    title={id.charAt(0).toUpperCase() + id.slice(1)}
-                    aria-label={`${id} view`}
+                    title={title}
+                    aria-label={`${title} view`}
                   >
                     <Icon className="w-4 h-4" />
                   </button>
@@ -1011,74 +1025,83 @@ export const PreviewPanel = memo(function PreviewPanel({
           // These tabs are always-rendered above, so return null here to avoid showing FileExplorer
           null
         ) : activeTab === 'preview' ? (
-          <PreviewContent
-            appCode={appCode}
-            iframeSrc={iframeSrc}
-            previewDevice={previewDevice}
-            isGenerating={isGenerating}
-            isFixingResp={isFixingResponsiveness}
-            iframeKey={key}
-            logs={logs}
-            networkLogs={networkLogs}
-            isConsoleOpen={isConsoleOpen}
-            setIsConsoleOpen={setIsConsoleOpen}
-            activeTerminalTab={activeTerminalTab}
-            setActiveTerminalTab={setActiveTerminalTab}
-            setLogs={setLogs}
-            setNetworkLogs={setNetworkLogs}
-            fixError={fixError}
-            autoFixToast={autoFixToast}
-            isAutoFixing={isAutoFixing}
-            pendingAutoFix={pendingAutoFix}
-            handleConfirmAutoFix={handleConfirmAutoFix}
-            handleDeclineAutoFix={handleDeclineAutoFix}
-            failedAutoFixError={failedAutoFixError}
-            onSendErrorToChat={onSendErrorToChat}
-            handleSendErrorToChat={handleSendErrorToChat}
-            handleDismissFailedError={handleDismissFailedError}
-            isInspectMode={isInspectMode}
-            hoveredElement={hoveredElement}
-            inspectedElement={inspectedElement}
-            isInspectEditing={isInspectEditing}
-            onCloseInspector={handleExitInspectMode}
-            onInspectEdit={wrappedInspectEdit}
-            iframeRef={iframeRef}
-            currentUrl={currentUrl}
-            canGoBack={canGoBack}
-            canGoForward={canGoForward}
-            onNavigate={navigateToUrl}
-            onGoBack={goBack}
-            onGoForward={goForward}
-            onReload={reloadPreview}
-            // Elements tab props for component tree
-            componentTree={componentTree}
-            selectedNodeId={selectedNodeId}
-            expandedNodes={expandedNodes}
-            onSelectNode={onSelectNode}
-            onToggleExpand={onToggleExpand}
-            onHoverNode={onHoverNode}
-            onRefreshTree={onRefreshTree}
-            isTreeLoading={isTreeLoading}
-            // InspectorPanel props
-            isInspectorPanelOpen={isInspectorPanelOpen}
-            inspectorActiveTab={inspectorActiveTab}
-            onInspectorTabChange={setInspectorActiveTab}
-            onCloseInspectorPanel={closeInspectorPanel}
-            computedStyles={computedStyles}
-            tailwindClasses={tailwindClasses}
-            isStylesLoading={isStylesLoading}
-            componentProps={componentProps}
-            componentState={componentState}
-            componentName={componentName}
-            isPropsLoading={isPropsLoading}
-            selectedElementRef={selectedElementRef}
-            ffGroup={inspectedElement?.ffGroup}
-            onApplyPreset={applyPreset}
-            onApplyCustomStyle={applyCustomStyle}
-            onApplyTempStyle={applyTempStyle}
-            onClearTempStyles={clearTempStyles}
-            isQuickStylesProcessing={isQuickStylesProcessing}
-          />
+          previewDevice === 'multi' ? (
+            <MultiDevicePreview
+              iframeSrc={iframeSrc}
+              iframeKey={key}
+              isGenerating={isGenerating}
+              onReload={reloadPreview}
+            />
+          ) : (
+            <PreviewContent
+              appCode={appCode}
+              iframeSrc={iframeSrc}
+              previewDevice={previewDevice}
+              isGenerating={isGenerating}
+              isFixingResp={isFixingResponsiveness}
+              iframeKey={key}
+              logs={logs}
+              networkLogs={networkLogs}
+              isConsoleOpen={isConsoleOpen}
+              setIsConsoleOpen={setIsConsoleOpen}
+              activeTerminalTab={activeTerminalTab}
+              setActiveTerminalTab={setActiveTerminalTab}
+              setLogs={setLogs}
+              setNetworkLogs={setNetworkLogs}
+              fixError={fixError}
+              autoFixToast={autoFixToast}
+              isAutoFixing={isAutoFixing}
+              pendingAutoFix={pendingAutoFix}
+              handleConfirmAutoFix={handleConfirmAutoFix}
+              handleDeclineAutoFix={handleDeclineAutoFix}
+              failedAutoFixError={failedAutoFixError}
+              onSendErrorToChat={onSendErrorToChat}
+              handleSendErrorToChat={handleSendErrorToChat}
+              handleDismissFailedError={handleDismissFailedError}
+              isInspectMode={isInspectMode}
+              hoveredElement={hoveredElement}
+              inspectedElement={inspectedElement}
+              isInspectEditing={isInspectEditing}
+              onCloseInspector={handleExitInspectMode}
+              onInspectEdit={wrappedInspectEdit}
+              iframeRef={iframeRef}
+              currentUrl={currentUrl}
+              canGoBack={canGoBack}
+              canGoForward={canGoForward}
+              onNavigate={navigateToUrl}
+              onGoBack={goBack}
+              onGoForward={goForward}
+              onReload={reloadPreview}
+              // Elements tab props for component tree
+              componentTree={componentTree}
+              selectedNodeId={selectedNodeId}
+              expandedNodes={expandedNodes}
+              onSelectNode={onSelectNode}
+              onToggleExpand={onToggleExpand}
+              onHoverNode={onHoverNode}
+              onRefreshTree={onRefreshTree}
+              isTreeLoading={isTreeLoading}
+              // InspectorPanel props
+              isInspectorPanelOpen={isInspectorPanelOpen}
+              inspectorActiveTab={inspectorActiveTab}
+              onInspectorTabChange={setInspectorActiveTab}
+              onCloseInspectorPanel={closeInspectorPanel}
+              computedStyles={computedStyles}
+              tailwindClasses={tailwindClasses}
+              isStylesLoading={isStylesLoading}
+              componentProps={componentProps}
+              componentState={componentState}
+              componentName={componentName}
+              isPropsLoading={isPropsLoading}
+              selectedElementRef={selectedElementRef}
+              ffGroup={inspectedElement?.ffGroup}
+              onApplyPreset={applyPreset}
+              onApplyCustomStyle={applyCustomStyle}
+              onApplyTempStyle={applyTempStyle}
+              onClearTempStyles={clearTempStyles}
+              isQuickStylesProcessing={isQuickStylesProcessing}
+            />
+          )
         ) : (
           <div className="flex-1 flex min-h-0 h-full">
             <FileExplorer

@@ -43,6 +43,7 @@ import {
   getFormHelpersScript,
   getScrollUtilitiesScript,
   getScreenshotCaptureScript,
+  getStatePreservationScript,
 } from './sandboxHtml/scripts';
 
 // Re-export script generators for potential external use
@@ -256,6 +257,9 @@ function buildIframeHtmlTemplate(files: FileSystem, isInspectMode: boolean): str
 
     // Screenshot Capture (preview to image)
     ${getScreenshotCaptureScript()}
+
+    // State Preservation (HMR-like state capture/restore)
+    ${getStatePreservationScript()}
 
     // CRITICAL: Prevent any scroll from happening at document level
     // This ensures negative positioned elements can't trigger scroll

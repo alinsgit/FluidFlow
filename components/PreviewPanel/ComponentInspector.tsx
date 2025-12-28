@@ -154,7 +154,7 @@ export const ComponentInspector: React.FC<ComponentInspectorProps> = ({
           className="flex items-center gap-2 px-3 py-2 backdrop-blur-xl rounded-full shadow-2xl cursor-move select-none transition-all"
           style={{
             backgroundColor: 'var(--color-feature)',
-            boxShadow: isDragging ? '0 0 0 2px rgba(255,255,255,0.3)' : 'none',
+            boxShadow: isDragging ? '0 0 0 2px color-mix(in srgb, var(--theme-text-primary) 30%, transparent)' : 'none',
             transform: isDragging ? 'scale(1.05)' : 'scale(1)'
           }}
           onMouseDown={handleDragStart}
@@ -459,7 +459,7 @@ const DraggableLabel: React.FC<{
         left: selectedRect.left + offset.x,
         backgroundColor: 'var(--color-feature)',
         color: 'var(--theme-text-on-accent)',
-        boxShadow: isDragging ? '0 0 0 2px rgba(255,255,255,0.5)' : 'none',
+        boxShadow: isDragging ? '0 0 0 2px color-mix(in srgb, var(--theme-text-primary) 50%, transparent)' : 'none',
         transform: isDragging ? 'scale(1.05)' : 'scale(1)'
       }}
       onMouseDown={handleMouseDown}

@@ -29,6 +29,26 @@ function shuffleArray<T>(array: T[]): T[] {
   return result;
 }
 
+// Helper function to convert color identifier to theme gradient
+const getGradientStyle = (colorId: string): string => {
+  const gradients: Record<string, string> = {
+    'accent-gradient': 'linear-gradient(to right, color-mix(in srgb, var(--theme-accent) 20%, transparent), color-mix(in srgb, var(--theme-ai-accent) 20%, transparent))',
+    'success-gradient': 'linear-gradient(to right, color-mix(in srgb, var(--color-success) 20%, transparent), color-mix(in srgb, var(--theme-accent) 20%, transparent))',
+    'ai-gradient': 'linear-gradient(to right, color-mix(in srgb, var(--theme-ai-accent) 20%, transparent), color-mix(in srgb, var(--theme-ai-secondary) 20%, transparent))',
+    'warning-gradient': 'linear-gradient(to right, color-mix(in srgb, var(--color-warning) 20%, transparent), color-mix(in srgb, var(--color-error) 20%, transparent))'
+  };
+
+  // Check if it's a legacy Tailwind class or a new gradient ID
+  if (colorId.includes('from-') || colorId.includes('to-')) {
+    // Legacy fallback - try to map common patterns
+    if (colorId.includes('blue') && colorId.includes('purple')) return gradients['accent-gradient'];
+    if (colorId.includes('emerald') || colorId.includes('green')) return gradients['success-gradient'];
+    return gradients['accent-gradient']; // default
+  }
+
+  return gradients[colorId] || gradients['accent-gradient'];
+};
+
 export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, showOnFirstLaunch = false }) => {
   const [hasSeenCredits, setHasSeenCredits] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -83,7 +103,7 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
                 logo: "🔗",
                 website: "https://tonl.dev",
                 github: "https://github.com/tonl-dev/tonl",
-                color: "from-blue-500/20 to-purple-600/20"
+                color: "accent-gradient" // Maps to theme accent gradient
               },
               {
                 id: "specpulse",
@@ -93,7 +113,7 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
                 logo: "⚡",
                 website: "https://specpulse.xyz",
                 github: "https://github.com/specpulse/specpulse",
-                color: "from-emerald-500/20 to-blue-600/20"
+                color: "success-gradient" // Maps to theme success gradient
               }
             ]);
           }
@@ -171,22 +191,55 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
     >
       <div className={`relative max-w-7xl w-full transform transition-all duration-500 ${isAnimating ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}>
         {/* Animated background effects */}
-        <div className="absolute inset-0 rounded-3xl blur-xl animate-pulse" style={{ background: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2))' }}></div>
+        <div
+          className="absolute inset-0 rounded-3xl blur-xl animate-pulse"
+          style={{
+            background: 'linear-gradient(to bottom right, color-mix(in srgb, var(--theme-accent) 20%, transparent), color-mix(in srgb, var(--theme-ai-accent) 20%, transparent), color-mix(in srgb, var(--theme-ai-secondary) 20%, transparent))'
+          }}
+        ></div>
 
         {/* Main card */}
         <div className="relative backdrop-blur-xl rounded-3xl p-10 shadow-2xl overflow-hidden w-full" style={{ backgroundColor: 'var(--theme-glass-200)', border: '1px solid var(--theme-border)' }}>
           {/* Floating particles background */}
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-10 left-10 animate-bounce" style={{ animationDelay: '0s', animationDuration: '3s', color: 'rgba(96, 165, 250, 0.2)' }}>
+            <div
+              className="absolute top-10 left-10 animate-bounce"
+              style={{
+                animationDelay: '0s',
+                animationDuration: '3s',
+                color: 'color-mix(in srgb, var(--theme-accent) 20%, transparent)'
+              }}
+            >
               <Sparkles size={20} />
             </div>
-            <div className="absolute top-20 right-20 animate-bounce" style={{ animationDelay: '0.5s', animationDuration: '3s', color: 'rgba(192, 132, 252, 0.2)' }}>
+            <div
+              className="absolute top-20 right-20 animate-bounce"
+              style={{
+                animationDelay: '0.5s',
+                animationDuration: '3s',
+                color: 'color-mix(in srgb, var(--theme-ai-accent) 20%, transparent)'
+              }}
+            >
               <Code size={16} />
             </div>
-            <div className="absolute bottom-10 left-20 animate-bounce" style={{ animationDelay: '1s', animationDuration: '3s', color: 'rgba(244, 114, 182, 0.2)' }}>
+            <div
+              className="absolute bottom-10 left-20 animate-bounce"
+              style={{
+                animationDelay: '1s',
+                animationDuration: '3s',
+                color: 'color-mix(in srgb, var(--theme-ai-secondary) 20%, transparent)'
+              }}
+            >
               <Zap size={18} />
             </div>
-            <div className="absolute bottom-20 right-10 animate-bounce" style={{ animationDelay: '1.5s', animationDuration: '3s', color: 'rgba(250, 204, 21, 0.2)' }}>
+            <div
+              className="absolute bottom-20 right-10 animate-bounce"
+              style={{
+                animationDelay: '1.5s',
+                animationDuration: '3s',
+                color: 'color-mix(in srgb, var(--color-warning) 20%, transparent)'
+              }}
+            >
               <Star size={14} />
             </div>
           </div>
@@ -206,10 +259,22 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
             <div className="flex flex-col md:flex-row gap-8">
               {/* Left Column: Project Info */}
               <div className="flex-1 text-center md:text-left">
-                <div className="inline-flex items-center justify-center w-20 h-20 mb-4 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg transform hover:scale-110 transition-transform duration-300">
+                <div
+                  className="inline-flex items-center justify-center w-20 h-20 mb-4 rounded-xl shadow-lg transform hover:scale-110 transition-transform duration-300"
+                  style={{
+                    background: 'linear-gradient(to bottom right, var(--theme-accent), var(--theme-ai-accent))'
+                  }}
+                >
                   <Sparkles size={40} style={{ color: 'white' }} />
                 </div>
-                <h2 className="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                <h2
+                  className="text-4xl font-bold mb-2 bg-clip-text text-transparent"
+                  style={{
+                    background: 'linear-gradient(to right, color-mix(in srgb, var(--theme-accent) 90%, white), var(--theme-ai-accent), var(--theme-ai-secondary))',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >
                   FluidFlow
                 </h2>
                 <p className="text-lg mb-4" style={{ color: 'var(--theme-text-primary)' }}>AI-Powered Prototyping Revolution</p>
@@ -221,14 +286,14 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
                   onClick={handleGitHubStar}
                   className="flex items-center gap-3 px-6 py-3 rounded-xl transition-all group transform hover:scale-105"
                   style={{
-                    background: 'linear-gradient(to right, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2), rgba(239, 68, 68, 0.2))',
-                    border: '1px solid rgba(234, 179, 8, 0.3)'
+                    background: 'linear-gradient(to right, color-mix(in srgb, var(--color-warning) 20%, transparent), color-mix(in srgb, var(--color-warning) 15%, var(--color-error) 5%), color-mix(in srgb, var(--color-error) 20%, transparent))',
+                    border: '1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to right, rgba(234, 179, 8, 0.3), rgba(249, 115, 22, 0.3), rgba(239, 68, 68, 0.3))';
+                    e.currentTarget.style.background = 'linear-gradient(to right, color-mix(in srgb, var(--color-warning) 30%, transparent), color-mix(in srgb, var(--color-warning) 25%, var(--color-error) 5%), color-mix(in srgb, var(--color-error) 30%, transparent))';
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(to right, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2), rgba(239, 68, 68, 0.2))';
+                    e.currentTarget.style.background = 'linear-gradient(to right, color-mix(in srgb, var(--color-warning) 20%, transparent), color-mix(in srgb, var(--color-warning) 15%, var(--color-error) 5%), color-mix(in srgb, var(--color-error) 20%, transparent))';
                   }}
                 >
                   <Star className="group-hover:rotate-180 transition-all duration-500" style={{ color: 'var(--color-warning)' }} size={20} />
@@ -241,7 +306,12 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
                 <div className="max-w-sm mx-auto">
                   <div className="text-center mb-4">
                     <div className="inline-flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-orange-600 flex items-center justify-center">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center"
+                        style={{
+                          background: 'linear-gradient(to bottom right, var(--theme-ai-secondary), var(--color-warning))'
+                        }}
+                      >
                         <span className="text-2xl">👨‍💻</span>
                       </div>
                       <div className="text-left">
@@ -313,7 +383,13 @@ export const CreditsModal: React.FC<CreditsModalProps> = ({ isOpen, onClose, sho
                 </div>
 
                 {currentProject && (
-                  <div className={`bg-gradient-to-r ${currentProject.color} rounded-xl p-6 backdrop-blur-sm h-32`} style={{ border: '1px solid var(--theme-border)' }}>
+                  <div
+                    className="rounded-xl p-6 backdrop-blur-sm h-32"
+                    style={{
+                      border: '1px solid var(--theme-border)',
+                      background: getGradientStyle(currentProject.color)
+                    }}
+                  >
                     <div className="flex items-center gap-4 h-full">
                       <div className="w-16 h-16 rounded-lg flex items-center justify-center shrink-0 overflow-hidden" style={{ backgroundColor: 'var(--theme-glass-200)', border: '1px solid var(--theme-border)' }}>
                         {currentProject.logo.startsWith('https://') ? (

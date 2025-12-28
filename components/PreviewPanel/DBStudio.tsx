@@ -134,7 +134,7 @@ const TableNode: React.FC<{
             onClick={onDelete}
             className="p-1 rounded transition-colors"
             style={{ ['--hover-bg' as string]: 'rgba(var(--color-error-rgb), 0.5)' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.5)')}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--color-error) 50%, transparent)')}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             title="Delete table"
           >
@@ -199,7 +199,7 @@ const TableNode: React.FC<{
             <button
               onClick={() => deleteColumn(index)}
               className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all"
-              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.3)')}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--color-error) 30%, transparent)')}
               onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
               <Trash2 className="w-3 h-3" style={{ color: 'var(--color-error)' }} />
@@ -261,8 +261,8 @@ function relationsToEdges(relations: RelationsData): Edge[] {
     type: 'smoothstep',
     animated: true,
     label: rel.label,
-    style: { stroke: '#3b82f6' },
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' },
+    style: { stroke: 'var(--theme-accent)' },
+    markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--theme-accent)' },
     data: { relationType: rel.relationType }
   }));
 }
@@ -322,8 +322,8 @@ export const DBStudio: React.FC<DBStudioProps> = ({ files, setFiles }) => {
             targetHandle: `${toTable}-${toCol}-target`,
             type: 'smoothstep',
             animated: true,
-            style: { stroke: '#3b82f6' },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' }
+            style: { stroke: 'var(--theme-accent)' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--theme-accent)' }
           };
         });
         setEdges(newEdges);
@@ -393,8 +393,8 @@ export const DBStudio: React.FC<DBStudioProps> = ({ files, setFiles }) => {
       targetHandle: params.targetHandle,
       type: 'smoothstep',
       animated: true,
-      style: { stroke: '#3b82f6' },
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' }
+      style: { stroke: 'var(--theme-accent)' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--theme-accent)' }
     };
     setEdges(eds => addEdge(newEdge, eds));
     setHasUnsavedChanges(true);
@@ -494,8 +494,8 @@ Use appropriate SQL types: INT, BIGINT, SERIAL, VARCHAR(255), TEXT, BOOLEAN, DAT
                 targetHandle: `${toTable}-${toCol}-target`,
                 type: 'smoothstep',
                 animated: true,
-                style: { stroke: '#3b82f6' },
-                markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' }
+                style: { stroke: 'var(--theme-accent)' },
+                markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--theme-accent)' }
               };
             });
             setEdges(prev => extend ? [...prev, ...newEdges] : newEdges);
@@ -585,8 +585,8 @@ Use appropriate SQL types: INT, BIGINT, SERIAL, VARCHAR(255), TEXT, BOOLEAN, DAT
           targetHandle: `${toTable}-${toCol}-target`,
           type: 'smoothstep',
           animated: true,
-          style: { stroke: '#3b82f6' },
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' }
+          style: { stroke: 'var(--theme-accent)' },
+          markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--theme-accent)' }
         };
       });
       setEdges(newEdges);
@@ -808,7 +808,7 @@ Use appropriate SQL types: INT, BIGINT, SERIAL, VARCHAR(255), TEXT, BOOLEAN, DAT
             <MiniMap
               style={{ backgroundColor: 'var(--theme-surface)' }}
               nodeColor="var(--color-success)"
-              maskColor="rgba(0,0,0,0.5)"
+              maskColor="color-mix(in srgb, var(--theme-background) 50%, transparent)"
             />
           </ReactFlow>
         )}
