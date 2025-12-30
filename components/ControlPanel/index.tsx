@@ -45,6 +45,8 @@ import { useContextSync, useControlPanelModals } from './hooks';
 export interface ControlPanelRef {
   handleInspectEdit: (prompt: string, element: InspectedElement, scope: EditScope) => Promise<void>;
   sendErrorToChat: (errorMessage: string) => void;
+  revertAndRetry: () => void;
+  canRevertAndRetry: boolean;
 }
 
 /**
@@ -113,6 +115,8 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     hasUncommittedChanges,
     reviewChange,
     saveSnapshot: onSaveCheckpoint,
+    undo,
+    canUndo,
   } = ctx;
 
   const {
@@ -139,6 +143,11 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   const [isEducationMode, setIsEducationMode] = useState(false);
   const [hasProjectContext, setHasProjectContext] = useState(false);
   const [, forceUpdate] = useState({});
+  // Track last user prompt for revert & retry functionality
+  const [lastUserPrompt, setLastUserPrompt] = useState<{
+    prompt: string;
+    attachments: ChatAttachment[];
+  } | null>(null);
 
   // Refs for chat persistence
   const hasRestoredChatRef = useRef(false);
@@ -397,6 +406,11 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     // Track if continuation was started (to prevent finally block from clearing isGenerating)
     let continuationStarted = false;
 
+    // Save the prompt for potential revert & retry (only for code generation, not inspect edits)
+    if (!inspectContext) {
+      setLastUserPrompt({ prompt, attachments });
+    }
+
     // Create user message
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -556,12 +570,31 @@ Fix the error in src/App.tsx.`;
     handleSend(errorPrompt, []);
   }, [handleSend]);
 
+  // Revert files and retry last prompt - called from PreviewPanel when AI changes break the app
+  const revertAndRetry = useCallback(() => {
+    if (!lastUserPrompt || !canUndo) {
+      console.warn('[revertAndRetry] Cannot revert: no prompt or no undo available');
+      return;
+    }
+
+    // Step 1: Undo the last file changes
+    undo();
+
+    // Step 2: Resend the last prompt
+    const { prompt, attachments } = lastUserPrompt;
+    handleSend(prompt, attachments);
+  }, [lastUserPrompt, canUndo, undo, handleSend]);
+
+  // Check if revert and retry is available
+  const canRevertAndRetry = Boolean(lastUserPrompt && canUndo);
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     handleInspectEdit,
-    sendErrorToChat
-  }), [handleInspectEdit, sendErrorToChat]);
+    sendErrorToChat,
+    revertAndRetry,
+    canRevertAndRetry,
+  }), [handleInspectEdit, sendErrorToChat, revertAndRetry, canRevertAndRetry]);
 
   const handleResetClick = () => {
     modals.openResetConfirm();

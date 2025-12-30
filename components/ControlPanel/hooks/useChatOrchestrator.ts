@@ -36,6 +36,8 @@ interface UseChatOrchestratorProps {
   isConsultantMode: boolean;
   isEducationMode: boolean;
   diffModeEnabled?: boolean;
+  onUndo?: () => void;
+  canUndo?: boolean;
 }
 
 export function useChatOrchestrator({
@@ -49,9 +51,17 @@ export function useChatOrchestrator({
   isConsultantMode,
   isEducationMode,
   diffModeEnabled,
+  onUndo,
+  canUndo,
 }: UseChatOrchestratorProps) {
   // Chat messages state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // Track last user prompt for revert & retry functionality
+  const [lastUserPrompt, setLastUserPrompt] = useState<{
+    prompt: string;
+    attachments: ChatAttachment[];
+  } | null>(null);
 
   // Generation state (streaming, file plan, truncation, continuation)
   const genState = useGenerationState();
@@ -172,6 +182,11 @@ export function useChatOrchestrator({
     inspectContext?: InspectContext
   ) => {
     let continuationStarted = false;
+
+    // Save the prompt for potential revert & retry (only for code generation, not inspect edits)
+    if (!inspectContext) {
+      setLastUserPrompt({ prompt, attachments });
+    }
 
     // Create user message
     const userMessage: ChatMessage = {
@@ -343,6 +358,24 @@ Fix the error in src/App.tsx.`;
     contextManager.clearContext(sessionId);
   }, [sessionId, contextManager]);
 
+  // Revert files and retry last prompt (for when AI changes break the app)
+  const revertAndRetry = useCallback(() => {
+    if (!lastUserPrompt || !canUndo || !onUndo) {
+      console.warn('[revertAndRetry] Cannot revert: no prompt, no undo available, or no undo handler');
+      return;
+    }
+
+    // Step 1: Undo the last file changes
+    onUndo();
+
+    // Step 2: Resend the last prompt
+    const { prompt, attachments } = lastUserPrompt;
+    handleSend(prompt, attachments);
+  }, [lastUserPrompt, canUndo, onUndo, handleSend]);
+
+  // Check if revert and retry is available
+  const canRevertAndRetry = Boolean(lastUserPrompt && canUndo && onUndo);
+
   return {
     // State
     messages,
@@ -374,6 +407,8 @@ Fix the error in src/App.tsx.`;
     handleTruncationRetry,
     handleContinueGeneration,
     clearChat,
+    revertAndRetry,
+    canRevertAndRetry,
   };
 }
 

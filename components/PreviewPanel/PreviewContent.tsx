@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Globe,
   MessageSquare,
+  RotateCcw,
 } from 'lucide-react';
 import { LogEntry, NetworkRequest, PreviewDevice, TerminalTab } from '../../types';
 import { DevToolsPanel } from './DevToolsPanel';
@@ -99,6 +100,9 @@ export interface PreviewContentProps {
   onApplyTempStyle?: (styles: Record<string, string>) => void;
   onClearTempStyles?: () => void;
   isQuickStylesProcessing?: boolean;
+  // Revert and retry when AI changes break the app
+  onRevertAndRetry?: () => void;
+  canRevertAndRetry?: boolean;
 }
 
 export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
@@ -172,6 +176,9 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
     onApplyTempStyle,
     onClearTempStyles,
     isQuickStylesProcessing = false,
+    // Revert and retry
+    onRevertAndRetry,
+    canRevertAndRetry = false,
   } = props;
 
   // Local state for URL input
@@ -367,7 +374,21 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
                     {failedAutoFixError.slice(0, 150)}
                     {failedAutoFixError.length > 150 ? '...' : ''}
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {canRevertAndRetry && onRevertAndRetry && (
+                      <button
+                        onClick={() => {
+                          handleDismissFailedError();
+                          onRevertAndRetry();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                        style={{ backgroundColor: 'var(--color-warning-subtle)', border: '1px solid var(--color-warning-border)', color: 'var(--color-warning)' }}
+                        title="Undo changes and resend the last prompt"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Revert & Retry
+                      </button>
+                    )}
                     {onSendErrorToChat && (
                       <button
                         onClick={handleSendErrorToChat}

@@ -291,6 +291,8 @@ export default function App() {
             onSendErrorToChat={(error) => controlPanelRef.current?.sendErrorToChat(error)}
             onPreviewErrorsChange={setPreviewHasErrors}
             onRunnerStatusChange={setHasRunningServer}
+            onRevertAndRetry={() => controlPanelRef.current?.revertAndRetry()}
+            canRevertAndRetry={controlPanelRef.current?.canRevertAndRetry ?? false}
           />
           </div>
         </IDEFrame>

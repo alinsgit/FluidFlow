@@ -57,13 +57,18 @@ interface PreviewPanelProps {
   onSendErrorToChat?: (errorMessage: string) => void;
   onPreviewErrorsChange?: (hasErrors: boolean) => void;
   onRunnerStatusChange?: (isRunning: boolean) => void;
+  // Revert and retry when AI changes break the app
+  onRevertAndRetry?: () => void;
+  canRevertAndRetry?: boolean;
 }
 
 export const PreviewPanel = memo(function PreviewPanel({
   onInspectEdit,
   onSendErrorToChat,
   onPreviewErrorsChange,
-  onRunnerStatusChange
+  onRunnerStatusChange,
+  onRevertAndRetry,
+  canRevertAndRetry,
 }: PreviewPanelProps) {
   // ============ Context Consumption ============
   // Get data directly from contexts instead of props (reduced from 28 to 4 props)
@@ -1100,6 +1105,8 @@ export const PreviewPanel = memo(function PreviewPanel({
               onApplyTempStyle={applyTempStyle}
               onClearTempStyles={clearTempStyles}
               isQuickStylesProcessing={isQuickStylesProcessing}
+              onRevertAndRetry={onRevertAndRetry}
+              canRevertAndRetry={canRevertAndRetry}
             />
           )
         ) : (
