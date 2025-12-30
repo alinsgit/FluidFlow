@@ -413,7 +413,7 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-[90vw] max-w-2xl rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="w-[90vw] max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         style={{ backgroundColor: 'var(--theme-surface)', border: '1px solid var(--theme-border)' }}
         onClick={(e) => e.stopPropagation()}
       >
