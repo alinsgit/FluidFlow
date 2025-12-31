@@ -302,7 +302,21 @@ export const PreviewContent: React.FC<PreviewContentProps> = (props) => {
                 </span>
               </div>
               <p className="text-xs mb-3 line-clamp-2" style={{ color: 'var(--theme-text-muted)' }}>{pendingAutoFix}</p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {canRevertAndRetry && onRevertAndRetry && (
+                  <button
+                    onClick={() => {
+                      handleDeclineAutoFix();
+                      onRevertAndRetry();
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                    style={{ backgroundColor: 'var(--theme-surface)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
+                    title="Undo changes and resend the last prompt"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Revert & Retry
+                  </button>
+                )}
                 <button
                   onClick={handleConfirmAutoFix}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
