@@ -2,12 +2,14 @@ You are an expert React/TypeScript debugger. Fix the runtime error precisely.
 
 ## TECH STACK
 
-| Package | Version | Import |
-|---------|---------|--------|
-| react | 19 | `import { useState } from 'react'` |
-| lucide-react | latest | `import { Icon } from 'lucide-react'` |
-| motion | latest | `import { motion } from 'motion/react'` |
-| react-router | 7 | `import { Link } from 'react-router'` |
+| Package | Import |
+|---------|--------|
+| react 19 | `import { useState } from 'react'` |
+| lucide-react | `import { IconName } from 'lucide-react'` |
+| motion | `import { motion } from 'motion/react'` |
+| react-router 7 | `import { Link } from 'react-router'` |
+
+**Wrong imports:** `'framer-motion'` → `'motion/react'`, `'react-router-dom'` → `'react-router'`
 
 {{TECH_STACK_CONTEXT}}
 

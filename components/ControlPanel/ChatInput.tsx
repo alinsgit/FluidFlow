@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, Loader2, Wand2, Paperclip, Image, Palette, X, Maximize2, Sparkles, Brain, Clock, FileText } from 'lucide-react';
+import { Send, Loader2, Wand2, Paperclip, Image, Palette, X, Maximize2, Sparkles, Brain, Clock, FileText, AlertTriangle } from 'lucide-react';
 import { ChatAttachment, FileSystem } from '../../types';
 import { PromptLibrary, PromptDropdown } from './PromptLibrary';
 import { PromptTemplateSelector } from './PromptTemplateSelector';
@@ -7,6 +7,7 @@ import { UploadCards } from './UploadCards';
 import { ExpandedPromptModal } from './ExpandedPromptModal';
 import { PromptImproverModal } from './PromptImproverModal';
 import { useToast } from '../Toast/ToastContext';
+import { hasMainChatContext } from '../../services/context';
 
 interface ChatInputProps {
   onSend: (prompt: string, attachments: ChatAttachment[], fileContext?: string[]) => void;
@@ -150,8 +151,23 @@ export const ChatInput = memo(function ChatInput({
     ? (prompt.trim() || attachments.length > 0)
     : (!!sketchAttachment || prompt.trim().length > 0);
 
+  // Check if AI has seen the codebase yet
+  const fileCount = Object.keys(files).length;
+  const needsCodebaseAnalysis = hasExistingApp && fileCount > 0 && !hasMainChatContext();
+
   return (
     <div className="flex-shrink-0" style={{ borderTop: '1px solid var(--theme-border)', backgroundColor: 'var(--theme-surface)' }}>
+      {/* Codebase analysis warning */}
+      {needsCodebaseAnalysis && (
+        <div className="mx-3 mt-3 p-2.5 rounded-lg text-xs flex items-start gap-2" style={{ backgroundColor: 'var(--color-warning-subtle)', border: '1px solid var(--color-warning-border)' }}>
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--color-warning)' }} />
+          <div>
+            <span style={{ color: 'var(--color-warning)' }}>AI hasn't analyzed your codebase yet.</span>
+            <span style={{ color: 'var(--theme-text-secondary)' }}> For better results, start with "Analyze the codebase" or describe what you want to change.</span>
+          </div>
+        </div>
+      )}
+
       {/* Error message */}
       {error && (
         <div className="mx-3 mt-3 p-2 rounded-lg text-xs" style={{ backgroundColor: 'var(--color-error-subtle)', border: '1px solid var(--color-error-border)', color: 'var(--color-error)' }}>

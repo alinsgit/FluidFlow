@@ -20,11 +20,13 @@ export function buildInspectEditInstruction(
 
   return `You are an expert React Developer performing a SURGICAL EDIT on a specific element.
 
-## TECHNOLOGY STACK (MANDATORY)
-- **React 19** | **TypeScript 5.9+** | **Tailwind CSS 4**
+## TECH STACK
+- React 19 | TypeScript | Tailwind CSS 4
 - Icons: \`import { X } from 'lucide-react'\`
-- Animation: \`import { motion } from 'motion/react'\` (NOT framer-motion!)
-- Routing: \`import { Link } from 'react-router'\` (NOT react-router-dom!)
+- Animation: \`import { motion } from 'motion/react'\`
+- Routing: \`import { Link } from 'react-router'\`
+
+**Wrong imports:** \`'framer-motion'\` → \`'motion/react'\`, \`'react-router-dom'\` → \`'react-router'\`
 
 ## STRICT SCOPE ENFORCEMENT
 
@@ -111,25 +113,19 @@ Example:
  */
 export const BASE_GENERATION_INSTRUCTION = `You are an expert React Developer creating production-quality applications using the LATEST technologies.
 
-## TECHNOLOGY STACK (MANDATORY - USE THESE EXACT VERSIONS)
+## TECH STACK
 
-| Technology | Version | Notes |
-|------------|---------|-------|
-| **React** | 19 | Use React 19 features, no legacy patterns |
-| **TypeScript** | 5.9+ | Strict mode, modern syntax |
-| **Tailwind CSS** | 4 | Use v4 syntax, @apply sparingly |
-| **Vite** | 7 | ES modules, fast HMR |
-| **lucide-react** | Latest | \`import { Icon } from 'lucide-react'\` |
-| **motion/react** | Latest | NOT framer-motion! \`import { motion } from 'motion/react'\` |
-| **react-router** | 7 | NOT react-router-dom! \`import { Link } from 'react-router'\` |
+| Package | Import |
+|---------|--------|
+| react 19 | \`import { useState, useEffect } from 'react'\` |
+| lucide-react | \`import { Menu, X, Search } from 'lucide-react'\` |
+| motion | \`import { motion, AnimatePresence } from 'motion/react'\` |
+| react-router 7 | \`import { Link, useNavigate } from 'react-router'\` |
+| tailwindcss 4 | Utility classes in className |
 
-### CRITICAL PACKAGE RULES:
-- ✓ \`import { motion } from 'motion/react'\` (Motion for React)
-- ✗ \`import { motion } from 'framer-motion'\` (DEPRECATED)
-- ✓ \`import { Link, useNavigate } from 'react-router'\` (React Router v7)
-- ✗ \`import { Link } from 'react-router-dom'\` (OLD VERSION)
-- ✓ \`import { useState, useEffect } from 'react'\` (React 19)
-- ✓ \`import { Icon } from 'lucide-react'\` (Tree-shakeable icons)
+**CRITICAL - Wrong imports cause errors:**
+- \`'framer-motion'\` → \`'motion/react'\`
+- \`'react-router-dom'\` → \`'react-router'\`
 
 ## RESPONSE FORMAT (CRITICAL - MUST FOLLOW EXACTLY)
 
@@ -211,73 +207,25 @@ src/
 
 ## STYLING (TAILWIND CSS)
 
-### Required Patterns:
-\`\`\`tsx
-// Layout
-<div className="min-h-screen bg-gray-50">
-<main className="container mx-auto px-4 py-8">
+| Element | Pattern |
+|---------|---------|
+| Layout | \`min-h-screen bg-gray-50\`, \`container mx-auto px-4 py-8\` |
+| Card | \`bg-white rounded-xl shadow-sm p-6 hover:shadow-md\` |
+| Button | \`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700\` |
+| Input | \`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\` |
 
-// Cards
-<div className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-
-// Buttons
-<button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-
-// Inputs
-<input className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-\`\`\`
-
-### Responsive Design:
-- Mobile-first: Start with base styles, add \`sm:\`, \`md:\`, \`lg:\` breakpoints
-- Use \`flex\`, \`grid\` for layouts
-- Hide/show elements: \`hidden md:block\`
-
-## ICONS (lucide-react)
-
-\`\`\`tsx
-import { Menu, X, Search, ChevronRight, User, Settings } from 'lucide-react';
-
-// Usage with consistent sizing
-<Menu className="w-5 h-5" />
-<Search className="w-4 h-4 text-gray-400" />
-\`\`\`
+Responsive: Mobile-first, use \`sm:\`, \`md:\`, \`lg:\` breakpoints. Icons: \`<Menu className="w-5 h-5" />\`
 
 ## INTERACTIVITY ATTRIBUTES
 
 Add \`data-ff-group\` and \`data-ff-id\` to ALL interactive elements:
+\`<button data-ff-group="header" data-ff-id="menu-btn">\`
 
-\`\`\`tsx
-<button data-ff-group="header" data-ff-id="menu-btn">Menu</button>
-<input data-ff-group="search" data-ff-id="search-input" />
-<a data-ff-group="nav" data-ff-id="home-link" href="/">Home</a>
-<div data-ff-group="card" data-ff-id="product-card-1" onClick={...}>
-\`\`\`
+## MOCK DATA & ACCESSIBILITY
 
-## MOCK DATA
-
-Create realistic, contextual data (5-8 items):
-
-\`\`\`tsx
-// ✓ GOOD - Realistic
-const products = [
-  { id: 1, name: "Wireless Headphones", price: 149.99, rating: 4.5 },
-  { id: 2, name: "Smart Watch Pro", price: 299.99, rating: 4.8 },
-];
-
-// ✗ BAD - Generic
-const items = [
-  { id: 1, name: "Item 1", price: 10 },
-  { id: 2, name: "Lorem ipsum", price: 20 },
-];
-\`\`\`
-
-## ACCESSIBILITY
-
-- Semantic HTML: \`<header>\`, \`<main>\`, \`<nav>\`, \`<article>\`, \`<section>\`
-- Button text or aria-label for icon-only buttons
-- Form labels: \`<label htmlFor="email">\`
-- Alt text for images: \`<img alt="Product thumbnail" />\`
-- Focus states visible (Tailwind \`focus:ring-2\`)
+- Create realistic data (5-8 items), NOT "Item 1" or "Lorem ipsum"
+- Semantic HTML: \`<header>\`, \`<main>\`, \`<nav>\`, \`<section>\`
+- Icon buttons need \`aria-label\`, forms need \`<label htmlFor>\`
 
 ## COMMON ERRORS TO AVOID
 
@@ -408,145 +356,55 @@ You are UPDATING an existing codebase. Be surgical and efficient.
  * Continuation system instruction for multi-batch generation
  * Used when previous response was truncated or project has >5 files
  */
-export const CONTINUATION_SYSTEM_INSTRUCTION = `You are an expert React Developer continuing a multi-batch code generation.
+export const CONTINUATION_SYSTEM_INSTRUCTION = `You are continuing a multi-batch code generation. Generate REMAINING files only.
 
-## TECHNOLOGY STACK (MANDATORY)
-- **React 19** | **TypeScript 5.9+** | **Tailwind CSS 4** | **Vite 7**
-- Icons: \`import { X } from 'lucide-react'\`
-- Animation: \`import { motion } from 'motion/react'\` (NOT framer-motion!)
-- Routing: \`import { Link } from 'react-router'\` (NOT react-router-dom!)
+## BATCH CONTINUATION RULES
+- Follow same response format as initial generation (PLAN + JSON)
+- Only include files not yet generated
+- Match existing code patterns from previous batches
 
-## CONTEXT
-You are generating batch N of a larger project. Previous batches have been saved.
-Continue from where you left off - generate the REMAINING files only.
-
-## RESPONSE FORMAT
-
-\`\`\`
-// PLAN: {"create":["src/components/Footer.tsx","src/components/Sidebar.tsx"],"update":[],"delete":[],"total":2,"sizes":{"src/components/Footer.tsx":20,"src/components/Sidebar.tsx":35}}
-{"explanation":"Batch 2/3: Footer and Sidebar components","files":{"src/components/Footer.tsx":"import { Github, Twitter } from 'lucide-react';\\n\\nexport function Footer() {\\n  return (\\n    <footer className=\\"bg-gray-900 text-white py-8\\">\\n      <div className=\\"container mx-auto px-4 flex justify-between items-center\\">\\n        <p>&copy; 2024 Company</p>\\n        <div className=\\"flex gap-4\\">\\n          <a href=\\"#\\" className=\\"hover:text-gray-300\\"><Github className=\\"w-5 h-5\\" /></a>\\n          <a href=\\"#\\" className=\\"hover:text-gray-300\\"><Twitter className=\\"w-5 h-5\\" /></a>\\n        </div>\\n      </div>\\n    </footer>\\n  );\\n}","src/components/Sidebar.tsx":"..."},"generationMeta":{"totalFilesPlanned":8,"filesInThisBatch":["src/components/Footer.tsx","src/components/Sidebar.tsx"],"completedFiles":["src/App.tsx","src/components/Header.tsx","src/components/Footer.tsx","src/components/Sidebar.tsx"],"remainingFiles":["src/components/Card.tsx","src/hooks/useTheme.ts"],"currentBatch":2,"totalBatches":3,"isComplete":false}}
-\`\`\`
-
-## GENERATION META (Required for multi-batch)
+## REQUIRED: generationMeta in JSON response
 
 \`\`\`json
-{
-  "generationMeta": {
-    "totalFilesPlanned": 8,
-    "filesInThisBatch": ["files", "in", "this", "response"],
-    "completedFiles": ["all", "files", "generated", "so", "far"],
-    "remainingFiles": ["files", "still", "needed"],
-    "currentBatch": 2,
-    "totalBatches": 3,
-    "isComplete": false
-  }
+"generationMeta": {
+  "totalFilesPlanned": 8,
+  "filesInThisBatch": ["src/components/Footer.tsx"],
+  "completedFiles": ["src/App.tsx", "src/components/Header.tsx", "src/components/Footer.tsx"],
+  "remainingFiles": ["src/components/Card.tsx"],
+  "currentBatch": 2,
+  "totalBatches": 3,
+  "isComplete": false
 }
 \`\`\`
 
-Set \`isComplete: true\` and \`remainingFiles: []\` on final batch.
-
-## JSON ENCODING RULES
-- Use \`\\n\` for newlines
-- Use \`\\"\` for quotes in strings
-- No trailing commas
-- Single-line JSON after PLAN comment
-
-## CODE REQUIREMENTS
-- Relative imports: \`'./components/X'\`
-- Tailwind CSS styling
-- lucide-react icons
-- Each file under 200 lines
-- Fully functional, standalone files
-- Match patterns from previous batches`;
+Set \`isComplete: true\` and \`remainingFiles: []\` on final batch.`;
 
 /**
  * Continuation system instruction for multi-batch generation (MARKER format)
  * Used when previous response was truncated or project has >5 files
  */
-export const CONTINUATION_SYSTEM_INSTRUCTION_MARKER = `You are an expert React Developer continuing a multi-batch code generation.
+export const CONTINUATION_SYSTEM_INSTRUCTION_MARKER = `You are continuing a multi-batch code generation. Generate REMAINING files only.
 
-## TECHNOLOGY STACK (MANDATORY)
-- **React 19** | **TypeScript 5.9+** | **Tailwind CSS 4** | **Vite 7**
-- Icons: \`import { X } from 'lucide-react'\`
-- Animation: \`import { motion } from 'motion/react'\` (NOT framer-motion!)
-- Routing: \`import { Link } from 'react-router'\` (NOT react-router-dom!)
+## BATCH CONTINUATION RULES
+- Follow same MARKER format as initial generation
+- Only include files not yet generated
+- Match existing code patterns from previous batches
 
-## CONTEXT
-You are generating batch N of a larger project. Previous batches have been saved.
-Continue from where you left off - generate the REMAINING files only.
-
-## RESPONSE FORMAT (MARKER)
+## REQUIRED: GENERATION_META block
 
 \`\`\`
-<!-- PLAN -->
-create: src/components/Footer.tsx, src/components/Sidebar.tsx
-update:
-delete:
-sizes: src/components/Footer.tsx:20, src/components/Sidebar.tsx:35
-<!-- /PLAN -->
-
-<!-- EXPLANATION -->
-Batch 2/3: Footer and Sidebar components
-<!-- /EXPLANATION -->
-
 <!-- GENERATION_META -->
 totalFilesPlanned: 8
 filesInThisBatch: src/components/Footer.tsx, src/components/Sidebar.tsx
 completedFiles: src/App.tsx, src/components/Header.tsx, src/components/Footer.tsx, src/components/Sidebar.tsx
-remainingFiles: src/components/Card.tsx, src/hooks/useTheme.ts
+remainingFiles: src/components/Card.tsx
 currentBatch: 2
 totalBatches: 3
 isComplete: false
 <!-- /GENERATION_META -->
-
-<!-- FILE:src/components/Footer.tsx -->
-import { Github, Twitter } from 'lucide-react';
-
-export function Footer() {
-  return (
-    <footer className="bg-gray-900 text-white py-8">
-      <div className="container mx-auto px-4 flex justify-between items-center">
-        <p>&copy; 2024 Company</p>
-        <div className="flex gap-4">
-          <a href="#" className="hover:text-gray-300"><Github className="w-5 h-5" /></a>
-          <a href="#" className="hover:text-gray-300"><Twitter className="w-5 h-5" /></a>
-        </div>
-      </div>
-    </footer>
-  );
-}
-<!-- /FILE:src/components/Footer.tsx -->
-
-<!-- FILE:src/components/Sidebar.tsx -->
-...component code here...
-<!-- /FILE:src/components/Sidebar.tsx -->
 \`\`\`
 
-## GENERATION_META BLOCK (Required for multi-batch)
-
-Include this block to track progress:
-- \`totalFilesPlanned\`: Total files in the project
-- \`filesInThisBatch\`: Files included in this response
-- \`completedFiles\`: All files generated so far (including previous batches)
-- \`remainingFiles\`: Files still to be generated
-- \`currentBatch\`: Current batch number
-- \`totalBatches\`: Estimated total batches
-- \`isComplete\`: Set to \`true\` on final batch
-
-## MARKER FORMAT RULES
-- Use \`<!-- FILE:path -->\` and \`<!-- /FILE:path -->\` for each file
-- Paths in opening and closing tags must match exactly
-- Write code naturally - no JSON escaping needed
-- One file per FILE block
-- Complete file content only
-
-## CODE REQUIREMENTS
-- Relative imports: \`'./components/X'\`
-- Tailwind CSS styling
-- lucide-react icons
-- Each file under 200 lines
-- Fully functional, standalone files
-- Match patterns from previous batches`;
+Set \`isComplete: true\` and \`remainingFiles:\` empty on final batch.`;
 
 /**
  * Prompt Engineer system instructions - for structured 3-step wizard
@@ -692,11 +550,13 @@ export const PROMPT_ENGINEER_SYSTEM = PROMPT_ENGINEER_FINAL;
  */
 export const ERROR_FIX_SYSTEM_PROMPT = `You are an expert React/TypeScript debugger. Fix the error immediately and precisely.
 
-## TECHNOLOGY STACK (Use these EXACT packages)
-- **React 19** | **TypeScript 5.9+** | **Tailwind CSS 4**
+## TECH STACK
+- React 19 | TypeScript | Tailwind CSS 4
 - Icons: \`import { X } from 'lucide-react'\`
-- Animation: \`import { motion } from 'motion/react'\` (NOT framer-motion!)
-- Routing: \`import { Link } from 'react-router'\` (NOT react-router-dom!)
+- Animation: \`import { motion } from 'motion/react'\`
+- Routing: \`import { Link } from 'react-router'\`
+
+**Wrong imports:** \`'framer-motion'\` → \`'motion/react'\`, \`'react-router-dom'\` → \`'react-router'\`
 
 ## RESPONSE FORMAT (CRITICAL)
 

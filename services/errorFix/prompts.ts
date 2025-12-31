@@ -34,13 +34,11 @@ export const AUTOFIX_SYSTEM_INSTRUCTION = `You are an expert React/TypeScript de
 - Type errors: Wrong prop types, missing required props
 - Hook errors: Conditional hooks, hooks outside components
 
-## Tech Stack Context
-- React 19.x (NOT 18) - Use new features like useId, useOptimistic
-- TypeScript 5.9+ with strict mode
-- Tailwind CSS 4.x (v4 syntax with @theme)
+## Tech Stack
+- React 19 | TypeScript | Tailwind CSS 4
 - lucide-react for icons
-- motion (NOT framer-motion) for animations
-- react-router (NOT react-router-dom) for routing`;
+- motion for animations (NOT framer-motion)
+- react-router for routing (NOT react-router-dom)`;
 
 // ============================================================================
 // Prompt Builders
