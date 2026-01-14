@@ -204,7 +204,6 @@ export function processAssetImports(files: Record<string, string>): Record<strin
       `;
     } else if (/\.(png|jpg|jpeg|gif|webp|ico)$/i.test(filename)) {
       // For image files, export a placeholder URL
-      const ext = filename.split('.').pop()?.toLowerCase();
       const basename = filename.split('/').pop()?.replace(/\.[^.]+$/, '') || 'image';
 
       // Generate a consistent placeholder based on filename

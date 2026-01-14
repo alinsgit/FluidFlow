@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useImperativeHandle, forwardRef, useEffect, useRef } from 'react';
 import { Layers, RotateCcw, Settings, ChevronDown, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { FileSystem, ChatMessage, ChatAttachment, FileChange } from '../../types';
-import { estimateTokenCount } from './utils';
 import { restoreFromHistoryEntries, getEntriesUpToTimestamp, restoreFromSingleEntry } from './utils/restoreHistory';
 import { executeConsultantMode } from './utils/consultantMode';
 import { debugLog, resetDebugState } from '../../hooks/useDebugStore';
@@ -56,7 +55,7 @@ export interface ControlPanelRef {
  * Minimal props interface - most data now comes from contexts directly
  * Reduced from 48 props to 12 props (75% reduction)
  */
-interface ControlPanelProps {
+  interface ControlPanelProps {
   // App.tsx callbacks that wrap context methods with additional logic
   resetApp: () => void;
   onModelChange: (modelId: string) => void;
@@ -67,10 +66,6 @@ interface ControlPanelProps {
   onOpenCodeMap?: () => void;
   onOpenGitTab?: () => void;
   onOpenPromptHistory?: () => void;
-
-  // Auto-commit (from useAutoCommit hook in App.tsx)
-  onToggleAutoCommit?: () => void;
-  isAutoCommitting?: boolean;
 
   // App.tsx local state
   hasRunningServer?: boolean;
@@ -86,8 +81,6 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
   onOpenCodeMap,
   onOpenGitTab,
   onOpenPromptHistory,
-  onToggleAutoCommit,
-  isAutoCommitting,
   hasRunningServer,
   historyPrompt
 }, ref) => {
@@ -102,19 +95,9 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     setFiles,
     activeFile: _activeFile,
     currentProject,
-    projects,
     isServerOnline,
-    isSyncing,
-    lastSyncedAt,
-    isLoadingProjects,
     isInitialized,
     createProject: onCreateProject,
-    openProject,
-    deleteProject: onDeleteProject,
-    duplicateProject: onDuplicateProject,
-    refreshProjects: onRefreshProjects,
-    closeProject: onCloseProject,
-    gitStatus,
     hasUncommittedChanges,
     reviewChange,
     saveSnapshot: onSaveCheckpoint,
@@ -131,14 +114,7 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     setAutoAcceptChanges: onAutoAcceptChangesChange,
     diffModeEnabled,
     setDiffModeEnabled: onDiffModeChange,
-    autoCommitEnabled,
   } = ui;
-
-  // Wrap openProject to match expected signature
-  const onOpenProject = useCallback(async (id: string) => {
-    const result = await openProject(id);
-    return result.success;
-  }, [openProject]);
 
   // ============ Local State ============
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -263,7 +239,6 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
     };
 
     handleProjectChange().catch(console.warn);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id]);
 
   // Modal state management (extracted to hook)

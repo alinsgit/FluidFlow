@@ -535,10 +535,6 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
 
     // Reset UI state (tabs, generating, suggestions, etc.)
     resetUIState();
-
-    // Clear browser console
-    console.clear();
-    console.log('[AppContext] Full reset completed');
   }, [defaultFiles, resetFiles, resetUIState, project]);
 
   // Context value

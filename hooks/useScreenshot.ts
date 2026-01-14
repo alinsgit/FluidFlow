@@ -127,6 +127,7 @@ export function useScreenshot({
     }, autoCaptureDelay);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- capture is stable and circular dependency is intentional
   }, [autoCapture, autoCaptureDelay, projectId]);
 
   // Auto-capture on significant changes (triggered by triggerOnChange)
@@ -163,6 +164,7 @@ export function useScreenshot({
     }, autoCaptureDelay);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- capture is stable and circular dependency is intentional
   }, [autoCapture, projectId, triggerOnChange, autoCaptureDelay, autoCaptureThrottle]);
 
   // Capture screenshot

@@ -16,9 +16,7 @@ import { CREDITS_MODAL_DELAY_MS } from '@/constants';
 import { ControlPanel, ControlPanelRef } from './components/ControlPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { SnippetsPanel } from './components/SnippetsPanel';
-import { DeployModal } from './components/DeployModal';
-import { ShareModal, loadProjectFromUrl } from './components/ShareModal';
-import { HistoryPanel } from './components/HistoryPanel';
+import { loadProjectFromUrl } from './components/ShareModal';
 import { ProjectManager } from './components/ProjectManager';
 import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
 import { DiffModal } from './components/DiffModal';
@@ -38,7 +36,6 @@ import { ContextMenuProvider } from './components/ContextMenu';
 import { IDEFrame } from './components/IDEFrame';
 import { PromptConfirmationProvider } from './contexts/PromptConfirmationContext';
 import { PromptConfirmationModal } from './components/PromptConfirmationModal';
-import { ProjectHealthModal } from './components/ProjectHealthModal';
 import type { SettingsCategory } from './components/MegaSettingsModal/types';
 
 // Lazy-loaded modals for better initial bundle size (~80KB savings)
@@ -49,6 +46,10 @@ import {
   LazyCodeMapModal,
   LazyTailwindPalette,
   LazyComponentTree,
+  LazyDeployModal,
+  LazyShareModal,
+  LazyHistoryPanel,
+  LazyProjectHealthModal,
 } from './components/LazyModals';
 
 // Re-export types for backwards compatibility
@@ -136,11 +137,6 @@ export default function App() {
     backupEnabled,
     onBackupPush: handleBackupPush,
   });
-
-  // Toggle auto-commit
-  const handleToggleAutoCommit = useCallback(() => {
-    ui.setAutoCommitEnabled(!ui.autoCommitEnabled);
-  }, [ui]);
 
   // Reset key for ControlPanel re-mount
   const [resetKey, setResetKey] = useState(0);
@@ -266,9 +262,6 @@ export default function App() {
               onOpenCodeMap={() => modals.open('codeMap')}
               onOpenGitTab={() => ui.setActiveTab('git')}
               onOpenPromptHistory={() => setShowPromptHistory(true)}
-              // Auto-commit
-              onToggleAutoCommit={handleToggleAutoCommit}
-              isAutoCommitting={isAutoCommitting}
               // Local state
               hasRunningServer={hasRunningServer}
               historyPrompt={historyPrompt}
@@ -356,15 +349,15 @@ export default function App() {
         }}
       />
 
-      {/* Deploy Modal */}
-      <DeployModal
+      {/* Deploy Modal (lazy-loaded) */}
+      <LazyDeployModal
         isOpen={modals.state.deploy}
         onClose={() => modals.close('deploy')}
         files={ctx.files}
       />
 
-      {/* Share Modal */}
-      <ShareModal
+      {/* Share Modal (lazy-loaded) */}
+      <LazyShareModal
         isOpen={modals.state.share}
         onClose={() => modals.close('share')}
         files={ctx.files}
@@ -385,8 +378,8 @@ export default function App() {
         onProviderChange={(_providerId, modelId) => handleModelChange(modelId)}
       />
 
-      {/* History Panel */}
-      <HistoryPanel
+      {/* History Panel (lazy-loaded) */}
+      <LazyHistoryPanel
         isOpen={modals.state.history}
         onClose={() => modals.close('history')}
         history={ctx.history}
@@ -446,8 +439,8 @@ export default function App() {
       {/* Prompt Confirmation Modal (intercepts all AI calls when enabled) */}
       <PromptConfirmationModal />
 
-      {/* Project Health Modal */}
-      <ProjectHealthModal
+      {/* Project Health Modal (lazy-loaded) */}
+      <LazyProjectHealthModal
         isOpen={modals.state.projectHealth}
         onClose={() => modals.close('projectHealth')}
         files={ctx.files}

@@ -213,7 +213,7 @@ export const PreviewContent = memo(function PreviewContent(props: PreviewContent
 
     return () => {
       // Send cleanup message to iframe before revoking URL
-      // This allows the sandbox to revoke its internal blob URLs
+      // This allows sandbox to revoke its internal blob URLs
       if (iframe?.contentWindow) {
         try {
           iframe.contentWindow.postMessage({ type: 'CLEANUP_BLOB_URLS' }, '*');
@@ -225,7 +225,7 @@ export const PreviewContent = memo(function PreviewContent(props: PreviewContent
         URL.revokeObjectURL(blobUrl);
       }
     };
-  }, [blobUrl]);
+  }, [blobUrl, iframeRef]);
 
   // Ref for the preview container
   const previewContainerRef = useRef<HTMLDivElement>(null);

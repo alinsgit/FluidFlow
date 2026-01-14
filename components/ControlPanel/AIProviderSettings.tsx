@@ -36,15 +36,7 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ onProvid
     setActiveProviderId(manager.getActiveProviderId());
   }, []);
 
-  const _saveProviders = (newProviders: ProviderConfig[], newActiveId?: string) => {
-    const manager = getProviderManager();
-    newProviders.forEach(p => manager.addProvider(p));
-    if (newActiveId) {
-      manager.setActiveProvider(newActiveId);
-      setActiveProviderId(newActiveId);
-    }
-    setProviders(manager.getConfigs());
-  };
+
 
   const updateProvider = (id: string, updates: Partial<ProviderConfig>) => {
     const manager = getProviderManager();

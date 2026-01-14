@@ -12,22 +12,6 @@ import { useEffect, useRef } from 'react';
 import { ChatMessage } from '@/types';
 import { getContextManager, CONTEXT_IDS } from '@/services/conversationContext';
 import { getProjectContext } from '@/services/projectContext';
-import { getProviderManager } from '@/services/ai';
-
-/**
- * Get current model's context window size
- */
-function getModelContextSize(): number {
-  try {
-    const manager = getProviderManager();
-    const config = manager.getActiveConfig();
-    if (!config) return 128000;
-    const model = config.models.find(m => m.id === config.defaultModel);
-    return model?.contextWindow || 128000;
-  } catch {
-    return 128000;
-  }
-}
 
 interface UseContextSyncOptions {
   projectId: string | undefined;

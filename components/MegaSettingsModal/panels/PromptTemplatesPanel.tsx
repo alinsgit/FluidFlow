@@ -203,7 +203,7 @@ export const PromptTemplatesPanel: React.FC = () => {
   }, [templates, searchQuery, filterCategory, showFavoritesOnly]);
 
   // Stats
-  const stats = useMemo(() => getPromptTemplateStats(), [templates]);
+  const stats = useMemo(() => getPromptTemplateStats(), []);
 
   // Handlers
   const handleCreate = (template: Omit<PromptTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount' | 'isBuiltIn'>) => {

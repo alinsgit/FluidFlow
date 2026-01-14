@@ -44,16 +44,6 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
 
   const selectedProvider = providers.find(p => p.id === selectedProviderId);
 
-  const _saveProviders = (newProviders: ProviderConfig[], newActiveId?: string) => {
-    const manager = getProviderManager();
-    newProviders.forEach(p => manager.addProvider(p));
-    if (newActiveId) {
-      manager.setActiveProvider(newActiveId);
-      setActiveProviderId(newActiveId);
-    }
-    setProviders(manager.getConfigs());
-  };
-
   const updateProvider = (id: string, updates: Partial<ProviderConfig>) => {
     const manager = getProviderManager();
     manager.updateProvider(id, updates);

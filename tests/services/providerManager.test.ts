@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProviderManager, loadProvidersFromLocalStorage, saveProvidersToLocalStorage, getActiveProviderIdFromLocalStorage, setActiveProviderIdInLocalStorage, getProviderManager } from '../../services/ai';
 import type { ProviderConfig } from '../../services/ai';
-import { settingsApi } from '../../services/projectApi';
 
 // Mock the settingsApi to prevent backend calls
 vi.mock('../../services/projectApi', () => ({

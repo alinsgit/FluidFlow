@@ -20,6 +20,17 @@ const ComponentTreeLazy = lazy(() => import('./ComponentTree').then(m => ({ defa
 const CreditsModalLazy = lazy(() => import('./CreditsModal').then(m => ({ default: m.CreditsModal })));
 const CodebaseSyncModalLazy = lazy(() => import('./CodebaseSyncModal').then(m => ({ default: m.CodebaseSyncModal })));
 
+// Lazy imports for large components (bundle size optimization)
+const GitHubModalLazy = lazy(() => import('./GitHubModal').then(m => ({ default: m.GitHubModal })));
+const BatchGenerationModalLazy = lazy(() => import('./ControlPanel/BatchGenerationModal').then(m => ({ default: m.BatchGenerationModal })));
+const TechStackModalLazy = lazy(() => import('./ControlPanel/TechStackModal').then(m => ({ default: m.TechStackModal })));
+const PromptEngineerModalLazy = lazy(() => import('./ControlPanel/PromptEngineerModal').then(m => ({ default: m.PromptEngineerModal })));
+const DeployModalLazy = lazy(() => import('./DeployModal').then(m => ({ default: m.DeployModal })));
+const ShareModalLazy = lazy(() => import('./ShareModal').then(m => ({ default: m.ShareModal })));
+const HistoryPanelLazy = lazy(() => import('./HistoryPanel').then(m => ({ default: m.HistoryPanel })));
+const ProjectHealthModalLazy = lazy(() => import('./ProjectHealthModal').then(m => ({ default: m.ProjectHealthModal })));
+const AutoFixModalLazy = lazy(() => import('./AutoFixModal').then(m => ({ default: m.AutoFixModal })));
+
 /**
  * Modal loading spinner
  */
@@ -65,3 +76,14 @@ export const LazyTailwindPalette = withLazyModal(TailwindPaletteLazy, 'TailwindP
 export const LazyComponentTree = withLazyModal(ComponentTreeLazy, 'ComponentTree');
 export const LazyCreditsModal = withLazyModal(CreditsModalLazy, 'CreditsModal');
 export const LazyCodebaseSyncModal = withLazyModal(CodebaseSyncModalLazy, 'CodebaseSyncModal');
+
+// Large components lazy exports
+export const LazyGitHubModal = withLazyModal(GitHubModalLazy, 'GitHubModal');
+export const LazyBatchGenerationModal = withLazyModal(BatchGenerationModalLazy, 'BatchGenerationModal');
+export const LazyTechStackModal = withLazyModal(TechStackModalLazy, 'TechStackModal');
+export const LazyPromptEngineerModal = withLazyModal(PromptEngineerModalLazy, 'PromptEngineerModal');
+export const LazyDeployModal = withLazyModal(DeployModalLazy, 'DeployModal');
+export const LazyShareModal = withLazyModal(ShareModalLazy, 'ShareModal');
+export const LazyHistoryPanel = withLazyModal(HistoryPanelLazy, 'HistoryPanel');
+export const LazyProjectHealthModal = withLazyModal(ProjectHealthModalLazy, 'ProjectHealthModal');
+export const LazyAutoFixModal = withLazyModal(AutoFixModalLazy, 'AutoFixModal');

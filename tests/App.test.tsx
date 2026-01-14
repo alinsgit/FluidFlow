@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import App from '../App';
 
 vi.mock('../contexts/AppContext', () => ({
-  AppProvider: ({ children }: any) => children,
+  AppProvider: ({ children }: { children: React.ReactNode }) => children,
   useAppContext: () => ({
     files: {},
     currentProject: null,
@@ -14,7 +14,7 @@ vi.mock('../contexts/AppContext', () => ({
 }));
 
 vi.mock('../contexts/UIContext', () => ({
-  UIProvider: ({ children }: any) => children,
+  UIProvider: ({ children }: { children: React.ReactNode }) => children,
   useUI: () => ({
     activeTab: 'editor',
     isGenerating: false,
@@ -22,7 +22,7 @@ vi.mock('../contexts/UIContext', () => ({
 }));
 
 vi.mock('../contexts/ThemeContext', () => ({
-  ThemeProvider: ({ children }: any) => children,
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useTheme: () => ({
     theme: 'light',
   }),

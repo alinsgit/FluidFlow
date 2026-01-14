@@ -165,7 +165,7 @@ export const PromptTemplateSelector: React.FC<PromptTemplateSelectorProps> = ({
     return result.slice(0, 10); // Limit to 10 in dropdown
   }, [templates, searchQuery, showFavoritesOnly]);
 
-  const favorites = useMemo(() => getFavoriteTemplates().slice(0, 5), [templates]);
+  const favorites = useMemo(() => getFavoriteTemplates().slice(0, 5), []);
 
   const handleSelect = (template: PromptTemplate) => {
     if (template.variables.length > 0) {

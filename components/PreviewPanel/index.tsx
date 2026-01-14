@@ -682,7 +682,7 @@ export const PreviewPanel = memo(function PreviewPanel({
       try {
         iframeRef.current.contentWindow.postMessage({ type: 'CAPTURE_STATE' }, '*');
         console.log('[Preview] State captured before reload');
-      } catch (e) {
+      } catch (_e) {
         // Ignore if iframe is not accessible
       }
     }
@@ -690,7 +690,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     setTimeout(() => {
       setKey(prev => prev + 1);
     }, 50);
-  }, []);
+  }, [iframeRef]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(files[activeFile] || '');

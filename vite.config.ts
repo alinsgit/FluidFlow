@@ -61,10 +61,10 @@ export default defineConfig(({ mode }) => {
         ],
         output: {
           manualChunks: {
-            // Split vendor chunks for better caching
-            'vendor-react': ['react', 'react-dom'],
+            // Split vendor chunks for better caching - optimize bundle size
+            'vendor-react-core': ['react', 'react-dom'],
+            'vendor-react-ui': ['lucide-react'],
             'vendor-monaco': ['@monaco-editor/react'],
-            'vendor-icons': ['lucide-react'],
             'vendor-ai': ['@google/genai'],
             'vendor-flow': ['@xyflow/react'],
           }

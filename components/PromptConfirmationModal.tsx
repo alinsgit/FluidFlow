@@ -38,7 +38,11 @@ export const PromptConfirmationModal: React.FC = () => {
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
-      next.has(section) ? next.delete(section) : next.add(section);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
       return next;
     });
   };

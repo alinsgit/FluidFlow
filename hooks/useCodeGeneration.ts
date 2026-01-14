@@ -483,6 +483,7 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
       }
     },
     [
+      sessionId,
       files,
       existingApp,
       selectedModel,

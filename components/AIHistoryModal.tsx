@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AIHistoryEntry } from '../services/projectApi';
 import { ConfirmModal } from './ContextIndicator/ConfirmModal';
+import { formatDuration, formatSize, formatTime } from '../utils/timeFormat';
 
 interface EntryCardProps {
   entry: AIHistoryEntry;
@@ -277,19 +278,7 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
     </div>
   );
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
 
-  const formatSize = (chars: number) => {
-    if (chars < 1024) return `${chars} chars`;
-    return `${(chars / 1024).toFixed(1)}KB`;
-  };
-
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
-  };
 
   const handleCopyRaw = async (entry: AIHistoryEntry) => {
     try {

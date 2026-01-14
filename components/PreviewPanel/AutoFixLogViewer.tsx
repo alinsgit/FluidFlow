@@ -28,7 +28,6 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Loader2,
   RefreshCw,
   Eye,
   EyeOff
@@ -41,6 +40,7 @@ import {
   type LogLevel,
   type LogCategory
 } from '../../services/errorFix';
+import { formatDuration, formatTime } from '../../utils/timeFormat';
 
 interface AutoFixLogViewerProps {
   className?: string;
@@ -140,7 +140,11 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
   const toggleLogExpand = (id: string) => {
     setExpandedLogs(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -148,7 +152,11 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
   const toggleRequestExpand = (id: string) => {
     setExpandedRequests(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -167,20 +175,7 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
     return true;
   });
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      fractionalSecondDigits: 3
-    });
-  };
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
 
   // Get response for request
   const getResponseForRequest = (requestId: string): AIResponseLog | undefined => {
@@ -355,7 +350,7 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleCopyToClipboard(log.code!, log.id);
+                                handleCopyToClipboard(log.code ?? '', log.id);
                               }}
                               className="flex items-center gap-1 px-2 py-0.5 rounded"
                               style={{ backgroundColor: 'var(--theme-glass-200)' }}
@@ -423,7 +418,7 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
                                 System Instruction
                               </span>
                               <button
-                                onClick={() => handleCopyToClipboard(aiRequest.systemInstruction!, `sys-${aiRequest.id}`)}
+                                onClick={() => handleCopyToClipboard(aiRequest.systemInstruction ?? '', `sys-${aiRequest.id}`)}
                                 className="flex items-center gap-1 px-2 py-0.5 rounded"
                                 style={{ backgroundColor: 'var(--theme-glass-200)' }}
                               >
@@ -477,7 +472,7 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
                               </span>
                               {aiResponse.response && (
                                 <button
-                                  onClick={() => handleCopyToClipboard(aiResponse.response!, `resp-${aiRequest.id}`)}
+                                  onClick={() => handleCopyToClipboard(aiResponse.response ?? '', `resp-${aiRequest.id}`)}
                                   className="flex items-center gap-1 px-2 py-0.5 rounded"
                                   style={{ backgroundColor: 'var(--theme-glass-200)' }}
                                 >
