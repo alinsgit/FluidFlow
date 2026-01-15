@@ -20,6 +20,31 @@ interface UseContextSyncOptions {
   skipRestoredMessages?: boolean;
 }
 
+/**
+ * Transform a ChatMessage into context content for AI
+ *
+ * @param msg - The chat message to transform
+ * @returns Object with content string and optional token count
+ */
+function transformMessageToContext(msg: ChatMessage): { content: string; tokens?: number } {
+  if (msg.role === 'user') {
+    return {
+      content: msg.llmContent || msg.prompt || '',
+      tokens: msg.tokenUsage?.totalTokens,
+    };
+  }
+
+  // Assistant role
+  const textContent = msg.explanation || msg.error || '';
+  const filesContent = msg.files
+    ? Object.entries(msg.files).map(([path, code]) => `// ${path}\n${code}`).join('\n\n')
+    : '';
+  return {
+    content: textContent + (filesContent ? '\n\n' + filesContent : ''),
+    tokens: msg.tokenUsage?.totalTokens,
+  };
+}
+
 export function useContextSync({ projectId, messages }: UseContextSyncOptions) {
   const contextManager = getContextManager();
   const sessionIdRef = useRef<string>(`${CONTEXT_IDS.MAIN_CHAT}-${projectId || 'default'}`);
@@ -75,32 +100,13 @@ export function useContextSync({ projectId, messages }: UseContextSyncOptions) {
     console.log(`[ContextSync] Syncing ${unsynced.length} new message(s)`);
 
     for (const msg of unsynced) {
-      let content: string;
-      let actualTokens: number | undefined;
-
-      if (msg.role === 'user') {
-        content = msg.llmContent || msg.prompt || '';
-        if (msg.tokenUsage?.totalTokens) {
-          actualTokens = msg.tokenUsage.totalTokens;
-        }
-      } else {
-        const textContent = msg.explanation || msg.error || '';
-        const filesContent = msg.files
-          ? Object.entries(msg.files).map(([path, code]) => `// ${path}\n${code}`).join('\n\n')
-          : '';
-        content = textContent + (filesContent ? '\n\n' + filesContent : '');
-
-        if (msg.tokenUsage?.totalTokens) {
-          actualTokens = msg.tokenUsage.totalTokens;
-        }
-      }
-
+      const { content, tokens } = transformMessageToContext(msg);
       contextManager.addMessage(
         sessionIdRef.current,
         msg.role,
         content,
         { messageId: msg.id },
-        actualTokens
+        tokens
       );
 
       syncedMessageIdsRef.current.add(msg.id);

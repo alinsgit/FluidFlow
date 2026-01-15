@@ -21,6 +21,7 @@ import {
 import type { ContextMessage, ConversationContext, ContextManagerConfig } from './context/types';
 import { CONTEXT_IDS } from './context/types';
 import { estimateTokens } from './context/tokenEstimation';
+import { createDebouncedAction } from '@/utils/async';
 
 export type { ContextMessage, ConversationContext, ContextManagerConfig };
 export { CONTEXT_IDS };
@@ -44,10 +45,14 @@ class ConversationContextManager {
   private contexts: Map<string, ConversationContext> = new Map();
   private config: ContextManagerConfig;
   // AI-006 fix: Debounce streaming saves to prevent data loss
-  private streamingSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private debouncedSave: () => void;
 
   constructor(config: Partial<ContextManagerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.debouncedSave = createDebouncedAction(
+      () => this.saveToStorage(),
+      STREAMING_SAVE_DEBOUNCE_MS
+    );
     this.loadFromStorage();
   }
 
@@ -224,22 +229,12 @@ class ConversationContextManager {
       context.lastUpdatedAt = Date.now();
 
       // AI-006 fix: Debounce save during streaming to prevent data loss
-      if (this.streamingSaveTimeout) {
-        clearTimeout(this.streamingSaveTimeout);
-      }
-      this.streamingSaveTimeout = setTimeout(() => {
-        this.saveToStorage();
-        this.streamingSaveTimeout = null;
-      }, STREAMING_SAVE_DEBOUNCE_MS);
+      this.debouncedSave();
     }
   }
 
   finalizeMessage(_contextId: string): void {
-    // AI-006 fix: Clear any pending debounced save
-    if (this.streamingSaveTimeout) {
-      clearTimeout(this.streamingSaveTimeout);
-      this.streamingSaveTimeout = null;
-    }
+    // AI-006 fix: Finalize save immediately (override debounce)
     this.saveToStorage();
   }
 

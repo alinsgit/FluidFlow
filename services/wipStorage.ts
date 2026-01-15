@@ -8,6 +8,7 @@
 
 import { WIP_DB_NAME, WIP_DB_VERSION, WIP_STORE_NAME, CHAT_STORE_NAME } from '@/constants';
 import { FileSystem, ChatMessage } from '@/types';
+import { LockManager } from '@/utils/async';
 
 /**
  * Special ID for scratch mode (no project selected)
@@ -33,8 +34,9 @@ export interface WIPData {
   version?: number;
 }
 
-// Simple lock to prevent concurrent IndexedDB writes
-let wipWriteLock: Promise<void> = Promise.resolve();
+// Lock managers to prevent concurrent IndexedDB writes
+const wipLock = new LockManager();
+const chatLock = new LockManager();
 
 /**
  * Open the WIP IndexedDB database
@@ -97,15 +99,7 @@ export async function getWIP(projectId: string): Promise<WIPData | null> {
  * @param data - WIP data to save
  */
 export async function saveWIP(data: WIPData): Promise<void> {
-  // Use lock to prevent concurrent operations
-  const previousLock = wipWriteLock;
-  let releaseLock: () => void = () => {};
-  wipWriteLock = new Promise((resolve) => {
-    releaseLock = resolve;
-  });
-
-  try {
-    await previousLock; // Wait for previous operation
+  return wipLock.run(async () => {
     const db = await openDatabase();
     const tx = db.transaction(WIP_STORE_NAME, 'readwrite');
     const store = tx.objectStore(WIP_STORE_NAME);
@@ -121,12 +115,7 @@ export async function saveWIP(data: WIPData): Promise<void> {
         resolve();
       };
     });
-  } catch (err) {
-    console.error('[WIPStorage] saveWIP failed:', err);
-    throw err;
-  } finally {
-    releaseLock();
-  }
+  });
 }
 
 /**
@@ -136,15 +125,7 @@ export async function saveWIP(data: WIPData): Promise<void> {
  * @param projectId - The project ID to clear WIP for
  */
 export async function clearWIP(projectId: string): Promise<void> {
-  // Use lock to prevent concurrent operations
-  const previousLock = wipWriteLock;
-  let releaseLock: () => void = () => {};
-  wipWriteLock = new Promise((resolve) => {
-    releaseLock = resolve;
-  });
-
-  try {
-    await previousLock; // Wait for previous operation
+  return wipLock.run(async () => {
     const db = await openDatabase();
     const tx = db.transaction(WIP_STORE_NAME, 'readwrite');
     const store = tx.objectStore(WIP_STORE_NAME);
@@ -160,11 +141,7 @@ export async function clearWIP(projectId: string): Promise<void> {
         resolve();
       };
     });
-  } catch (err) {
-    console.warn('[WIPStorage] clearWIP failed:', err);
-  } finally {
-    releaseLock();
-  }
+  });
 }
 
 /**
@@ -217,9 +194,6 @@ export interface ChatData {
   savedAt: number;
 }
 
-// Simple lock to prevent concurrent chat writes
-let chatWriteLock: Promise<void> = Promise.resolve();
-
 /**
  * Get chat messages for a project
  */
@@ -250,15 +224,7 @@ export async function getChatMessages(projectId: string): Promise<ChatMessage[]>
  * Save chat messages for a project
  */
 export async function saveChatMessages(projectId: string, messages: ChatMessage[]): Promise<void> {
-  // Use lock to prevent concurrent operations
-  const previousLock = chatWriteLock;
-  let releaseLock: () => void = () => {};
-  chatWriteLock = new Promise((resolve) => {
-    releaseLock = resolve;
-  });
-
-  try {
-    await previousLock;
+  return chatLock.run(async () => {
     const db = await openDatabase();
     const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
     const store = tx.objectStore(CHAT_STORE_NAME);
@@ -280,26 +246,14 @@ export async function saveChatMessages(projectId: string, messages: ChatMessage[
         resolve();
       };
     });
-  } catch (err) {
-    console.error('[ChatStorage] saveChatMessages failed:', err);
-    throw err;
-  } finally {
-    releaseLock();
-  }
+  });
 }
 
 /**
  * Clear chat messages for a project
  */
 export async function clearChatMessages(projectId: string): Promise<void> {
-  const previousLock = chatWriteLock;
-  let releaseLock: () => void = () => {};
-  chatWriteLock = new Promise((resolve) => {
-    releaseLock = resolve;
-  });
-
-  try {
-    await previousLock;
+  return chatLock.run(async () => {
     const db = await openDatabase();
     const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
     const store = tx.objectStore(CHAT_STORE_NAME);
@@ -315,9 +269,5 @@ export async function clearChatMessages(projectId: string): Promise<void> {
         resolve();
       };
     });
-  } catch (err) {
-    console.warn('[ChatStorage] clearChatMessages failed:', err);
-  } finally {
-    releaseLock();
-  }
+  });
 }

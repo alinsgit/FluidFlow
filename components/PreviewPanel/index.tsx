@@ -1048,77 +1048,99 @@ export const PreviewPanel = memo(function PreviewPanel({
             />
           ) : (
             <PreviewContent
-              appCode={appCode}
-              iframeSrc={iframeSrc}
-              previewDevice={previewDevice}
-              isGenerating={isGenerating}
-              isFixingResp={isFixingResponsiveness}
-              iframeKey={key}
-              logs={logs}
-              networkLogs={networkLogs}
-              isConsoleOpen={isConsoleOpen}
-              setIsConsoleOpen={setIsConsoleOpen}
-              activeTerminalTab={activeTerminalTab}
-              setActiveTerminalTab={setActiveTerminalTab}
-              setLogs={setLogs}
-              setNetworkLogs={setNetworkLogs}
-              fixError={fixError}
-              autoFixToast={autoFixToast}
-              isAutoFixing={isAutoFixing}
-              pendingAutoFix={pendingAutoFix}
-              handleConfirmAutoFix={handleConfirmAutoFix}
-              handleDeclineAutoFix={handleDeclineAutoFix}
-              failedAutoFixError={failedAutoFixError}
-              onSendErrorToChat={onSendErrorToChat}
-              handleSendErrorToChat={handleSendErrorToChat}
-              handleDismissFailedError={handleDismissFailedError}
-              isInspectMode={isInspectMode}
-              hoveredElement={hoveredElement}
-              inspectedElement={inspectedElement}
-              isInspectEditing={isInspectEditing}
-              onCloseInspector={handleExitInspectMode}
-              onInspectEdit={wrappedInspectEdit}
-              iframeRef={iframeRef}
-              currentUrl={currentUrl}
-              canGoBack={canGoBack}
-              canGoForward={canGoForward}
-              onNavigate={navigateToUrl}
-              onGoBack={goBack}
-              onGoForward={goForward}
-              onReload={reloadPreview}
-              // Elements tab props for component tree
-              componentTree={componentTree}
-              selectedNodeId={selectedNodeId}
-              expandedNodes={expandedNodes}
-              onSelectNode={onSelectNode}
-              onToggleExpand={onToggleExpand}
-              onHoverNode={onHoverNode}
-              onRefreshTree={onRefreshTree}
-              isTreeLoading={isTreeLoading}
-              // InspectorPanel props
-              isInspectorPanelOpen={isInspectorPanelOpen}
-              inspectorActiveTab={inspectorActiveTab}
-              onInspectorTabChange={setInspectorActiveTab}
-              onCloseInspectorPanel={closeInspectorPanel}
-              computedStyles={computedStyles}
-              tailwindClasses={tailwindClasses}
-              isStylesLoading={isStylesLoading}
-              componentProps={componentProps}
-              componentState={componentState}
-              componentName={componentName}
-              isPropsLoading={isPropsLoading}
-              selectedElementRef={selectedElementRef}
-              ffGroup={inspectedElement?.ffGroup}
-              onApplyPreset={applyPreset}
-              onApplyCustomStyle={applyCustomStyle}
-              onApplyTempStyle={applyTempStyle}
-              onClearTempStyles={clearTempStyles}
-              isQuickStylesProcessing={isQuickStylesProcessing}
-              onRevertAndRetry={onRevertAndRetry}
-              onRevertOnly={onRevertOnly}
-              canRevertAndRetry={canRevertAndRetry}
-              canRevert={canRevert}
-              lastPrompt={lastPrompt}
+              core={{
+                appCode,
+                iframeSrc,
+                iframeKey: key,
+                previewDevice,
+              }}
+              state={{
+                isGenerating,
+                isFixingResp: isFixingResponsiveness,
+              }}
+              logs={{
+                logs,
+                networkLogs,
+                isConsoleOpen,
+                activeTerminalTab,
+                setLogs,
+                setNetworkLogs,
+                setIsConsoleOpen,
+                setActiveTerminalTab,
+                fixError,
+              }}
+              autoFix={{
+                autoFixToast,
+                isAutoFixing,
+                pendingAutoFix,
+                failedAutoFixError,
+                handleConfirmAutoFix,
+                handleDeclineAutoFix,
+                handleSendErrorToChat,
+                handleDismissFailedError,
+                onSendErrorToChat,
+              }}
+              inspect={{
+                isInspectMode,
+                isInspectEditing,
+                hoveredElement,
+                inspectedElement,
+                onCloseInspector: handleExitInspectMode,
+                onInspectEdit: wrappedInspectEdit,
+              }}
+              navigation={{
+                iframeRef,
+                currentUrl,
+                canGoBack,
+                canGoForward,
+                onNavigate: navigateToUrl,
+                onGoBack: goBack,
+                onGoForward: goForward,
+                onReload: reloadPreview,
+              }}
+              elementsTree={{
+                componentTree,
+                selectedNodeId,
+                expandedNodes,
+                isTreeLoading,
+                onSelectNode,
+                onToggleExpand,
+                onHoverNode,
+                onRefreshTree,
+              }}
+              inspectorPanel={{
+                isInspectorPanelOpen,
+                inspectorActiveTab,
+                onInspectorTabChange: setInspectorActiveTab,
+                onCloseInspectorPanel: closeInspectorPanel,
+              }}
+              styles={{
+                computedStyles,
+                tailwindClasses,
+                isStylesLoading,
+              }}
+              componentData={{
+                componentProps,
+                componentState,
+                componentName,
+                isPropsLoading,
+              }}
+              quickStyles={{
+                selectedElementRef,
+                ffGroup: inspectedElement?.ffGroup,
+                isQuickStylesProcessing,
+                onApplyPreset: applyPreset,
+                onApplyCustomStyle: applyCustomStyle,
+                onApplyTempStyle: applyTempStyle,
+                onClearTempStyles: clearTempStyles,
+              }}
+              revert={{
+                onRevertAndRetry,
+                onRevertOnly,
+                canRevertAndRetry,
+                canRevert,
+                lastPrompt,
+              }}
             />
           )
         ) : (

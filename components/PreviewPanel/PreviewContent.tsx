@@ -31,38 +31,63 @@ import type { EditScope } from './InspectorPanel/types';
 import { ComponentInspector, InspectionOverlay, InspectedElement } from './ComponentInspector';
 import { useToast } from '../Toast';
 
-export interface PreviewContentProps {
+/**
+ * Grouped props interfaces for better organization
+ * Reduced from 110+ individual props to ~12 prop groups
+ */
+
+/** Core preview rendering props */
+interface PreviewCoreProps {
   appCode: string | undefined;
   iframeSrc: string;
+  iframeKey: number;
   previewDevice: PreviewDevice;
+}
+
+/** Generation and fixing state */
+interface PreviewStateProps {
   isGenerating: boolean;
   isFixingResp: boolean;
-  iframeKey: number;
+}
+
+/** Console and network logs management */
+interface PreviewLogsProps {
   logs: LogEntry[];
   networkLogs: NetworkRequest[];
   isConsoleOpen: boolean;
-  setIsConsoleOpen: (v: boolean) => void;
   activeTerminalTab: TerminalTab;
-  setActiveTerminalTab: (t: TerminalTab) => void;
   setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>;
   setNetworkLogs: React.Dispatch<React.SetStateAction<NetworkRequest[]>>;
+  setIsConsoleOpen: (v: boolean) => void;
+  setActiveTerminalTab: (t: TerminalTab) => void;
   fixError: (id: string, msg: string) => void;
+}
+
+/** Auto-fix functionality */
+interface PreviewAutoFixProps {
   autoFixToast: string | null;
   isAutoFixing: boolean;
   pendingAutoFix: string | null;
+  failedAutoFixError: string | null;
   handleConfirmAutoFix: () => void;
   handleDeclineAutoFix: () => void;
-  failedAutoFixError: string | null;
-  onSendErrorToChat?: (errorMessage: string) => void;
   handleSendErrorToChat: () => void;
   handleDismissFailedError: () => void;
+  onSendErrorToChat?: (errorMessage: string) => void;
+}
+
+/** Inspect mode state and actions */
+interface PreviewInspectProps {
   isInspectMode: boolean;
+  isInspectEditing: boolean;
   hoveredElement: { top: number; left: number; width: number; height: number } | null;
   inspectedElement: InspectedElement | null;
-  isInspectEditing: boolean;
   onCloseInspector: () => void;
   onInspectEdit: (prompt: string, element: InspectedElement, scope: EditScope) => void;
-  // URL Bar props
+}
+
+/** URL bar navigation */
+interface PreviewNavigationProps {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   currentUrl: string;
   canGoBack: boolean;
@@ -71,38 +96,56 @@ export interface PreviewContentProps {
   onGoBack: () => void;
   onGoForward: () => void;
   onReload: () => void;
-  // Elements tab props (optional - for component tree inspection)
+}
+
+/** Component tree inspection (Elements tab) */
+interface PreviewElementsTreeProps {
   componentTree?: ComponentTreeNode | null;
   selectedNodeId?: string | null;
   expandedNodes?: Set<string>;
+  isTreeLoading?: boolean;
   onSelectNode?: (nodeId: string) => void;
   onToggleExpand?: (nodeId: string) => void;
   onHoverNode?: (nodeId: string | null) => void;
   onRefreshTree?: () => void;
-  isTreeLoading?: boolean;
-  // InspectorPanel props (optional - for CSS/props inspection)
+}
+
+/** Inspector panel state (CSS/Props inspection) */
+interface PreviewInspectorPanelProps {
   isInspectorPanelOpen?: boolean;
   inspectorActiveTab?: InspectorTab;
   onInspectorTabChange?: (tab: InspectorTab) => void;
   onCloseInspectorPanel?: () => void;
-  // Styles data
+}
+
+/** Computed styles data */
+interface PreviewStylesDataProps {
   computedStyles?: ComputedStylesResult | null;
   tailwindClasses?: TailwindClassInfo[];
   isStylesLoading?: boolean;
-  // Props data
+}
+
+/** Component props data */
+interface PreviewComponentPropsData {
   componentProps?: Record<string, unknown> | null;
   componentState?: Array<{ index: number; value: unknown }> | null;
   componentName?: string | null;
   isPropsLoading?: boolean;
-  // Quick styles
+}
+
+/** Quick style application */
+interface PreviewQuickStylesProps {
   selectedElementRef?: string | null;
   ffGroup?: string | null;
+  isQuickStylesProcessing?: boolean;
   onApplyPreset?: (prompt: string, scope: EditScope) => void;
   onApplyCustomStyle?: (prompt: string, scope: EditScope) => void;
   onApplyTempStyle?: (styles: Record<string, string>) => void;
   onClearTempStyles?: () => void;
-  isQuickStylesProcessing?: boolean;
-  // Revert and retry when AI changes break the app
+}
+
+/** Revert and retry functionality */
+interface PreviewRevertProps {
   onRevertAndRetry?: () => void;
   onRevertOnly?: () => boolean;
   canRevertAndRetry?: boolean;
@@ -110,38 +153,95 @@ export interface PreviewContentProps {
   lastPrompt?: string | null;
 }
 
+/** Main props interface using grouped interfaces */
+export interface PreviewContentProps {
+  /** Core preview rendering */
+  core: PreviewCoreProps;
+  /** Generation state */
+  state: PreviewStateProps;
+  /** Logs management */
+  logs: PreviewLogsProps;
+  /** Auto-fix functionality */
+  autoFix: PreviewAutoFixProps;
+  /** Inspect mode */
+  inspect: PreviewInspectProps;
+  /** URL navigation */
+  navigation: PreviewNavigationProps;
+  /** Elements tree (optional) */
+  elementsTree?: PreviewElementsTreeProps;
+  /** Inspector panel (optional) */
+  inspectorPanel?: PreviewInspectorPanelProps;
+  /** Styles data (optional) */
+  styles?: PreviewStylesDataProps;
+  /** Component props data (optional) */
+  componentData?: PreviewComponentPropsData;
+  /** Quick styles (optional) */
+  quickStyles?: PreviewQuickStylesProps;
+  /** Revert functionality (optional) */
+  revert?: PreviewRevertProps;
+}
+
 export const PreviewContent = memo(function PreviewContent(props: PreviewContentProps) {
+  // Destructure grouped props with defaults for optional groups
   const {
-    appCode,
-    iframeSrc,
-    previewDevice,
-    isGenerating,
-    isFixingResp,
-    iframeKey,
+    core,
+    state,
     logs,
+    autoFix,
+    inspect,
+    navigation,
+    elementsTree,
+    inspectorPanel,
+    styles,
+    componentData,
+    quickStyles,
+    revert,
+  } = props;
+
+  // Extract core props
+  const { appCode, iframeSrc, iframeKey, previewDevice } = core;
+
+  // Extract state props
+  const { isGenerating, isFixingResp } = state;
+
+  // Extract logs props
+  const {
+    logs: logEntries,
     networkLogs,
     isConsoleOpen,
-    setIsConsoleOpen,
     activeTerminalTab,
-    setActiveTerminalTab,
     setLogs,
     setNetworkLogs,
+    setIsConsoleOpen,
+    setActiveTerminalTab,
     fixError,
+  } = logs;
+
+  // Extract auto-fix props
+  const {
     autoFixToast,
     isAutoFixing,
     pendingAutoFix,
+    failedAutoFixError,
     handleConfirmAutoFix,
     handleDeclineAutoFix,
-    failedAutoFixError,
-    onSendErrorToChat,
     handleSendErrorToChat,
     handleDismissFailedError,
+    onSendErrorToChat,
+  } = autoFix;
+
+  // Extract inspect props
+  const {
     isInspectMode,
+    isInspectEditing,
     hoveredElement,
     inspectedElement,
-    isInspectEditing,
     onCloseInspector,
     onInspectEdit,
+  } = inspect;
+
+  // Extract navigation props
+  const {
     iframeRef,
     currentUrl,
     canGoBack,
@@ -150,44 +250,62 @@ export const PreviewContent = memo(function PreviewContent(props: PreviewContent
     onGoBack,
     onGoForward,
     onReload,
-    // Elements tab props
+  } = navigation;
+
+  // Extract optional elements tree props with defaults
+  const {
     componentTree,
     selectedNodeId,
     expandedNodes,
+    isTreeLoading = false,
     onSelectNode,
     onToggleExpand,
     onHoverNode,
     onRefreshTree,
-    isTreeLoading,
-    // InspectorPanel props
+  } = elementsTree || {};
+
+  // Extract optional inspector panel props with defaults
+  const {
     isInspectorPanelOpen = false,
     inspectorActiveTab = 'styles',
     onInspectorTabChange,
     onCloseInspectorPanel,
-    // Styles data
+  } = inspectorPanel || {};
+
+  // Extract optional styles props with defaults
+  const {
     computedStyles,
     tailwindClasses = [],
     isStylesLoading = false,
-    // Props data
+  } = styles || {};
+
+  // Extract optional component data props with defaults
+  const {
     componentProps,
     componentState,
     componentName,
     isPropsLoading = false,
-    // Quick styles
+  } = componentData || {};
+
+  // Extract optional quick styles props with defaults
+  const {
     selectedElementRef,
     ffGroup,
+    isQuickStylesProcessing = false,
     onApplyPreset,
     onApplyCustomStyle,
     onApplyTempStyle,
     onClearTempStyles,
-    isQuickStylesProcessing = false,
-    // Revert and retry
+  } = quickStyles || {};
+
+  // Extract optional revert props with defaults
+  const {
     onRevertAndRetry,
     onRevertOnly,
     canRevertAndRetry = false,
     canRevert = false,
     lastPrompt,
-  } = props;
+  } = revert || {};
 
   // Toast for notifications
   const toast = useToast();
@@ -719,7 +837,7 @@ export const PreviewContent = memo(function PreviewContent(props: PreviewContent
 
       {appCode && (
         <DevToolsPanel
-          logs={logs}
+          logs={logEntries}
           networkLogs={networkLogs}
           isOpen={isConsoleOpen}
           onToggle={() => setIsConsoleOpen(!isConsoleOpen)}
