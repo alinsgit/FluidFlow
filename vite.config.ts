@@ -40,6 +40,11 @@ export default defineConfig(({ mode }) => {
     // securely (encrypted) in localStorage and backend. For development, set
     // GEMINI_API_KEY in .env and the backend will automatically configure the default provider.
     define: {},
+    esbuild: {
+      // Strip console.log/debug in production; keep warn/error for diagnostics
+      pure: mode === 'production' ? ['console.log', 'console.debug'] : [],
+      drop: mode === 'production' ? ['debugger'] : [],
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -60,13 +65,27 @@ export default defineConfig(({ mode }) => {
           'os'
         ],
         output: {
-          manualChunks: {
-            // Split vendor chunks for better caching - optimize bundle size
-            'vendor-react-core': ['react', 'react-dom'],
-            'vendor-react-ui': ['lucide-react'],
-            'vendor-monaco': ['@monaco-editor/react'],
-            'vendor-ai': ['@google/genai'],
-            'vendor-flow': ['@xyflow/react'],
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            // React core
+            if (id.includes('/react-dom/') || id.includes('/react/')) return 'vendor-react-core';
+            // Icons
+            if (id.includes('/lucide-react/')) return 'vendor-react-ui';
+            // Code editor
+            if (id.includes('/@monaco-editor/') || id.includes('/monaco-editor/')) return 'vendor-monaco';
+            // AI SDKs
+            if (id.includes('/@google/genai/') || id.includes('/openai/')) return 'vendor-ai';
+            // Flow diagrams (includes d3 subdependencies)
+            if (id.includes('/@xyflow/') || id.includes('/d3-')) return 'vendor-flow';
+            // Utility libraries
+            if (
+              id.includes('/diff/') ||
+              id.includes('/dompurify/') ||
+              id.includes('/jszip/') ||
+              id.includes('/file-saver/') ||
+              id.includes('/uuid/') ||
+              id.includes('/marked/')
+            ) return 'vendor-utils';
           }
         }
       }

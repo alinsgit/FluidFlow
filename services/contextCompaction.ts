@@ -177,7 +177,6 @@ export async function triggerCompaction(
   try {
     // Perform compaction
     await contextManager.compactContext(contextId, async (text) => {
-      const { getProviderManager } = await import('./ai');
       const manager = getProviderManager();
 
       const request = {

@@ -200,21 +200,35 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
       const currentProjectId = project.currentProject.id;
 
       const restoreWithWIP = async () => {
+        // Helper to check if user has switched projects during async operations
+        const isStale = () => lastProjectIdRef.current !== currentProjectId;
+
         try {
           const wip = await getWIP(currentProjectId);
+          // Guard against stale restore if user switched projects during async getWIP
+          if (isStale()) {
+            console.log('[AppContext] Aborting stale WIP restore for:', currentProjectId);
+            return;
+          }
           lastCommittedFilesRef.current = JSON.stringify(project.files);
 
           if (wip && wip.files && Object.keys(wip.files).length > 0) {
+            // Re-check staleness before each state mutation to prevent cross-project data corruption
+            if (isStale()) return;
             console.log('[AppContext] Restoring WIP:', Object.keys(wip.files).length, 'files');
             resetFiles(wip.files);
+            if (isStale()) return;
             setHasUncommittedChanges(true);
             if (wip.activeFile && wip.files[wip.activeFile]) {
+              if (isStale()) return;
               setActiveFile(wip.activeFile);
             }
             if (wip.activeTab) {
+              if (isStale()) return;
               setActiveTab(wip.activeTab as TabType);
             }
           } else {
+            if (isStale()) return;
             const backendFileCount = Object.keys(project.files).length;
             if (backendFileCount > 0) {
               resetFiles(project.files);
@@ -223,6 +237,7 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
           }
         } catch (err) {
           console.warn('[AppContext] WIP restore failed:', err);
+          if (isStale()) return;
           if (Object.keys(project.files).length > 0) {
             resetFiles(project.files);
           }

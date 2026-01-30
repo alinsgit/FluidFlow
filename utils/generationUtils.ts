@@ -16,8 +16,9 @@ import { getGenerationPrompt } from '../services/promptTemplates';
 import type { AIResponseFormat } from '../services/fluidflowConfig';
 import { getFileContextTracker, type FileContextDelta } from '../services/context/fileContextTracker';
 import { FILE_CONTEXT_PREVIEW_LENGTH, STORAGE_KEYS } from '../constants';
-import type { FileContextInfo } from '../services/ai/types';
+import type { FileContextInfo, ProviderType } from '../services/ai/types';
 import { getContextForPrompt } from '../services/projectContext';
+import { getProviderManager } from '../services/ai';
 
 /**
  * Check if file context delta mode is enabled
@@ -321,6 +322,26 @@ export function markFilesAsShared(files: FileSystem, contextId: string = MAIN_CH
 export function getFileContextStats(files: FileSystem, contextId: string = MAIN_CHAT_CONTEXT) {
   const tracker = getFileContextTracker(contextId);
   return tracker.getStats(files);
+}
+
+/**
+ * Get active provider with manager, model, and provider name.
+ * Reduces the 3-line boilerplate pattern across all AI hooks.
+ */
+export function getActiveProvider(fallbackModel: string): {
+  manager: ReturnType<typeof getProviderManager>;
+  model: string;
+  providerName: string;
+  providerType: ProviderType | undefined;
+} {
+  const manager = getProviderManager();
+  const activeConfig = manager.getActiveConfig();
+  return {
+    manager,
+    model: activeConfig?.defaultModel || fallbackModel,
+    providerName: activeConfig?.name || 'AI',
+    providerType: activeConfig?.type,
+  };
 }
 
 /**

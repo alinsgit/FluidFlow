@@ -286,13 +286,3 @@ export function isTransientError(error: unknown): boolean {
   return false;
 }
 
-/**
- * Create an error with specific code (convenience function)
- */
-export function createError(
-  code: ErrorCode,
-  message: string,
-  context?: ErrorContext
-): FluidFlowError {
-  return new FluidFlowError(message, code, context);
-}

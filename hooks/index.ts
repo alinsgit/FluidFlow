@@ -10,7 +10,7 @@ export { useProject } from './useProject';
 export type { ProjectState, UseProjectReturn, PendingSyncConfirmation } from './useProject';
 
 // UI state hooks
-export { useModalManager, createModalProps, LEGACY_STATE_MAPPING } from './useModalManager';
+export { useModalManager, createModalProps } from './useModalManager';
 export type { ModalType, ModalState, ModalManager } from './useModalManager';
 
 // AI Generation state hook

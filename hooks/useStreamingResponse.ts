@@ -29,6 +29,29 @@ export type {
 
 export { FormatMismatchError } from './streaming';
 
+/**
+ * Module-level store for the last AI response data.
+ * Used for error recovery when streaming fails mid-response.
+ * Replaces unsafe `(window as any).__lastAIResponse` global.
+ */
+export interface LastAIResponseData {
+  raw: string;
+  timestamp: number;
+  chars: number;
+  filesDetected: string[];
+  format: string;
+}
+
+let _lastAIResponse: LastAIResponseData | null = null;
+
+export function setLastAIResponse(data: LastAIResponseData): void {
+  _lastAIResponse = data;
+}
+
+export function getLastAIResponse(): LastAIResponseData | null {
+  return _lastAIResponse;
+}
+
 // Import utilities from submodules
 import {
   type StreamingFormat,
@@ -413,17 +436,16 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
         console.debug('[Debug] Final stream update failed:', e);
       }
 
-      // Save raw response for debugging
+      // Save raw response for debugging and error recovery
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).__lastAIResponse = {
+        setLastAIResponse({
           raw: fullText,
           timestamp: Date.now(),
           chars: fullText.length,
           filesDetected: detectedFiles,
           format: detectedFormat,
-        };
-        console.log(`[Debug] Raw response saved to window.__lastAIResponse (${fullText.length} chars, format: ${detectedFormat})`);
+        });
+        console.log(`[Debug] Raw response saved (${fullText.length} chars, format: ${detectedFormat})`);
       } catch (e) {
         console.debug('[Debug] Could not save raw response:', e);
       }

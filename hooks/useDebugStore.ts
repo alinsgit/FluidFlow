@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import type { DebugLogEntry, DebugState } from '@/types';
 
 const MAX_LOGS = 500;
@@ -42,6 +42,16 @@ const initialState: DebugState = {
 
 let globalDebugState: DebugState = initialState;
 const globalListeners: Set<() => void> = new Set();
+
+// useSyncExternalStore helpers
+function subscribe(listener: () => void): () => void {
+  globalListeners.add(listener);
+  return () => { globalListeners.delete(listener); };
+}
+
+function getSnapshot(): DebugState {
+  return globalDebugState;
+}
 
 // Reset global debug state - useful for app resets or testing
 export function resetDebugState(): void {
@@ -191,20 +201,10 @@ function updateLog(id: string, updates: Partial<DebugLogEntry>, notifyNow = fals
 }
 
 export function useDebugStore() {
-  const [updateCount, forceUpdate] = useState(0);
-
-  // Subscribe to global state changes - use useEffect for proper cleanup
-  useEffect(() => {
-    const listener = () => forceUpdate(c => c + 1);
-    globalListeners.add(listener);
-    return () => {
-      globalListeners.delete(listener);
-    };
-  }, []);
+  const state = useSyncExternalStore(subscribe, getSnapshot);
 
   const setEnabled = useCallback((enabled: boolean) => {
     globalDebugState = { ...globalDebugState, enabled };
-    // Persist to localStorage
     try {
       localStorage.setItem(DEBUG_ENABLED_KEY, String(enabled));
     } catch {
@@ -226,11 +226,9 @@ export function useDebugStore() {
     globalListeners.forEach(listener => listener());
   }, []);
 
-  // Include updateCount in deps to recompute when global state changes trigger re-render
-  // updateCount changes when globalListeners notify, triggering useMemo recomputation
   const filteredLogs = useMemo(() => {
-    const { types, categories, searchQuery } = globalDebugState.filter;
-    return globalDebugState.logs.filter(log => {
+    const { types, categories, searchQuery } = state.filter;
+    return state.logs.filter(log => {
       if (!types.includes(log.type)) return false;
       if (!categories.includes(log.category)) return false;
       if (searchQuery) {
@@ -249,14 +247,13 @@ export function useDebugStore() {
       }
       return true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateCount intentionally triggers recomputation on global state changes
-  }, [updateCount]);
+  }, [state]);
 
   return {
-    enabled: globalDebugState.enabled,
-    logs: globalDebugState.logs,
+    enabled: state.enabled,
+    logs: state.logs,
     filteredLogs,
-    filter: globalDebugState.filter,
+    filter: state.filter,
     setEnabled,
     clearLogs,
     setFilter,

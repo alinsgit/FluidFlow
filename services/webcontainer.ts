@@ -321,7 +321,8 @@ class WebContainerService {
         resolve('');
         return;
       }
-      const _unsubscribe = this.instance.on('server-ready', (port, url) => {
+      const unsubscribe = this.instance.on('server-ready', (port, url) => {
+        unsubscribe();
         this.updateState({ status: 'running', serverUrl: url });
         this.log(`Dev server ready at ${url} (port ${port})`);
         resolve(url);
@@ -330,6 +331,7 @@ class WebContainerService {
       // Timeout after 60 seconds
       setTimeout(() => {
         if (this.state.status === 'starting') {
+          unsubscribe();
           this.updateState({ status: 'error', error: 'Dev server timeout' });
           this.log('Dev server start timeout');
           resolve(null);

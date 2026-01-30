@@ -20,6 +20,20 @@ export interface UseAIHistoryReturn {
 const MAX_HISTORY_SIZE = 100; // Keep last 100 generations
 const SAVE_DEBOUNCE_MS = 1000; // Reduced for faster saves
 
+// Module-level debug state (replaces window globals)
+let _lastAIHistoryEntry: AIHistoryEntry | null = null;
+let _aiHistoryCount = 0;
+
+/** Get the most recently added AI history entry (for debugging) */
+export function getLastAIHistoryEntry(): AIHistoryEntry | null {
+  return _lastAIHistoryEntry;
+}
+
+/** Get total AI history entry count (for debugging) */
+export function getAIHistoryCount(): number {
+  return _aiHistoryCount;
+}
+
 export function useAIHistory(projectId: string | null): UseAIHistoryReturn {
   const [history, setHistory] = useState<AIHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -161,15 +175,9 @@ export function useAIHistory(projectId: string | null): UseAIHistoryReturn {
       return updated;
     });
 
-    // Also store in window for immediate debugging access
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Debug: window extension for dev tools access
-      (window as any).__lastAIHistoryEntry = newEntry;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Debug: window extension for dev tools access
-      (window as any).__aiHistoryCount = history.length + 1;
-    } catch (_e) {
-      // Ignore
-    }
+    // Store for debugging access via exported getters
+    _lastAIHistoryEntry = newEntry;
+    _aiHistoryCount = history.length + 1;
 
     console.log(`[AIHistory] Added entry ${id} (${entry.success ? 'success' : 'failed'})`);
     return id;

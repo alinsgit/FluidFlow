@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { isValidProjectId } from '../utils/validation';
+import { isValidProjectId, isValidFilePath, sanitizeFilePath } from '../utils/validation';
 import { safeReadJson } from '../utils/safeJson';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -171,20 +171,21 @@ router.get('/:id/status', async (req, res) => {
   } catch (error: unknown) {
     console.error('Git status error:', error);
 
-    // Check if it's a corruption error - return 200 so frontend can handle it
     const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Corruption errors: 409 Conflict - repo exists but is unusable
     if (errorMessage.includes('corrupt') || errorMessage.includes('inflate')) {
-      return res.json({
-        initialized: true, // Still initialized, just corrupted
+      return res.status(409).json({
+        initialized: true,
         corrupted: true,
         error: 'Git repository is corrupted',
         message: 'The git repository may need to be re-initialized'
       });
     }
 
-    // For other errors, also return 200 with error info so frontend can handle
-    res.json({
-      initialized: true, // Assume initialized since isOwnGitRepo passed
+    // Other git errors: 500 Internal Server Error
+    res.status(500).json({
+      initialized: true,
       error: 'Failed to get git status',
       message: errorMessage
     });
@@ -621,19 +622,11 @@ router.get('/:id/commit/:hash/diff', async (req, res) => {
     // Get diff for commit (compare with parent)
     const args = [`${hash}^..${hash}`];
     if (file) {
-      // BUG-FIX: Validate file path to prevent path traversal attacks
-      const filePath = String(file).replace(/\\/g, '/');
-      if (
-        filePath.includes('..') ||
-        filePath.startsWith('/') ||
-        /^[a-zA-Z]:/.test(filePath) ||
-        filePath.includes('\0') ||
-        /%2e%2e/i.test(filePath) ||
-        /%00/.test(filePath)
-      ) {
+      const filePath = String(file);
+      if (!isValidFilePath(filePath)) {
         return res.status(400).json({ error: 'Invalid file path' });
       }
-      args.push('--', filePath);
+      args.push('--', sanitizeFilePath(filePath));
     }
 
     const diff = await git.diff(args);
@@ -665,18 +658,10 @@ router.get('/:id/commit/:hash/file', async (req, res) => {
       return res.status(400).json({ error: 'File path required' });
     }
 
-    // Validate filePath - prevent path traversal and injection attacks
-    const sanitizedPath = String(filePath).replace(/\\/g, '/');
-    if (
-      sanitizedPath.includes('..') ||
-      sanitizedPath.startsWith('/') ||
-      /^[a-zA-Z]:/.test(sanitizedPath) ||
-      sanitizedPath.includes('\0') ||
-      /%2e%2e/i.test(sanitizedPath) ||
-      /%00/.test(sanitizedPath)
-    ) {
+    if (!isValidFilePath(String(filePath))) {
       return res.status(400).json({ error: 'Invalid file path' });
     }
+    const sanitizedPath = sanitizeFilePath(String(filePath));
 
     if (!existsSync(filesDir)) {
       return res.status(404).json({ error: 'Project not found' });

@@ -20,33 +20,12 @@ function utf8ToBase64(str: string): string {
   return btoa(binary);
 }
 
-function base64ToUtf8(base64: string): string {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  const decoder = new TextDecoder();
-  return decoder.decode(bytes);
-}
-
 // Simple compression using LZ-based encoding
 function compressString(str: string): string {
   try {
     // Convert to base64 and URL-safe encode
     const base64 = utf8ToBase64(str);
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  } catch {
-    return '';
-  }
-}
-
-function decompressString(compressed: string): string {
-  try {
-    // Restore base64 and decode
-    let base64 = compressed.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    return base64ToUtf8(base64);
   } catch {
     return '';
   }
@@ -248,25 +227,3 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
     </BaseModal>
   );
 };
-
-// Export helper to load project from URL
-// eslint-disable-next-line react-refresh/only-export-components -- Utility function export for external use
-export function loadProjectFromUrl(): FileSystem | null {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const projectData = params.get('project');
-
-    if (projectData) {
-      const decompressed = decompressString(projectData);
-      if (decompressed) {
-        const files = JSON.parse(decompressed);
-        // Clean up URL after loading
-        window.history.replaceState({}, '', window.location.pathname);
-        return files;
-      }
-    }
-  } catch (err) {
-    console.error('Failed to load project from URL:', err);
-  }
-  return null;
-}

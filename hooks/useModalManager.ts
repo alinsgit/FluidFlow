@@ -171,19 +171,3 @@ export function createModalProps(manager: ModalManager, modal: ModalType) {
   };
 }
 
-/**
- * Mapping from old state names to new modal types (for migration)
- */
-export const LEGACY_STATE_MAPPING: Record<string, ModalType> = {
-  isSnippetsPanelOpen: 'snippetsPanel',
-  isTailwindPaletteOpen: 'tailwindPalette',
-  isComponentTreeOpen: 'componentTree',
-  isDeployModalOpen: 'deploy',
-  isShareModalOpen: 'share',
-  isAISettingsOpen: 'aiSettings',
-  isMegaSettingsOpen: 'megaSettings',
-  isHistoryPanelOpen: 'history',
-  isProjectManagerOpen: 'projectManager',
-  isCreditsModalOpen: 'credits',
-  isCodeMapModalOpen: 'codeMap',
-};

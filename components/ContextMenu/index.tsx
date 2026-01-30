@@ -71,30 +71,21 @@ export function ContextMenuProvider({ children }: ContextMenuProviderProps) {
     setState(prev => ({ ...prev, show: false }));
   }, []);
 
-  // Close on click outside
+  // Close on click outside or Escape (only when menu is visible)
   useEffect(() => {
-    const handleClick = () => {
-      if (state.show) {
-        hideContextMenu();
-      }
-    };
+    if (!state.show) return;
 
-    if (state.show) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [state.show, hideContextMenu]);
-
-  // Close on Escape
-  useEffect(() => {
+    const handleClick = () => hideContextMenu();
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && state.show) {
-        hideContextMenu();
-      }
+      if (e.key === 'Escape') hideContextMenu();
     };
 
+    document.addEventListener('click', handleClick);
     document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [state.show, hideContextMenu]);
 
   const handleItemClick = (item: ContextMenuItem) => {

@@ -5,14 +5,80 @@
  * and missing file requests. Extracted from ControlPanel to reduce complexity.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { FileSystem, ChatMessage } from '../types';
 import { parseMultiFileResponse, parseUnifiedResponse, GenerationMeta } from '../utils/cleanCode';
-import { getProviderManager } from '../services/ai';
 import { FILE_GENERATION_SCHEMA, supportsAdditionalProperties } from '../services/ai/utils/schemas';
 import { FilePlan, ContinuationState, TruncatedContent } from './useGenerationState';
-import { calculateFileChanges, createTokenUsage } from '../utils/generationUtils';
+import { calculateFileChanges, createTokenUsage, getActiveProvider } from '../utils/generationUtils';
 import { getFluidFlowConfig } from '../services/fluidflowConfig';
+
+// ============ Internal Helpers ============
+
+/**
+ * Validate generated files, filtering out empty/malformed entries.
+ * Returns valid files and a list of invalid file paths.
+ */
+function validateGeneratedFiles(
+  files: FileSystem
+): { validFiles: FileSystem; invalidFiles: string[] } {
+  const validFiles: FileSystem = {};
+  const invalidFiles: string[] = [];
+
+  for (const [path, content] of Object.entries(files)) {
+    if (!path || path.includes('/.') || !path.match(/\.[a-z]+$/i)) {
+      console.warn('[Continuation] Invalid file path:', path);
+      invalidFiles.push(path);
+      continue;
+    }
+
+    const contentStr = typeof content === 'string' ? content : '';
+    if (
+      contentStr.length < 20 ||
+      /^(tsx|jsx|ts|js|css|json|md);?$/.test(contentStr.trim())
+    ) {
+      console.warn('[Continuation] Empty or malformed file content:', path, '- content:', contentStr.slice(0, 50));
+      invalidFiles.push(path);
+      continue;
+    }
+
+    validFiles[path] = contentStr;
+  }
+
+  return { validFiles, invalidFiles };
+}
+
+/**
+ * Create a ChatMessage for generation completion or error.
+ */
+function createCompletionMessage(
+  opts: {
+    explanation: string;
+    files?: FileSystem;
+    currentFiles: FileSystem;
+    model?: string;
+    provider?: string;
+    startTime: number;
+    tokenUsage?: ChatMessage['tokenUsage'];
+    error?: string;
+  }
+): ChatMessage {
+  const fileChanges = opts.files ? calculateFileChanges(opts.currentFiles, opts.files) : undefined;
+  return {
+    id: crypto.randomUUID(),
+    role: 'assistant',
+    timestamp: Date.now(),
+    explanation: opts.explanation,
+    ...(opts.error && { error: opts.error }),
+    ...(opts.files && { files: opts.files }),
+    ...(fileChanges && { fileChanges }),
+    snapshotFiles: { ...opts.currentFiles },
+    ...(opts.model && { model: opts.model }),
+    ...(opts.provider && { provider: opts.provider }),
+    generationTime: Date.now() - opts.startTime,
+    ...(opts.tokenUsage && { tokenUsage: opts.tokenUsage }),
+  };
+}
 
 // Types for the hook
 export interface ContinuationGenerationOptions {
@@ -60,6 +126,32 @@ export function useContinuationGeneration(
     reviewChange,
   } = options;
 
+  // Track mounted state and active timers to prevent state updates after unmount
+  const mountedRef = useRef(true);
+  const activeTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  // Clear all active timers - used on unmount and when clearing pending operations
+  const clearAllTimers = useCallback(() => {
+    activeTimers.current.forEach(t => clearTimeout(t));
+    activeTimers.current.clear();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      clearAllTimers();
+    };
+  }, [clearAllTimers]);
+
+  const safeSetTimeout = useCallback((fn: () => void, ms: number) => {
+    const timer = setTimeout(() => {
+      activeTimers.current.delete(timer);
+      if (mountedRef.current) fn();
+    }, ms);
+    activeTimers.current.add(timer);
+    return timer;
+  }, []);
+
   /**
    * Targeted request for specific missing files - more focused than general continuation
    */
@@ -76,9 +168,7 @@ export function useContinuationGeneration(
       console.log('[MissingFiles] Requesting specific files:', missingFiles);
       setStreamingStatus(`🎯 Requesting ${missingFiles.length} missing file(s)...`);
 
-      const manager = getProviderManager();
-      const activeConfig = manager.getActiveConfig();
-      const currentModel = activeConfig?.defaultModel || selectedModel;
+      const { manager, model: currentModel, providerType } = getActiveProvider(selectedModel);
 
       // Very focused prompt - only ask for the missing files
       const targetedPrompt = `Generate ONLY the following specific files. These files are missing from the project.
@@ -120,7 +210,7 @@ Return ONLY a JSON object with the files:
             temperature: 0.7,
             responseFormat: currentFormat === 'marker' ? undefined : 'json',
             responseSchema:
-              currentFormat !== 'marker' && activeConfig?.type && supportsAdditionalProperties(activeConfig.type)
+              currentFormat !== 'marker' && providerType && supportsAdditionalProperties(providerType)
                 ? FILE_GENERATION_SCHEMA
                 : undefined,
           },
@@ -155,6 +245,9 @@ Return ONLY a JSON object with the files:
    */
   const handleContinueGeneration = useCallback(
     async (contState?: ContinuationState | null, existingFiles?: FileSystem) => {
+      // Clear pending timers from previous continuation attempts to prevent leaks
+      clearAllTimers();
+
       const state = contState;
       if (!state || state.generationMeta.isComplete) {
         console.log('[Continuation] No continuation needed or already complete');
@@ -176,10 +269,7 @@ Return ONLY a JSON object with the files:
         `✨ Generating... ${completedFiles.length}/${generationMeta.totalFilesPlanned} files`
       );
 
-      const manager = getProviderManager();
-      const activeConfig = manager.getActiveConfig();
-      const currentModel = activeConfig?.defaultModel || selectedModel;
-      const providerName = activeConfig?.name || 'AI';
+      const { manager, model: currentModel, providerName, providerType } = getActiveProvider(selectedModel);
       const continuationStartTime = Date.now();
 
       try {
@@ -213,7 +303,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
             temperature: 0.7,
             responseFormat: contFormat === 'marker' ? undefined : 'json',
             responseSchema:
-              contFormat !== 'marker' && activeConfig?.type && supportsAdditionalProperties(activeConfig.type)
+              contFormat !== 'marker' && providerType && supportsAdditionalProperties(providerType)
                 ? FILE_GENERATION_SCHEMA
                 : undefined,
           },
@@ -281,7 +371,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
             setContinuationState(retryState);
 
             // Wait before retrying (exponential backoff)
-            setTimeout(() => {
+            safeSetTimeout(() => {
               handleContinueGeneration(retryState, existingFiles);
             }, 1000 * (currentRetryAttempts + 1));
 
@@ -350,35 +440,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           }
 
           // VALIDATE: Filter out empty or malformed files
-          const validFiles: FileSystem = {};
-          const invalidFiles: string[] = [];
-
-          for (const [path, content] of Object.entries(newAccumulatedFiles)) {
-            // Check for valid file path
-            if (!path || path.includes('/.') || !path.match(/\.[a-z]+$/i)) {
-              console.warn('[Continuation] Invalid file path:', path);
-              invalidFiles.push(path);
-              continue;
-            }
-
-            // Check for valid content (more than just extension or very short)
-            const contentStr = typeof content === 'string' ? content : '';
-            if (
-              contentStr.length < 20 ||
-              /^(tsx|jsx|ts|js|css|json|md);?$/.test(contentStr.trim())
-            ) {
-              console.warn(
-                '[Continuation] Empty or malformed file content:',
-                path,
-                '- content:',
-                contentStr.slice(0, 50)
-              );
-              invalidFiles.push(path);
-              continue;
-            }
-
-            validFiles[path] = contentStr;
-          }
+          const { validFiles, invalidFiles } = validateGeneratedFiles(newAccumulatedFiles);
 
           console.log('[Continuation] File validation:', {
             total: Object.keys(newAccumulatedFiles).length,
@@ -453,7 +515,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           setStreamingStatus(`✅ Generated ${generatedFileList.length} files!`);
 
           // Small delay to ensure message renders before modal opens
-          setTimeout(() => {
+          safeSetTimeout(() => {
             setContinuationState(null);
             setIsGenerating(false);
             setFilePlan(null);
@@ -490,7 +552,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           console.log('[Continuation] Starting next batch:', currentBatch + 1);
 
           // Continue immediately - seamless experience
-          setTimeout(() => {
+          safeSetTimeout(() => {
             handleContinueGeneration(newContState, existingFiles);
           }, 50);
         }
@@ -517,7 +579,7 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           setContinuationState(retryState);
 
           // Wait before retrying (exponential backoff)
-          setTimeout(() => {
+          safeSetTimeout(() => {
             handleContinueGeneration(retryState, existingFiles);
           }, 1000 * (currentRetryAttempts + 1));
 
@@ -545,43 +607,33 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           );
 
           if (targetedResult.success) {
-            // Check which files are still missing after targeted request
             const stillMissing = generationMeta.remainingFiles.filter(
               (f) => !targetedResult.files[f]
             );
-
             const generatedFileList = Object.keys(targetedResult.files);
             const finalFiles = existingFiles
               ? { ...existingFiles, ...targetedResult.files }
               : targetedResult.files;
-            const fileChanges = calculateFileChanges(files, finalFiles);
 
-            // Use AI's explanation, with fallback for missing files info
             let explanationText = targetedResult.explanation || 'Generation complete.';
             if (stillMissing.length > 0) {
               explanationText += `\n\n⚠️ **${stillMissing.length} files could not be generated:** ${stillMissing.join(', ')}`;
             }
 
-            const completionMessage: ChatMessage = {
-              id: crypto.randomUUID(),
-              role: 'assistant',
-              timestamp: Date.now(),
+            setMessages((prev) => [...prev, createCompletionMessage({
               explanation: explanationText,
               files: targetedResult.files,
-              fileChanges,
-              snapshotFiles: { ...files },
+              currentFiles: files,
               model: currentModel,
               provider: providerName,
-              generationTime: Date.now() - continuationStartTime,
+              startTime: continuationStartTime,
               tokenUsage: createTokenUsage(undefined, undefined, explanationText, targetedResult.files),
-            };
-            setMessages((prev) => [...prev, completionMessage]);
+            })]);
             setStreamingStatus(
               `✅ Generated ${generatedFileList.length} files${stillMissing.length > 0 ? ` (${stillMissing.length} missing)` : ''}`
             );
 
-            // Complete generation
-            setTimeout(() => {
+            safeSetTimeout(() => {
               setContinuationState(null);
               setIsGenerating(false);
               setFilePlan(null);
@@ -602,30 +654,25 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
           const finalFiles = existingFiles
             ? { ...existingFiles, ...accumulatedFiles }
             : accumulatedFiles;
-          const fileChanges = calculateFileChanges(files, finalFiles);
 
           const explanationText = `Generation complete.\n\n⚠️ **${generationMeta.remainingFiles.length} files could not be generated:** ${generationMeta.remainingFiles.join(', ')}`;
 
-          const completionMessage: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            timestamp: Date.now(),
+          const completionMessage = createCompletionMessage({
             explanation: explanationText,
             files: accumulatedFiles,
-            fileChanges,
-            snapshotFiles: { ...files },
+            currentFiles: files,
             model: currentModel,
             provider: providerName,
-            generationTime: Date.now() - continuationStartTime,
+            startTime: continuationStartTime,
             tokenUsage: createTokenUsage(undefined, undefined, explanationText, accumulatedFiles),
-          };
+          });
           setMessages((prev) => [...prev, completionMessage]);
 
           setStreamingStatus(
             `✅ Generated ${generatedFileList.length} files (${generationMeta.remainingFiles.length} missing)`
           );
 
-          setTimeout(() => {
+          safeSetTimeout(() => {
             setContinuationState(null);
             setIsGenerating(false);
             setFilePlan(null);
@@ -663,6 +710,8 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
       setMessages,
       reviewChange,
       requestMissingFiles,
+      safeSetTimeout,
+      clearAllTimers,
     ]
   );
 
@@ -674,6 +723,9 @@ Generate the remaining files. Each file must be COMPLETE and FUNCTIONAL.`;
       truncatedContent: TruncatedContent,
       reviewChangeFn: (label: string, newFiles: FileSystem) => void
     ) => {
+      // Clear pending timers from previous retry attempts
+      clearAllTimers();
+
       const { rawResponse, prompt, systemInstruction, attempt } = truncatedContent;
 
       // Limit retry attempts to prevent infinite loops
@@ -707,9 +759,7 @@ Please continue from exactly where you stopped and complete the response. Make s
 
 Original prompt: ${prompt}`;
 
-        const manager = getProviderManager();
-        const activeConfig = manager.getActiveConfig();
-        const currentModel = activeConfig?.defaultModel || selectedModel;
+        const { manager, model: currentModel } = getActiveProvider(selectedModel);
 
         let fullText = '';
 
@@ -761,7 +811,7 @@ Original prompt: ${prompt}`;
         setIsGenerating(false);
       }
     },
-    [selectedModel, setIsGenerating, setStreamingStatus, setTruncatedContent]
+    [selectedModel, setIsGenerating, setStreamingStatus, setTruncatedContent, clearAllTimers]
   );
 
   return {

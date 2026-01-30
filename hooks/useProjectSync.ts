@@ -141,10 +141,11 @@ export function useProjectSync(options: UseProjectSyncOptions): UseProjectSyncRe
         lastSyncedAt: Date.now(),
       }));
       return true;
-    } catch (_err) {
+    } catch (err) {
+      console.error('[ProjectSync] Sync failed:', err);
       updateState(() => ({
         isSyncing: false,
-        error: 'Failed to sync files',
+        error: `Failed to sync files: ${err instanceof Error ? err.message : 'Unknown error'}`,
       }));
       return false;
     }
@@ -182,10 +183,11 @@ export function useProjectSync(options: UseProjectSyncOptions): UseProjectSyncRe
       }));
       console.log('[ProjectSync] Force sync completed after confirmation');
       return true;
-    } catch (_err) {
+    } catch (err) {
+      console.error('[ProjectSync] Confirm sync failed:', err);
       updateState(() => ({
         isSyncing: false,
-        error: 'Failed to sync files',
+        error: `Failed to sync files: ${err instanceof Error ? err.message : 'Unknown error'}`,
       }));
       return false;
     }

@@ -40,9 +40,12 @@ const chatLock = new LockManager();
 
 /**
  * Open the WIP IndexedDB database
- * Creates the object store if it doesn't exist
+ * Creates the object store if it doesn't exist.
+ * Caches the connection to avoid opening a new one on every operation.
  */
-function openDatabase(): Promise<IDBDatabase> {
+let cachedDb: IDBDatabase | null = null;
+
+function openDatabaseInternal(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(WIP_DB_NAME, WIP_DB_VERSION);
 
@@ -51,7 +54,16 @@ function openDatabase(): Promise<IDBDatabase> {
       reject(request.error);
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      cachedDb = request.result;
+      // Clear cache if the browser closes the connection (e.g. during version change)
+      cachedDb.onclose = () => { cachedDb = null; };
+      cachedDb.onversionchange = () => {
+        cachedDb?.close();
+        cachedDb = null;
+      };
+      resolve(cachedDb);
+    };
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -67,29 +79,98 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 /**
+ * Open the database with stale connection recovery.
+ * If the cached connection is stale (closed by another tab or browser),
+ * clears the cache and retries once.
+ */
+async function openDatabase(): Promise<IDBDatabase> {
+  if (cachedDb) {
+    try {
+      // Verify the cached connection is still usable by attempting a transaction
+      cachedDb.transaction(WIP_STORE_NAME, 'readonly');
+      return cachedDb;
+    } catch {
+      // Connection is stale (InvalidStateError), clear and reopen
+      console.warn('[WIPStorage] Stale database connection detected, reconnecting...');
+      cachedDb = null;
+    }
+  }
+  return openDatabaseInternal();
+}
+
+// ============ Generic IndexedDB Helpers ============
+
+/**
+ * Get a record from a store by key.
+ * Returns null if the record doesn't exist; throws on database errors.
+ */
+async function dbGet<T>(storeName: string, key: string, label: string): Promise<T | null> {
+  const db = await openDatabase();
+  const tx = db.transaction(storeName, 'readonly');
+  const store = tx.objectStore(storeName);
+
+  return new Promise((resolve, reject) => {
+    const request = store.get(key);
+    request.onerror = () => {
+      console.error(`[${label}] Failed to get:`, request.error);
+      reject(request.error);
+    };
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+/**
+ * Put a record into a store (insert or update).
+ * Uses the provided lock to prevent concurrent writes.
+ */
+async function dbPut<T>(storeName: string, data: T, lock: LockManager, label: string): Promise<void> {
+  return lock.run(async () => {
+    const db = await openDatabase();
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+
+    return new Promise((resolve, reject) => {
+      const request = store.put(data);
+      request.onerror = () => {
+        console.error(`[${label}] Failed to save:`, request.error);
+        reject(request.error);
+      };
+      request.onsuccess = () => resolve();
+    });
+  });
+}
+
+/**
+ * Delete a record from a store by key.
+ * Uses the provided lock to prevent concurrent writes.
+ */
+async function dbDelete(storeName: string, key: string, lock: LockManager, label: string): Promise<void> {
+  return lock.run(async () => {
+    const db = await openDatabase();
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+
+    return new Promise((resolve, reject) => {
+      const request = store.delete(key);
+      request.onerror = () => {
+        console.warn(`[${label}] Failed to clear:`, request.error);
+        reject(request.error);
+      };
+      request.onsuccess = () => resolve();
+    });
+  });
+}
+
+// ============ WIP Storage Operations ============
+
+/**
  * Get WIP data for a project
  *
  * @param projectId - The project ID to retrieve WIP for
- * @returns WIP data or null if not found
+ * @returns WIP data or null if not found; throws on database errors
  */
 export async function getWIP(projectId: string): Promise<WIPData | null> {
-  try {
-    const db = await openDatabase();
-    const tx = db.transaction(WIP_STORE_NAME, 'readonly');
-    const store = tx.objectStore(WIP_STORE_NAME);
-
-    return new Promise((resolve, reject) => {
-      const request = store.get(projectId);
-      request.onerror = () => {
-        console.error('[WIPStorage] Failed to get WIP data:', request.error);
-        reject(request.error);
-      };
-      request.onsuccess = () => resolve(request.result || null);
-    });
-  } catch (err) {
-    console.error('[WIPStorage] getWIP failed:', err);
-    return null;
-  }
+  return dbGet<WIPData>(WIP_STORE_NAME, projectId, 'WIPStorage');
 }
 
 /**
@@ -99,23 +180,8 @@ export async function getWIP(projectId: string): Promise<WIPData | null> {
  * @param data - WIP data to save
  */
 export async function saveWIP(data: WIPData): Promise<void> {
-  return wipLock.run(async () => {
-    const db = await openDatabase();
-    const tx = db.transaction(WIP_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(WIP_STORE_NAME);
-
-    return new Promise((resolve, reject) => {
-      const request = store.put(data);
-      request.onerror = () => {
-        console.error('[WIPStorage] Failed to save WIP:', request.error);
-        reject(request.error);
-      };
-      request.onsuccess = () => {
-        console.log('[WIPStorage] WIP saved for project:', data.id);
-        resolve();
-      };
-    });
-  });
+  await dbPut(WIP_STORE_NAME, data, wipLock, 'WIPStorage');
+  console.log('[WIPStorage] WIP saved for project:', data.id);
 }
 
 /**
@@ -125,23 +191,8 @@ export async function saveWIP(data: WIPData): Promise<void> {
  * @param projectId - The project ID to clear WIP for
  */
 export async function clearWIP(projectId: string): Promise<void> {
-  return wipLock.run(async () => {
-    const db = await openDatabase();
-    const tx = db.transaction(WIP_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(WIP_STORE_NAME);
-
-    return new Promise((resolve, reject) => {
-      const request = store.delete(projectId);
-      request.onerror = () => {
-        console.warn('[WIPStorage] Failed to clear:', request.error);
-        reject(request.error);
-      };
-      request.onsuccess = () => {
-        console.log('[WIPStorage] Cleared WIP for project:', projectId);
-        resolve();
-      };
-    });
-  });
+  await dbDelete(WIP_STORE_NAME, projectId, wipLock, 'WIPStorage');
+  console.log('[WIPStorage] Cleared WIP for project:', projectId);
 }
 
 /**
@@ -196,78 +247,26 @@ export interface ChatData {
 
 /**
  * Get chat messages for a project
+ * @returns Messages array (empty if no data); throws on database errors
  */
 export async function getChatMessages(projectId: string): Promise<ChatMessage[]> {
-  try {
-    const db = await openDatabase();
-    const tx = db.transaction(CHAT_STORE_NAME, 'readonly');
-    const store = tx.objectStore(CHAT_STORE_NAME);
-
-    return new Promise((resolve, reject) => {
-      const request = store.get(projectId);
-      request.onerror = () => {
-        console.error('[ChatStorage] Failed to get messages:', request.error);
-        reject(request.error);
-      };
-      request.onsuccess = () => {
-        const data = request.result as ChatData | undefined;
-        resolve(data?.messages || []);
-      };
-    });
-  } catch (err) {
-    console.error('[ChatStorage] getChatMessages failed:', err);
-    return [];
-  }
+  const data = await dbGet<ChatData>(CHAT_STORE_NAME, projectId, 'ChatStorage');
+  return data?.messages || [];
 }
 
 /**
  * Save chat messages for a project
  */
 export async function saveChatMessages(projectId: string, messages: ChatMessage[]): Promise<void> {
-  return chatLock.run(async () => {
-    const db = await openDatabase();
-    const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(CHAT_STORE_NAME);
-
-    const data: ChatData = {
-      id: projectId,
-      messages,
-      savedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const request = store.put(data);
-      request.onerror = () => {
-        console.error('[ChatStorage] Failed to save messages:', request.error);
-        reject(request.error);
-      };
-      request.onsuccess = () => {
-        console.log('[ChatStorage] Messages saved for:', projectId, '- count:', messages.length);
-        resolve();
-      };
-    });
-  });
+  const data: ChatData = { id: projectId, messages, savedAt: Date.now() };
+  await dbPut(CHAT_STORE_NAME, data, chatLock, 'ChatStorage');
+  console.log('[ChatStorage] Messages saved for:', projectId, '- count:', messages.length);
 }
 
 /**
  * Clear chat messages for a project
  */
 export async function clearChatMessages(projectId: string): Promise<void> {
-  return chatLock.run(async () => {
-    const db = await openDatabase();
-    const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(CHAT_STORE_NAME);
-
-    return new Promise((resolve, reject) => {
-      const request = store.delete(projectId);
-      request.onerror = () => {
-        console.warn('[ChatStorage] Failed to clear messages:', request.error);
-        reject(request.error);
-      };
-      request.onsuccess = () => {
-        console.log('[ChatStorage] Cleared messages for:', projectId);
-        resolve();
-      };
-    });
-  });
+  await dbDelete(CHAT_STORE_NAME, projectId, chatLock, 'ChatStorage');
+  console.log('[ChatStorage] Cleared messages for:', projectId);
 }

@@ -176,7 +176,7 @@ Thumbs.db
       const blob = await zip.generateAsync({ type: 'blob' });
       saveAs(blob, 'fluidflow-app.zip');
     } catch (error) {
-      console.error(error);
+      console.error('[Export] ZIP download failed:', error);
     } finally {
       setIsDownloading(false);
       setShowExportModal(false);

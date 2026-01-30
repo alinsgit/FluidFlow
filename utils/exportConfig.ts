@@ -139,31 +139,3 @@ npm run dev
 \`\`\``;
 }
 
-/**
- * Generate default .gitignore content
- */
-export function getGitignore(): string {
-  return `# Dependencies
-node_modules/
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Build
-dist/
-build/
-
-# IDE
-.idea/
-.vscode/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-`;
-}

@@ -4,7 +4,7 @@
  * Individual toast notification with animation
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 import { Toast } from './types';
 
@@ -40,6 +40,20 @@ interface ToastProps {
 export const ToastItem: React.FC<ToastProps> = ({ toast, onDismiss }) => {
   const [isExiting, setIsExiting] = useState(false);
   const [progress, setProgress] = useState(100);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Start exit animation then dismiss after delay
+  const startDismiss = useCallback(() => {
+    setIsExiting(true);
+    dismissTimerRef.current = setTimeout(onDismiss, 300);
+  }, [onDismiss]);
+
+  // Cleanup dismiss timer on unmount
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (toast.duration === 0) return;
@@ -52,8 +66,7 @@ export const ToastItem: React.FC<ToastProps> = ({ toast, onDismiss }) => {
       setProgress(prev => {
         if (prev <= step) {
           clearInterval(timer);
-          setIsExiting(true);
-          setTimeout(onDismiss, 300); // Wait for exit animation
+          startDismiss();
           return 0;
         }
         return prev - step;
@@ -61,7 +74,7 @@ export const ToastItem: React.FC<ToastProps> = ({ toast, onDismiss }) => {
     }, interval);
 
     return () => clearInterval(timer);
-  }, [toast.duration, onDismiss]);
+  }, [toast.duration, startDismiss]);
 
   const Icon = TOAST_ICONS[toast.type];
   const colors = getToastColors(toast.type);
@@ -102,10 +115,7 @@ export const ToastItem: React.FC<ToastProps> = ({ toast, onDismiss }) => {
 
       {/* Close Button */}
       <button
-        onClick={() => {
-          setIsExiting(true);
-          setTimeout(onDismiss, 300);
-        }}
+        onClick={startDismiss}
         className="shrink-0 p-1 rounded transition-colors"
         style={{ color: 'var(--theme-text-muted)' }}
         aria-label="Close toast"

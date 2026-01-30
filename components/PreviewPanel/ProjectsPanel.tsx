@@ -15,7 +15,8 @@ import type { ProjectMeta } from '@/services/projectApi';
 import { projectApi } from '@/services/projectApi';
 import { githubApi } from '@/services/api/github';
 import { useAppContext } from '@/contexts/AppContext';
-import { GitHubModal, type GitHubModalMode } from '../GitHubModal';
+import type { GitHubModalMode } from '../GitHubModal';
+import { LazyGitHubModal } from '../LazyModals';
 import { ConfirmModal } from '../shared/BaseModal';
 
 function formatDate(timestamp: number): string {
@@ -845,7 +846,7 @@ export const ProjectsPanel: React.FC = () => {
       />
 
       {/* GitHub Modal (Import/Push) */}
-      <GitHubModal
+      <LazyGitHubModal
         isOpen={showGitHubModal}
         onClose={() => setShowGitHubModal(false)}
         mode={gitHubModalMode}

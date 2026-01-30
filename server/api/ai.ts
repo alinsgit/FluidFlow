@@ -2,6 +2,54 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
+/**
+ * Validate a base URL to prevent SSRF attacks.
+ * Only allows HTTPS URLs to known AI provider domains or public endpoints.
+ * Blocks private/internal IP ranges.
+ */
+function isValidProxyBaseUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+
+    if (!['https:', 'http:'].includes(parsed.protocol)) {
+      return false;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+
+    // Allow known AI provider domains
+    const allowedDomains = [
+      'api.minimax.io',
+      'api.openai.com',
+      'api.anthropic.com',
+      'generativelanguage.googleapis.com',
+      'openrouter.ai',
+      'api.openrouter.ai',
+    ];
+
+    if (allowedDomains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+      return true;
+    }
+
+    // Block private/internal IP ranges
+    const blockedPatterns = [
+      /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
+      /^0\./, /^169\.254\./, /^127\./, /^\[?::1\]?$/,
+      /^\[?fe80:/i, /\.local$/i, /\.internal$/i,
+      /^localhost$/i,
+    ];
+
+    if (blockedPatterns.some(p => p.test(hostname))) {
+      return false;
+    }
+
+    // Only allow HTTPS for unknown domains
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // MiniMax API proxy - avoids CORS issues from browser
 // The MiniMax API doesn't allow certain headers from OpenAI SDK
 router.post('/minimax/chat/completions', async (req: Request, res: Response) => {
@@ -13,6 +61,11 @@ router.post('/minimax/chat/completions', async (req: Request, res: Response) => 
   }
 
   const baseUrl = (req.headers['x-base-url'] as string) || 'https://api.minimax.io/v1';
+
+  if (!isValidProxyBaseUrl(baseUrl)) {
+    res.status(400).json({ error: 'Invalid base URL' });
+    return;
+  }
 
   try {
     const isStreaming = req.body?.stream === true;
@@ -87,6 +140,11 @@ router.get('/minimax/test', async (req: Request, res: Response) => {
   }
 
   const baseUrl = (req.headers['x-base-url'] as string) || 'https://api.minimax.io/v1';
+
+  if (!isValidProxyBaseUrl(baseUrl)) {
+    res.json({ success: false, error: 'Invalid base URL' });
+    return;
+  }
 
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {

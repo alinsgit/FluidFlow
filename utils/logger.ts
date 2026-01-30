@@ -64,7 +64,7 @@ function formatMessage(prefix: string, args: unknown[]): unknown[] {
 /**
  * Create a prefixed logger for a specific module
  */
-export function createLogger(moduleName: string) {
+function createLogger(moduleName: string) {
   const prefix = `[${moduleName}]`;
 
   return {

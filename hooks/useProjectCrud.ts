@@ -78,7 +78,8 @@ export function useProjectCrud(options: UseProjectCrudOptions): UseProjectCrudRe
     try {
       const projects = await projectApi.list();
       updateState(() => ({ projects, isLoadingProjects: false }));
-    } catch (_err) {
+    } catch (err) {
+      console.error('[ProjectCrud] Failed to load projects:', err);
       updateState(() => ({
         isLoadingProjects: false,
         error: 'Failed to load projects',
@@ -119,7 +120,8 @@ export function useProjectCrud(options: UseProjectCrudOptions): UseProjectCrudRe
         onFilesChange?.(project.files || {});
 
         return project;
-      } catch (_err) {
+      } catch (err) {
+        console.error('[ProjectCrud] Failed to create project:', err);
         updateState(() => ({ error: 'Failed to create project' }));
         return null;
       }
@@ -258,7 +260,8 @@ export function useProjectCrud(options: UseProjectCrudOptions): UseProjectCrudRe
         });
 
         return true;
-      } catch (_err) {
+      } catch (err) {
+        console.error('[ProjectCrud] Failed to delete project:', err);
         updateState(() => ({ error: 'Failed to delete project' }));
         return false;
       }
@@ -278,7 +281,8 @@ export function useProjectCrud(options: UseProjectCrudOptions): UseProjectCrudRe
           projects: [project, ...prev.projects.filter((p) => p.id !== project.id)],
         }));
         return project;
-      } catch (_err) {
+      } catch (err) {
+        console.error('[ProjectCrud] Failed to duplicate project:', err);
         updateState(() => ({ error: 'Failed to duplicate project' }));
         return null;
       }

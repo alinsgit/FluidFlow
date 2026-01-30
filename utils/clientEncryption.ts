@@ -214,7 +214,7 @@ export function isEncrypted(value: string): boolean {
 /**
  * Encrypts the apiKey field in a provider config.
  */
-export async function encryptApiKey<T extends { apiKey?: string }>(
+async function encryptApiKey<T extends { apiKey?: string }>(
   config: T
 ): Promise<T> {
   if (!config.apiKey) {
@@ -230,7 +230,7 @@ export async function encryptApiKey<T extends { apiKey?: string }>(
 /**
  * Decrypts the apiKey field in a provider config.
  */
-export async function decryptApiKey<T extends { apiKey?: string }>(
+async function decryptApiKey<T extends { apiKey?: string }>(
   config: T
 ): Promise<T> {
   if (!config.apiKey) {

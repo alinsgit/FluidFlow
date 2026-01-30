@@ -90,5 +90,12 @@ export default tseslint.config(
     rules: {
       'react-refresh/only-export-components': 'off',
     },
+  },
+  // PromptConfirmation context exports provider, hook, and global utility functions
+  {
+    files: ['contexts/PromptConfirmationContext.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   }
 );

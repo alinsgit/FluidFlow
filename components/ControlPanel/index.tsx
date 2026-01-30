@@ -13,10 +13,7 @@ import { useCodeGeneration } from '../../hooks/useCodeGeneration';
 import { getProviderManager, GenerationRequest } from '../../services/ai';
 import { InspectedElement, EditScope } from '../PreviewPanel/ComponentInspector';
 import { useAIHistory } from '../../hooks/useAIHistory';
-import { LazyAIHistoryModal, LazyCodebaseSyncModal } from '../LazyModals';
-import { TechStackModal } from './TechStackModal';
-import { PromptEngineerModal } from './PromptEngineerModal';
-import { BatchGenerationModal } from './BatchGenerationModal';
+import { LazyAIHistoryModal, LazyCodebaseSyncModal, LazyTechStackModal, LazyPromptEngineerModal, LazyBatchGenerationModal } from '../LazyModals';
 import { ContextIndicator } from '../ContextIndicator';
 import { getFluidFlowConfig } from '../../services/fluidflowConfig';
 import { addPromptToHistory } from '@/services/promptHistory';
@@ -238,7 +235,10 @@ export const ControlPanel = forwardRef<ControlPanelRef, ControlPanelProps>(({
       }
     };
 
-    handleProjectChange().catch(console.warn);
+    handleProjectChange().catch((err) => {
+      console.error('[ControlPanel] Chat persistence failed during project change:', err);
+      // Non-critical: chat messages may not transfer, but app continues to function
+    });
   }, [currentProject?.id]);
 
   // Modal state management (extracted to hook)
@@ -962,13 +962,13 @@ Fix the error in src/App.tsx.`;
       />
 
       {/* Tech Stack Modal */}
-      <TechStackModal
+      <LazyTechStackModal
         isOpen={modals.isTechStackOpen}
         onClose={modals.closeTechStack}
       />
 
       {/* Prompt Engineer Modal */}
-      <PromptEngineerModal
+      <LazyPromptEngineerModal
         isOpen={modals.isPromptEngineerOpen}
         onClose={modals.closePromptEngineer}
         onPromptGenerated={handlePromptGenerated}
@@ -976,7 +976,7 @@ Fix the error in src/App.tsx.`;
 
       {/* Batch Generation Modal */}
       {modals.batchGenModal && (
-        <BatchGenerationModal
+        <LazyBatchGenerationModal
           isOpen={modals.batchGenModal.isOpen}
           onClose={modals.closeBatchGen}
           prompt={modals.batchGenModal.prompt}

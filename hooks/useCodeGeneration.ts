@@ -10,7 +10,7 @@
  * - useGenerationSuccess: Success handling and diff modal
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { FileSystem, ChatMessage, ChatAttachment } from '../types';
 import { GenerationMeta } from '../utils/cleanCode';
 import { debugLog } from './useDebugStore';
@@ -20,7 +20,7 @@ import {
   supportsAdditionalProperties,
 } from '../services/ai/utils/schemas';
 import { FilePlan, TruncatedContent, ContinuationState, FileProgress } from './useGenerationState';
-import { useStreamingResponse } from './useStreamingResponse';
+import { useStreamingResponse, getLastAIResponse } from './useStreamingResponse';
 import { useResponseParser } from './useResponseParser';
 import { useContinuationHandler } from './useContinuationHandler';
 import { useTruncationRecovery } from './useTruncationRecovery';
@@ -115,6 +115,9 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
 
   const existingApp = files['src/App.tsx'];
 
+  // AbortController to cancel ongoing generation when a new one starts
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Use extracted hooks
   const { processStreamingResponse } = useStreamingResponse({
     setStreamingChars,
@@ -167,6 +170,13 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
    */
   const generateCode = useCallback(
     async (genOptions: CodeGenerationOptions): Promise<CodeGenerationResult> => {
+      // Abort any previous generation still in progress
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const { prompt, attachments, isEducationMode, diffModeEnabled, conversationHistory } = genOptions;
 
       const sketchAtt = attachments.find((a) => a.type === 'sketch');
@@ -274,6 +284,8 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
         },
       });
       const genStartTime = Date.now();
+      // Track file plan outside try block so catch can access it for truncation recovery
+      let recoveryFilePlan: FilePlan | null = null;
 
       try {
         // Process streaming response
@@ -281,6 +293,12 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
         const expectedFormat = responseFormat === 'marker' ? 'marker' : undefined;
         const { fullText, chunkCount, detectedFiles, streamResponse, currentFilePlan } =
           await processStreamingResponse(request, currentModel, genRequestId, genStartTime, expectedFormat);
+        recoveryFilePlan = currentFilePlan;
+
+        // Check if generation was cancelled while streaming
+        if (abortController.signal.aborted) {
+          return { success: false, error: 'Generation cancelled' };
+        }
 
         // Show parsing status
         setStreamingStatus(`✨ Processing ${detectedFiles.length} files...`);
@@ -387,6 +405,11 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
           explanation,
         });
 
+        // Final abort check before committing results to state
+        if (abortController.signal.aborted) {
+          return { success: false, error: 'Generation cancelled' };
+        }
+
         // Handle success
         handleGenerationSuccess(
           newFiles,
@@ -418,15 +441,12 @@ export function useCodeGeneration(options: UseCodeGenerationOptions): UseCodeGen
           errorMsg.includes('truncated') || errorMsg.includes('token limits');
 
         if (isTruncationError) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const lastResponse = (window as any).__lastAIResponse;
+          const lastResponse = getLastAIResponse();
           const fullText = lastResponse?.raw || '';
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const currentFilePlan = (window as any).__currentFilePlan || null;
 
           const truncResult = await handleTruncationError(
             fullText,
-            currentFilePlan,
+            recoveryFilePlan,
             prompt,
             currentModel,
             providerName,

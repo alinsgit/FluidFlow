@@ -170,8 +170,9 @@ export class BatchGenerator {
     }
 
     // First batch was complete
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    opts.onBatchComplete(completedFiles, 1, firstBatchResult.parseResult!);
+    if (firstBatchResult.parseResult) {
+      opts.onBatchComplete(completedFiles, 1, firstBatchResult.parseResult);
+    }
 
     return {
       success: true,
@@ -287,8 +288,9 @@ export class BatchGenerator {
         }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      options.onBatchComplete(batchResult.files || {}, currentBatch, batchResult.parseResult!);
+      if (batchResult.parseResult) {
+        options.onBatchComplete(batchResult.files || {}, currentBatch, batchResult.parseResult);
+      }
 
       console.log(`[BatchGenerator] Batch ${currentBatch} completed. Total files: ${Object.keys(completedFiles).length}, Remaining: ${remainingFiles.length}`);
     }

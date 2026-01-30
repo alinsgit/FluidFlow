@@ -20,9 +20,14 @@ function generateId(): string {
 }
 
 /**
- * Open the Analytics IndexedDB database
+ * Open the Analytics IndexedDB database.
+ * Caches the connection to avoid opening a new one on every operation.
  */
+let cachedDb: IDBDatabase | null = null;
+
 function openDatabase(): Promise<IDBDatabase> {
+  if (cachedDb) return Promise.resolve(cachedDb);
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(ANALYTICS_DB_NAME, ANALYTICS_DB_VERSION);
 
@@ -31,7 +36,15 @@ function openDatabase(): Promise<IDBDatabase> {
       reject(request.error);
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      cachedDb = request.result;
+      cachedDb.onclose = () => { cachedDb = null; };
+      cachedDb.onversionchange = () => {
+        cachedDb?.close();
+        cachedDb = null;
+      };
+      resolve(cachedDb);
+    };
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;

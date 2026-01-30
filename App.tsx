@@ -16,7 +16,7 @@ import { CREDITS_MODAL_DELAY_MS } from '@/constants';
 import { ControlPanel, ControlPanelRef } from './components/ControlPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { SnippetsPanel } from './components/SnippetsPanel';
-import { loadProjectFromUrl } from './components/ShareModal';
+import { loadProjectFromUrl } from './utils/shareUrl';
 import { ProjectManager } from './components/ProjectManager';
 import { SyncConfirmationDialog } from './components/SyncConfirmationDialog';
 import { DiffModal } from './components/DiffModal';

@@ -13,7 +13,6 @@ import {
   getMainTsx,
   getTailwindCss,
   getReadme,
-  getGitignore,
 } from '../../utils/exportConfig';
 
 describe('Export Config', () => {
@@ -230,47 +229,4 @@ describe('Export Config', () => {
     });
   });
 
-  describe('getGitignore', () => {
-    it('should return valid .gitignore content', () => {
-      const gitignore = getGitignore();
-
-      expect(gitignore).toBeDefined();
-      expect(typeof gitignore).toBe('string');
-    });
-
-    it('should ignore node_modules', () => {
-      const gitignore = getGitignore();
-
-      expect(gitignore).toContain('node_modules/');
-    });
-
-    it('should ignore environment files', () => {
-      const gitignore = getGitignore();
-
-      expect(gitignore).toContain('.env');
-      expect(gitignore).toContain('.env.local');
-    });
-
-    it('should ignore build directories', () => {
-      const gitignore = getGitignore();
-
-      expect(gitignore).toContain('dist/');
-      expect(gitignore).toContain('build/');
-    });
-
-    it('should ignore IDE and OS files', () => {
-      const gitignore = getGitignore();
-
-      expect(gitignore).toContain('.idea/');
-      expect(gitignore).toContain('.vscode/');
-      expect(gitignore).toContain('.DS_Store');
-      expect(gitignore).toContain('Thumbs.db');
-    });
-
-    it('should ignore log files', () => {
-      const gitignore = getGitignore();
-
-      expect(gitignore).toContain('*.log');
-    });
-  });
 });
