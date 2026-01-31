@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ERROR_DISPLAY_DURATION_MS } from '../../../constants/timing';
 import { Github, Check, Info, Loader2, CloudUpload, Eye, EyeOff, FileJson, MessageSquare, Shield, ExternalLink } from 'lucide-react';
 import { SettingsSection } from '../shared';
 import { SettingsToggle } from '../shared/SettingsToggle';
@@ -61,7 +62,7 @@ export const GitHubPanel: React.FC = () => {
     } catch (err) {
       console.error('Failed to save backup settings:', err);
       setBackupMessage({ type: 'error', text: 'Failed to save' });
-      setTimeout(() => setBackupMessage(null), 3000);
+      setTimeout(() => setBackupMessage(null), ERROR_DISPLAY_DURATION_MS);
     } finally {
       setBackupSaving(false);
     }
@@ -82,7 +83,7 @@ export const GitHubPanel: React.FC = () => {
     } catch (err) {
       console.error('Failed to save token:', err);
       setBackupMessage({ type: 'error', text: 'Failed to save token' });
-      setTimeout(() => setBackupMessage(null), 3000);
+      setTimeout(() => setBackupMessage(null), ERROR_DISPLAY_DURATION_MS);
     } finally {
       setBackupSaving(false);
     }

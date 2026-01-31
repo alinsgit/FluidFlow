@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import {
   Bug,
   Search,
@@ -142,7 +143,7 @@ interface LogEntryCardProps {
 }
 
 const LogEntryCard: React.FC<LogEntryCardProps> = ({ entry, isExpanded, onToggle }) => {
-  const [copied, setCopied] = useState(false);
+  const { isCopied: copied, copy: copyText } = useCopyToClipboard();
 
   const typeConfig = {
     request: { icon: ArrowUpCircle, colorVar: 'var(--color-info)', bgVar: 'var(--color-info-subtle)' },
@@ -161,9 +162,7 @@ const LogEntryCard: React.FC<LogEntryCardProps> = ({ entry, isExpanded, onToggle
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    copyText(JSON.stringify(entry, null, 2));
   };
 
   const getPreview = () => {

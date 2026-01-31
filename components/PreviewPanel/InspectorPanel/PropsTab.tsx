@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { SAVE_INDICATOR_DURATION_MS } from '../../../constants/timing';
 import { ChevronRight, ChevronDown, Copy, Check, Code2, Braces, Hash, Type, ToggleLeft, Zap } from 'lucide-react';
 import type { PropsTabProps } from './types';
 
@@ -57,7 +58,7 @@ const JsonTreeNode: React.FC<JsonTreeProps> = ({ data, name, depth = 0, maxDepth
       const text = JSON.stringify(data, null, 2);
       onCopy(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), SAVE_INDICATOR_DURATION_MS);
     } catch {
       onCopy(String(data));
     }
@@ -149,7 +150,7 @@ export const PropsTab: React.FC<PropsTabProps> = ({
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setTimeout(() => setCopied(false), SAVE_INDICATOR_DURATION_MS);
   }, []);
 
   if (isLoading) {

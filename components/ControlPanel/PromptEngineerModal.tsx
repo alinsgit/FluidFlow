@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { createPortal } from 'react-dom';
 import { X, Brain, Target, Zap, Lightbulb, ArrowRight, Copy, Check } from 'lucide-react';
 
@@ -52,7 +53,7 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [_isGenerating, setIsGenerating] = useState(false);
   const [finalPrompt, setFinalPrompt] = useState('');
-  const [copied, setCopied] = useState(false);
+  const { isCopied: copied, copy } = useCopyToClipboard();
 
   const generateNextQuestion = async (userInput: string, step: number): Promise<{
     question: string;
@@ -227,11 +228,9 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
     }
   };
 
-  const handleCopyPrompt = async () => {
+  const handleCopyPrompt = () => {
     if (finalPrompt) {
-      await navigator.clipboard.writeText(finalPrompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      copy(finalPrompt);
     }
   };
 
@@ -249,7 +248,7 @@ export const PromptEngineerModal: React.FC<PromptEngineerModalProps> = ({
     setCurrentQuestion('');
     setFinalPrompt('');
     setIsGenerating(false);
-    setCopied(false);
+    // isCopied auto-resets via hook
   };
 
   if (!isOpen) return null;

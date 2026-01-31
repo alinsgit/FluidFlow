@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import {
   X, Send, Wand2, FileCode, Loader2, Check, Copy, Sparkles, RotateCcw
 } from 'lucide-react';
@@ -68,7 +69,7 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { isCopied: copied, copy } = useCopyToClipboard();
   const [error, setError] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -349,7 +350,7 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
       setInputValue('');
       setSelectedOptions([]);
       setError(null);
-      setCopied(false);
+      // isCopied auto-resets via hook
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -368,15 +369,9 @@ export const PromptImproverModal: React.FC<PromptImproverModalProps> = ({
     }
   };
 
-  const handleCopy = async () => {
+  const handleCopy = () => {
     if (!wizard.finalPrompt) return;
-    try {
-      await navigator.clipboard.writeText(wizard.finalPrompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy:', e);
-    }
+    copy(wizard.finalPrompt);
   };
 
   const handleAccept = () => {

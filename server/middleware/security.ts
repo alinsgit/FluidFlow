@@ -66,11 +66,12 @@ export const securityHeaders = helmet({
  */
 export function validateRequest(req: Request, res: Response, next: NextFunction) {
   // Check for common attack patterns
+  // VULN-017 fix: Remove 'g' flag to prevent stateful regex .test() false negatives
   const suspiciousPatterns = [
-    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, // XSS
-    /javascript:/gi, // JavaScript protocol
-    /on\w+\s*=/gi, // Event handlers
-    /expression\s*\(/gi, // CSS expression
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i, // XSS
+    /javascript:/i, // JavaScript protocol
+    /on\w+\s*=/i, // Event handlers
+    /expression\s*\(/i, // CSS expression
   ];
 
   const body = JSON.stringify(req.body);

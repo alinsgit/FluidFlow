@@ -9,7 +9,8 @@
  *
  * Security: Uses DOMPurify to sanitize all HTML content before rendering
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { createPortal } from 'react-dom';
 import { X, Copy, Check } from 'lucide-react';
 import DOMPurify from 'dompurify';
@@ -106,7 +107,7 @@ export const TextExpandModal: React.FC<TextExpandModalProps> = ({
   content,
   type
 }) => {
-  const [copied, setCopied] = useState(false);
+  const { isCopied: copied, copy } = useCopyToClipboard();
 
   // Handle ESC key
   useEffect(() => {
@@ -122,14 +123,8 @@ export const TextExpandModal: React.FC<TextExpandModalProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+  const handleCopy = () => {
+    copy(content);
   };
 
   if (!isOpen) return null;

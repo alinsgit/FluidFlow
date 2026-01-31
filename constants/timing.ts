@@ -13,6 +13,11 @@ export const STREAMING_SAVE_DEBOUNCE_MS = 2_000; // 2 seconds
 export const CREDITS_MODAL_DELAY_MS = 1_000; // 1 second
 export const TOAST_DURATION_MS = 3_000; // 3 seconds
 export const DEBOUNCE_DEFAULT_MS = 300; // 300ms
+export const COPY_FEEDBACK_RESET_MS = 2_000; // 2 seconds — clipboard "Copied!" feedback
+export const CHAT_SAVE_DEBOUNCE_MS = 500; // 500ms — chat history save debounce
+export const ERROR_DISPLAY_DURATION_MS = 3_000; // 3 seconds — error message display
+export const SAVE_INDICATOR_DURATION_MS = 1_500; // 1.5 seconds — save/copy indicator in editor
+export const CONTEXT_POLL_INTERVAL_MS = 2_000; // 2 seconds — context stats update interval
 
 // API timeouts
 export const API_TIMEOUT_MS = 30_000; // 30 seconds

@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { SAVE_INDICATOR_DURATION_MS } from '../../../constants/timing';
 import { ChevronDown, ChevronRight, Copy, Check, Loader2, Palette } from 'lucide-react';
 import type { StylesTabProps } from './types';
 import {
@@ -38,7 +39,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   const handleCopy = (key: string, value: string) => {
     onCopy(`${key}: ${value}`);
     setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 1500);
+    setTimeout(() => setCopiedKey(null), SAVE_INDICATOR_DURATION_MS);
   };
 
   return (
@@ -102,7 +103,7 @@ const TailwindSection: React.FC<TailwindSectionProps> = ({
   const handleCopyClass = (className: string) => {
     onCopy(className);
     setCopiedClass(className);
-    setTimeout(() => setCopiedClass(null), 1500);
+    setTimeout(() => setCopiedClass(null), SAVE_INDICATOR_DURATION_MS);
   };
 
   return (

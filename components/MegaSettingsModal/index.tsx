@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { TOAST_DURATION_MS } from '../../constants/timing';
 import { createPortal } from 'react-dom';
 import { X, Settings2, Download, Upload, RotateCcw } from 'lucide-react';
 import { ConfirmModal } from '../ContextIndicator/ConfirmModal';
@@ -91,10 +92,10 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
       URL.revokeObjectURL(url);
 
       setImportExportMessage({ type: 'success', message: 'Settings exported successfully!' });
-      setTimeout(() => setImportExportMessage(null), 3000);
+      setTimeout(() => setImportExportMessage(null), TOAST_DURATION_MS);
     } catch (_error) {
       setImportExportMessage({ type: 'error', message: 'Failed to export settings' });
-      setTimeout(() => setImportExportMessage(null), 3000);
+      setTimeout(() => setImportExportMessage(null), TOAST_DURATION_MS);
     }
   };
 
@@ -127,10 +128,10 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
         }
 
         setImportExportMessage({ type: 'success', message: 'Settings imported! Refresh to apply.' });
-        setTimeout(() => setImportExportMessage(null), 3000);
+        setTimeout(() => setImportExportMessage(null), TOAST_DURATION_MS);
       } catch (_error) {
         setImportExportMessage({ type: 'error', message: 'Failed to import settings' });
-        setTimeout(() => setImportExportMessage(null), 3000);
+        setTimeout(() => setImportExportMessage(null), TOAST_DURATION_MS);
       }
     };
     input.click();
@@ -163,7 +164,7 @@ export const MegaSettingsModal: React.FC<MegaSettingsModalProps> = ({
     }
 
     setImportExportMessage({ type: 'success', message: 'Settings reset to defaults!' });
-    setTimeout(() => setImportExportMessage(null), 3000);
+    setTimeout(() => setImportExportMessage(null), TOAST_DURATION_MS);
     // Force re-render by toggling category
     setActiveCategory('ai-providers');
     setTimeout(() => setActiveCategory(activeCategory), 0);

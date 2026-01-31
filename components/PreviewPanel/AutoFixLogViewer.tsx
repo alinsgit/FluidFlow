@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { COPY_FEEDBACK_RESET_MS } from '../../constants/timing';
 import {
   Bot,
   ChevronDown,
@@ -134,7 +135,7 @@ export const AutoFixLogViewer: React.FC<AutoFixLogViewerProps> = ({
   const handleCopyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    setTimeout(() => setCopiedId(null), COPY_FEEDBACK_RESET_MS);
   };
 
   const toggleLogExpand = (id: string) => {

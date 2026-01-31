@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
+import { ERROR_DISPLAY_DURATION_MS } from '../../constants/timing';
 import { Send, Loader2, Wand2, Paperclip, Image, Palette, X, Maximize2, Sparkles, Brain, Clock, FileText, AlertTriangle } from 'lucide-react';
 import { ChatAttachment, FileSystem } from '../../types';
 import { PromptLibrary, PromptDropdown } from './PromptLibrary';
@@ -95,13 +96,13 @@ export const ChatInput = memo(function ChatInput({
 
     if (!hasExistingApp && !hasSketch && !hasPrompt) {
       setLocalError('Please upload a sketch or enter a prompt');
-      setTimeout(() => setLocalError(null), 3000);
+      setTimeout(() => setLocalError(null), ERROR_DISPLAY_DURATION_MS);
       return;
     }
 
     if (hasExistingApp && !hasPrompt && attachments.length === 0) {
       setLocalError('Please enter a prompt or attach an image');
-      setTimeout(() => setLocalError(null), 3000);
+      setTimeout(() => setLocalError(null), ERROR_DISPLAY_DURATION_MS);
       return;
     }
 
@@ -130,7 +131,7 @@ export const ChatInput = memo(function ChatInput({
     const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       setLocalError('Invalid file type. Use PNG, JPEG, or WebP.');
-      setTimeout(() => setLocalError(null), 3000);
+      setTimeout(() => setLocalError(null), ERROR_DISPLAY_DURATION_MS);
       return;
     }
 

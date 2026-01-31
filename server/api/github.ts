@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { safeReadJson } from '../utils/safeJson';
+import { isValidProjectId } from '../utils/validation';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -98,6 +99,9 @@ const isValidGitHubToken = (token: string): boolean => {
 router.post('/:id/remote', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
     const { url, name = 'origin' } = req.body;
     const filesDir = getFilesDir(id);
 
@@ -144,6 +148,9 @@ router.post('/:id/remote', async (req, res) => {
 router.get('/:id/remote', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
     const filesDir = getFilesDir(id);
 
     if (!existsSync(filesDir)) {
@@ -175,6 +182,9 @@ router.get('/:id/remote', async (req, res) => {
 router.post('/:id/backup-push', rateLimitMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
     const { branch = 'backup/auto', token } = req.body;
     const projectDir = getProjectPath(id);
     const filesDir = getFilesDir(id);
@@ -293,6 +303,9 @@ router.post('/:id/backup-push', rateLimitMiddleware, async (req, res) => {
 // Push to remote (GH-002 fix: rate limited)
 router.post('/:id/push', rateLimitMiddleware, async (req, res) => {
   const { id } = req.params;
+  if (!isValidProjectId(id)) {
+    return res.status(400).json({ error: 'Invalid project ID' });
+  }
   const { remote = 'origin', branch, force = false, setUpstream = true, token, includeContext = false } = req.body;
   const projectDir = getProjectPath(id);
   const filesDir = getFilesDir(id);
@@ -494,6 +507,9 @@ router.post('/:id/push', rateLimitMiddleware, async (req, res) => {
 router.post('/:id/pull', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
     const { remote = 'origin', branch } = req.body;
     const filesDir = getFilesDir(id);
 
@@ -524,6 +540,9 @@ router.post('/:id/pull', async (req, res) => {
 router.post('/:id/fetch', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
     const { remote = 'origin', prune = false } = req.body;
     const filesDir = getFilesDir(id);
 
@@ -649,6 +668,9 @@ router.post('/clone', rateLimitMiddleware, async (req, res) => {
 router.post('/:id/create-repo', rateLimitMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidProjectId(id)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
     const { token, name, description, isPrivate = false } = req.body;
 
     if (!token) {

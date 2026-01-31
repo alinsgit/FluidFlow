@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { COPY_FEEDBACK_RESET_MS } from '../../constants/timing';
 import {
   Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Shield,
   AlertTriangle, Info, Lock, Unlock, RefreshCw, Sparkles,
@@ -205,7 +206,7 @@ export const EnvironmentPanel: React.FC<EnvironmentPanelProps> = ({ files, setFi
   const copyValue = async (value: string, key: string) => {
     await navigator.clipboard.writeText(value);
     setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
+    setTimeout(() => setCopied(null), COPY_FEEDBACK_RESET_MS);
   };
 
   const saveEnvFile = () => {

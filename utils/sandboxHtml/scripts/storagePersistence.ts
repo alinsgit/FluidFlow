@@ -185,14 +185,14 @@ export function getStoragePersistenceScript(): string {
               var key = localStorage.key(i);
               if (key) local[key] = localStorage.getItem(key);
             }
-          } catch (e) {}
+          } catch (e) { /* Storage may be unavailable in sandboxed iframes */ }
 
           try {
             for (var j = 0; j < sessionStorage.length; j++) {
               var skey = sessionStorage.key(j);
               if (skey) session[skey] = sessionStorage.getItem(skey);
             }
-          } catch (e) {}
+          } catch (e) { /* Storage may be unavailable in sandboxed iframes */ }
 
           return { localStorage: local, sessionStorage: session };
         }

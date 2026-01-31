@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { FileText, Eye, Code2, Copy, Check, RefreshCw } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
@@ -171,7 +172,7 @@ function parseMarkdown(markdown: string): string {
 
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileName, onRegenerate, isGenerating = false }) => {
   const [showSource, setShowSource] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const { isCopied: copied, copy } = useCopyToClipboard();
 
   // Parse markdown and sanitize with DOMPurify to prevent XSS
   const htmlContent = useMemo(() => {
@@ -184,10 +185,8 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, fileN
     });
   }, [content]);
 
-  const copyContent = async () => {
-    await navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyContent = () => {
+    copy(content);
   };
 
   return (

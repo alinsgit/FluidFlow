@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { SAVE_INDICATOR_DURATION_MS } from '../constants/timing';
 import { Search, Check, X, Palette, Layout, Type, Box, Move, Sparkles } from 'lucide-react';
 
 interface TailwindPaletteProps {
@@ -109,7 +110,7 @@ export const TailwindPalette: React.FC<TailwindPaletteProps> = ({ isOpen, onClos
     if (copyTimeoutRef.current) {
       clearTimeout(copyTimeoutRef.current);
     }
-    copyTimeoutRef.current = setTimeout(() => setCopiedClass(null), 1500);
+    copyTimeoutRef.current = setTimeout(() => setCopiedClass(null), SAVE_INDICATOR_DURATION_MS);
   };
 
   const handleInsert = (className: string) => {

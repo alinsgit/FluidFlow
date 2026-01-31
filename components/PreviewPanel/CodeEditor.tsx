@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef, memo } from 'react';
+import { SAVE_INDICATOR_DURATION_MS } from '../../constants/timing';
 import Editor, { OnMount, BeforeMount } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import { FileCode, Check, Circle, BookOpen } from 'lucide-react';
@@ -94,7 +95,7 @@ export const CodeEditor = memo(function CodeEditor({ files, setFiles, activeFile
         saveTimeoutRef.current = setTimeout(() => {
           setIsSaved(true);
           setShowSaveIndicator(true);
-          setTimeout(() => setShowSaveIndicator(false), 1500);
+          setTimeout(() => setShowSaveIndicator(false), SAVE_INDICATOR_DURATION_MS);
         }, 1000);
       }
     },

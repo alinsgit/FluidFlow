@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
+import { TOAST_DURATION_MS } from '../../constants/timing';
 import {
   ReactFlow,
   Background,
@@ -273,7 +275,7 @@ export const DBStudio: React.FC<DBStudioProps> = ({ files, setFiles }) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
-  const [copied, setCopied] = useState(false);
+  const { isCopied: copied, copy: copyText } = useCopyToClipboard();
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [rowCount, setRowCount] = useState(10);
@@ -283,7 +285,7 @@ export const DBStudio: React.FC<DBStudioProps> = ({ files, setFiles }) => {
   // Show toast notification
   const showToast = (message: string) => {
     setToast(message);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), TOAST_DURATION_MS);
   };
 
   // Store loaded positions for initial render
@@ -547,9 +549,7 @@ Use appropriate SQL types: INT, BIGINT, SERIAL, VARCHAR(255), TEXT, BOOLEAN, DAT
 
   const copySQL = async () => {
     const sql = generateSQL(tables, edges);
-    await navigator.clipboard.writeText(sql);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    copyText(sql);
     showToast('SQL copied to clipboard');
   };
 

@@ -731,8 +731,16 @@ router.post('/github-backup/update-status', async (req, res) => {
 });
 
 // Get raw token for backup operations (not masked)
+// SEC: Token is only served to localhost origins via CORS policy.
+// An additional check ensures the request comes from the same host.
 router.get('/github-backup/token', async (req, res) => {
   try {
+    // Verify request is from localhost (defense in depth beyond CORS)
+    const host = req.hostname || req.get('host') || '';
+    if (!host.startsWith('localhost') && !host.startsWith('127.0.0.1') && !host.startsWith('::1')) {
+      return res.status(403).json({ error: 'Forbidden: token endpoint is local-only' });
+    }
+
     const settings = await loadSettings();
     const backupSettings = settings.githubBackup || DEFAULT_GITHUB_BACKUP_SETTINGS;
 

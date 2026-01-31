@@ -7,7 +7,7 @@ import { githubRouter } from './api/github.js';
 import { settingsRouter } from './api/settings.js';
 import { runnerRouter, cleanupAllRunningProjects, getRunnerHealth } from './api/runner.js';
 import { aiRouter } from './api/ai.js';
-import { apiLimiter, requestLogger } from './middleware/security.js';
+import { apiLimiter, requestLogger, securityHeaders, validateRequest } from './middleware/security.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -24,6 +24,9 @@ const PROJECTS_DIR = path.join(__dirname, '../projects');
 if (!fs.existsSync(PROJECTS_DIR)) {
   fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 }
+
+// Security headers (helmet)
+app.use(securityHeaders);
 
 // Middleware
 app.use(cors({
@@ -44,6 +47,9 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
+
+// Request validation (block suspicious patterns)
+app.use('/api', validateRequest);
 
 // Rate limiting for all API endpoints (100 requests per 15 minutes)
 app.use('/api', apiLimiter);

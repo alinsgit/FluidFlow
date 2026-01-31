@@ -49,7 +49,7 @@ export function getScreenshotCaptureScript(): string {
       }
 
       // Preload html2canvas
-      loadHtml2Canvas().catch(function() {});
+      loadHtml2Canvas().catch(function() { /* Best-effort preload, retried on demand */ });
 
       // Capture options
       var defaultOptions = {

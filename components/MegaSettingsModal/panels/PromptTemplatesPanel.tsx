@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { TOAST_DURATION_MS } from '../../../constants/timing';
 import {
   FileText, Plus, Search, Star, Trash2, Edit3, Copy, Download, Upload,
   Tag, Sparkles, Wrench, MessageCircle, Layers, X, Check, ChevronDown
@@ -282,7 +283,7 @@ export const PromptTemplatesPanel: React.FC = () => {
 
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
+    setTimeout(() => setMessage(null), TOAST_DURATION_MS);
   };
 
   return (

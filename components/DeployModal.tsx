@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { COPY_FEEDBACK_RESET_MS } from '../constants/timing';
 import { Rocket, Copy, Check, ExternalLink, Terminal, Github } from 'lucide-react';
 import { FileSystem } from '../types';
 import { BaseModal } from './shared/BaseModal';
@@ -16,7 +17,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({ isOpen, onClose, files
   const copyToClipboard = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
+    setTimeout(() => setCopied(null), COPY_FEEDBACK_RESET_MS);
   };
 
   // Generate package.json content

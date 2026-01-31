@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { Link2, Copy, Check, Twitter, Linkedin, Mail, Loader2 } from 'lucide-react';
 import { FileSystem } from '../types';
 import { BaseModal, ModalContent } from './shared/BaseModal';
@@ -33,19 +34,9 @@ function compressString(str: string): string {
 
 export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }) => {
   const [shareUrl, setShareUrl] = useState('');
-  const [copied, setCopied] = useState(false);
+  const { isCopied: copied, copy } = useCopyToClipboard();
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const generateShareUrl = useCallback(async () => {
     setIsGenerating(true);
@@ -86,14 +77,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, files }
     }
   }, [isOpen, generateShareUrl]);
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = () => {
     if (!shareUrl) return;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    if (copyTimeoutRef.current) {
-      clearTimeout(copyTimeoutRef.current);
-    }
-    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+    copy(shareUrl);
   };
 
   const shareVia = (platform: 'twitter' | 'linkedin' | 'email') => {

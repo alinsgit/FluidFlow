@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { COPY_FEEDBACK_RESET_MS } from '../constants/timing';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -287,7 +288,7 @@ export const AIHistoryModal: React.FC<AIHistoryModalProps> = ({
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
-      copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
+      copyTimeoutRef.current = setTimeout(() => setCopiedId(null), COPY_FEEDBACK_RESET_MS);
     } catch (e) {
       console.error('Failed to copy:', e);
     }

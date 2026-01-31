@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, memo } from 'react';
+import { TOAST_DURATION_MS } from '../../constants/timing';
 import {
   ChevronRight, ChevronDown, Folder, FolderOpen,
   FileCode, FileJson, FileText, Database, FlaskConical,
@@ -503,7 +504,7 @@ export const FileExplorer = memo(function FileExplorer({
     } else {
       setShowDeleteConfirm(path);
       // Auto-hide confirm after 3 seconds
-      setTimeout(() => setShowDeleteConfirm(null), 3000);
+      setTimeout(() => setShowDeleteConfirm(null), TOAST_DURATION_MS);
     }
   };
 

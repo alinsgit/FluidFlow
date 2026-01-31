@@ -3,7 +3,7 @@ import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'fs';
-import { isValidProjectId, isValidInteger } from '../utils/validation';
+import { isValidProjectId, isValidInteger, isValidFilePath } from '../utils/validation';
 
 // Type for VFS files
 type FileSystem = Record<string, string>;
@@ -189,7 +189,22 @@ function syncFilesToDisk(targetDir: string, files: FileSystem): void {
 
   // Write all files
   for (const [filePath, content] of Object.entries(files)) {
+    // Validate file path to prevent path traversal
+    if (!isValidFilePath(filePath)) {
+      console.warn(`[Runner] Skipping invalid file path: ${filePath}`);
+      continue;
+    }
+
     const fullPath = path.join(targetDir, filePath);
+
+    // Ensure resolved path stays within targetDir (defense in depth)
+    const resolvedPath = path.resolve(fullPath);
+    const resolvedTarget = path.resolve(targetDir);
+    if (!resolvedPath.startsWith(resolvedTarget + path.sep) && resolvedPath !== resolvedTarget) {
+      console.warn(`[Runner] Path escapes target directory: ${filePath}`);
+      continue;
+    }
+
     const dir = path.dirname(fullPath);
 
     // Create directory if needed

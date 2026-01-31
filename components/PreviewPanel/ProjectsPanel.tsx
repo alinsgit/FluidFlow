@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { TOAST_DURATION_MS } from '../../constants/timing';
 import {
   FolderOpen, Plus, Trash2, Copy, Clock, GitBranch, RefreshCw,
   Search, MoreVertical, Check, AlertCircle, FolderPlus, Loader2, Github,
@@ -207,7 +208,7 @@ export const ProjectsPanel: React.FC = () => {
       ));
       // Show success message via error state (temporary)
       setError(`Cleaned ${result.freedMB} MB from node_modules`);
-      setTimeout(() => setError(null), 3000);
+      setTimeout(() => setError(null), TOAST_DURATION_MS);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clean node_modules');
     } finally {

@@ -155,26 +155,33 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
     incompleteFiles?: string[];
   } | null>(null);
 
+  // PERF: Memoize file keys to avoid recalculating localChanges on content-only edits.
+  // Only recompute when the set of files changes or uncommitted state changes.
+  const fileKeysSignature = useMemo(() => Object.keys(files).sort().join('\0'), [files]);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+
   // Calculate local changes for display
   const localChanges = useMemo(() => {
     if (!hasUncommittedChanges || !lastCommittedFilesRef.current) return [];
 
     try {
+      const currentFiles = filesRef.current;
       const committedFiles = safeJsonParse(lastCommittedFilesRef.current, {} as FileSystem);
       const changes: { path: string; status: 'added' | 'modified' | 'deleted' }[] = [];
 
-      Object.keys(files).forEach(path => {
+      Object.keys(currentFiles).forEach(path => {
         if (isIgnoredPath(path)) return;
         if (!committedFiles[path]) {
           changes.push({ path, status: 'added' });
-        } else if (committedFiles[path] !== files[path]) {
+        } else if (committedFiles[path] !== currentFiles[path]) {
           changes.push({ path, status: 'modified' });
         }
       });
 
       Object.keys(committedFiles).forEach(path => {
         if (isIgnoredPath(path)) return;
-        if (!files[path]) {
+        if (!currentFiles[path]) {
           changes.push({ path, status: 'deleted' });
         }
       });
@@ -183,7 +190,8 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
     } catch {
       return [];
     }
-  }, [files, hasUncommittedChanges]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileKeysSignature, hasUncommittedChanges]);
 
   // Initialize from backend when project changes
   useEffect(() => {
@@ -622,7 +630,16 @@ export function AppProvider({ children, defaultFiles }: AppProviderProps) {
     files, setFiles, activeFile, undo, redo, canUndo, canRedo,
     history, historyLength, currentIndex, goToIndex, saveSnapshot,
     resetFiles, exportHistory, restoreHistory,
-    project, createProject, openProject, initGit, commit, discardChanges, revertToCommit,
+    // PERF: Destructure project properties individually to avoid re-renders when
+    // unrelated project properties change. Using `project` as a single dependency
+    // caused all consumers to re-render on any project state change.
+    project.currentProject, project.projects, project.isServerOnline,
+    project.isSyncing, project.lastSyncedAt, project.isLoadingProjects,
+    project.isInitialized, project.deleteProject, project.duplicateProject,
+    project.refreshProjects, project.closeProject, project.syncFiles,
+    project.saveContext, project.gitStatus, project.refreshGitStatus,
+    project.pendingSyncConfirmation, project.confirmPendingSync, project.cancelPendingSync,
+    createProject, openProject, initGit, commit, discardChanges, revertToCommit,
     hasUncommittedChanges, localChanges,
     pendingReview, reviewChange, confirmChange, cancelReview, resetApp
   ]);

@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       port: 3100,
-      host: '0.0.0.0',
+      host: 'localhost',
       // HTTPS is handled by basicSsl plugin for WebContainer API
       watch: {
         // Ignore projects folder - file changes there shouldn't trigger HMR

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { COPY_FEEDBACK_RESET_MS } from '../../constants/timing';
 import {
   GitBranch, GitCommit, Check, X, Plus, RefreshCw, Loader2,
   FileText, FilePlus, FileX, ChevronDown, ChevronUp,
@@ -151,7 +152,7 @@ export const GitPanel: React.FC<GitPanelProps> = ({
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
-      copyTimeoutRef.current = setTimeout(() => setCopiedHash(null), 2000);
+      copyTimeoutRef.current = setTimeout(() => setCopiedHash(null), COPY_FEEDBACK_RESET_MS);
     } catch (err) {
       console.error('Failed to copy:', err);
     }

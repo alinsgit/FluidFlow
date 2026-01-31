@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { ERROR_DISPLAY_DURATION_MS } from '../../constants/timing';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -139,13 +140,13 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
 
     if (!hasExistingApp && !hasSketch && !hasPrompt) {
       setLocalError('Please upload a sketch or enter a prompt');
-      setTimeout(() => setLocalError(null), 3000);
+      setTimeout(() => setLocalError(null), ERROR_DISPLAY_DURATION_MS);
       return;
     }
 
     if (hasExistingApp && !hasPrompt && attachments.length === 0) {
       setLocalError('Please enter a prompt or attach an image');
-      setTimeout(() => setLocalError(null), 3000);
+      setTimeout(() => setLocalError(null), ERROR_DISPLAY_DURATION_MS);
       return;
     }
 
@@ -185,7 +186,7 @@ export const ExpandedPromptModal: React.FC<ExpandedPromptModalProps> = ({
     const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       setLocalError('Invalid file type');
-      setTimeout(() => setLocalError(null), 3000);
+      setTimeout(() => setLocalError(null), ERROR_DISPLAY_DURATION_MS);
       return;
     }
 

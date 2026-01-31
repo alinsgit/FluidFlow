@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, memo, useCallback, useMemo } from 'react';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import {
   Monitor, Smartphone, Tablet, RefreshCw, Eye, Code2, Copy, Check, Download, Database,
   ShieldCheck, FileText, Wrench, Package, Loader2, Camera,
@@ -124,7 +125,7 @@ export const PreviewPanel = memo(function PreviewPanel({
 
   // Use external state if provided, otherwise use internal
   const activeTab = externalActiveTab ?? internalActiveTab;
-  const [isCopied, setIsCopied] = useState(false);
+  const { isCopied, copy: copyText } = useCopyToClipboard();
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('desktop');
 
   // Console logs state (shared between useAutoFix and useIframeMessaging)
@@ -693,9 +694,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, [iframeRef]);
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(files[activeFile] || '');
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+    copyText(files[activeFile] || '');
   };
   const downloadCode = () => {
     const element = document.createElement('a');

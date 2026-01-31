@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { COPY_FEEDBACK_RESET_MS } from '../constants/timing';
 import { Search, Copy, Check, ChevronRight, Code2, Layout, Database, Zap, X, Sparkles, Plus, Trash2, Star } from 'lucide-react';
 import { settingsApi } from '../services/projectApi';
 
@@ -480,7 +481,7 @@ export const SnippetsPanel: React.FC<SnippetsPanelProps> = ({ isOpen, onClose, o
     if (copyTimeoutRef.current) {
       clearTimeout(copyTimeoutRef.current);
     }
-    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
+    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), COPY_FEEDBACK_RESET_MS);
   };
 
   const handleInsert = (snippet: Snippet) => {
