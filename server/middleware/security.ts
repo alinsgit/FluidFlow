@@ -74,11 +74,18 @@ export function validateRequest(req: Request, res: Response, next: NextFunction)
     /expression\s*\(/i, // CSS expression
   ];
 
-  const body = JSON.stringify(req.body);
+  // Build a body string for scanning that EXCLUDES file content fields.
+  // File content (stored on disk, not rendered in app UI) naturally contains
+  // HTML/JS code like <script> tags, event handlers, etc. Scanning these
+  // causes false positives when creating/updating projects.
+  const bodyToScan = req.body ? (() => {
+    const { files, ...rest } = req.body;
+    return JSON.stringify(rest);
+  })() : '{}';
   const query = JSON.stringify(req.query);
 
   for (const pattern of suspiciousPatterns) {
-    if (pattern.test(body) || pattern.test(query)) {
+    if (pattern.test(bodyToScan) || pattern.test(query)) {
       return res.status(400).json({
         error: 'Invalid request: potentially malicious content detected',
       });

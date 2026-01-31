@@ -1061,6 +1061,11 @@ router.get('/:id/file', async (req, res) => {
     }
 
     if (!existsSync(fullPath)) {
+      // For internal metadata files (.fluidflow/), return 200 with null content
+      // instead of 404 to avoid noisy errors in browser console
+      if (sanitizedPath.startsWith('.fluidflow/') || sanitizedPath.startsWith('.fluidflow\\')) {
+        return res.json({ content: null, path: sanitizedPath, notFound: true });
+      }
       return res.status(404).json({ error: 'File not found' });
     }
 

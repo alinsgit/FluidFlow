@@ -86,6 +86,9 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
     initFileProgressFromPlan,
   } = callbacks;
 
+  // Ref to hold accumulated text across streaming chunks (for final sweep closures)
+  const fullTextRef = useRef('');
+
   /**
    * Process streaming response and detect files as they appear
    */
@@ -98,7 +101,7 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
       expectedFormat?: StreamingFormat
     ): Promise<StreamingResult> => {
       const manager = getProviderManager();
-      const fullTextRef = useRef('');
+      fullTextRef.current = '';
       let fullText = '';
       let detectedFiles: string[] = [];
       let chunkCount = 0;
