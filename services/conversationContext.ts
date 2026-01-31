@@ -105,9 +105,53 @@ class ConversationContextManager {
 
     try {
       const contexts = Array.from(this.contexts.values());
-      localStorage.setItem(this.config.storageKey, JSON.stringify(contexts));
+      const data = JSON.stringify(contexts);
+
+      // Check approximate size (5MB limit for localStorage)
+      if (data.length > 4 * 1024 * 1024) {
+        console.warn('[ContextManager] Data too large, compacting oldest contexts');
+        this.compactOldestContexts();
+        // Retry after compaction
+        const compactedData = JSON.stringify(Array.from(this.contexts.values()));
+        localStorage.setItem(this.config.storageKey, compactedData);
+        return;
+      }
+
+      localStorage.setItem(this.config.storageKey, data);
     } catch (e) {
-      console.error('[ContextManager] Failed to save to storage:', e);
+      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+        console.warn('[ContextManager] Quota exceeded, attempting compaction');
+        this.compactOldestContexts();
+        // Retry once after compaction
+        try {
+          const contexts = Array.from(this.contexts.values());
+          localStorage.setItem(this.config.storageKey, JSON.stringify(contexts));
+        } catch (retryError) {
+          console.error('[ContextManager] Failed to save even after compaction:', retryError);
+        }
+      } else {
+        console.error('[ContextManager] Failed to save to storage:', e);
+      }
+    }
+  }
+
+  /**
+   * Compact oldest contexts to free up storage space
+   */
+  private compactOldestContexts(): void {
+    // Sort contexts by last updated (oldest first)
+    const sortedContexts = Array.from(this.contexts.entries())
+      .sort((a, b) => a[1].lastUpdatedAt - b[1].lastUpdatedAt);
+
+    // Remove oldest contexts until we're under the limit
+    const targetSize = Math.max(3, Math.floor(this.contexts.size * 0.7)); // Keep 70% or at least 3
+    for (let i = 0; i < sortedContexts.length - targetSize; i++) {
+      const [id, context] = sortedContexts[i];
+      // Keep system contexts (main-chat, etc.)
+      if (!id.includes('main-chat')) {
+        console.log(`[ContextManager] Removing old context: ${id}`);
+        this.contexts.delete(id);
+      }
     }
   }
 

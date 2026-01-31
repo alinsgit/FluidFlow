@@ -11,7 +11,7 @@
  * - progressCalculator.ts: File progress calculation
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { debugLog } from './useDebugStore';
 import { getProviderManager, GenerationRequest, GenerationResponse } from '../services/ai';
 import { FilePlan } from './useGenerationState';
@@ -98,6 +98,7 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
       expectedFormat?: StreamingFormat
     ): Promise<StreamingResult> => {
       const manager = getProviderManager();
+      const fullTextRef = useRef('');
       let fullText = '';
       let detectedFiles: string[] = [];
       let chunkCount = 0;
@@ -131,6 +132,7 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
         (chunk) => {
           const chunkText = chunk.text || '';
           fullText += chunkText;
+          fullTextRef.current = fullText;
           chunkCount++;
           setStreamingChars(fullText.length);
 
@@ -386,8 +388,9 @@ export function useStreamingResponse(callbacks: StreamingCallbacks): UseStreamin
           const delay = index * 150; // 150ms between each file completion
 
           setTimeout(() => {
+            const currentFullText = fullTextRef.current;
             const expectedLines = planRef?.sizes?.[filePath] ?? 100;
-            const progress = calculateFileProgress(fullText, filePath, expectedLines, finalFormat);
+            const progress = calculateFileProgress(currentFullText, filePath, expectedLines, finalFormat);
 
             if (progress.status === 'complete' || progress.progress > 0) {
               // Add to completedFiles and update progress

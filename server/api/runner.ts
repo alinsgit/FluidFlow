@@ -101,14 +101,57 @@ cleanupOrphanProcesses();
 // Track running processes
 const MAX_LOG_ENTRIES = 1000; // Limit log entries to prevent memory leak
 
+/**
+ * Circular buffer for efficient log storage
+ * O(1) push, O(n) toArray when needed for API responses
+ */
+class CircularBuffer<T> {
+  private buffer: T[] = [];
+  private head = 0;
+  private count = 0;
+
+  constructor(private maxSize: number) {}
+
+  push(item: T): void {
+    if (this.count < this.maxSize) {
+      this.buffer.push(item);
+      this.count++;
+    } else {
+      this.buffer[this.head] = item;
+      this.head = (this.head + 1) % this.maxSize;
+    }
+  }
+
+  toArray(): T[] {
+    if (this.count < this.maxSize) {
+      return [...this.buffer];
+    }
+    return [...this.buffer.slice(this.head), ...this.buffer.slice(0, this.head)];
+  }
+
+  get length(): number {
+    return this.count;
+  }
+
+  slice(start?: number, end?: number): T[] {
+    const arr = this.toArray();
+    return arr.slice(start, end);
+  }
+
+  // For compatibility with existing code that expects string[]
+  [Symbol.iterator](): Iterator<T> {
+    return this.toArray()[Symbol.iterator]();
+  }
+}
+
 interface RunningProject {
   projectId: string;
   port: number;
   // BUG-F01/F02 FIX: Process can be null when not yet spawned or after cleanup on error
   process: ChildProcess | null;
   status: 'installing' | 'starting' | 'running' | 'error' | 'stopped';
-  logs: string[];
-  errorLogs: string[];
+  logs: CircularBuffer<string>;
+  errorLogs: CircularBuffer<string>;
   startedAt: number;
   url: string;
   // EventEmitter for SSE log streaming
@@ -126,13 +169,6 @@ function pushLog(project: RunningProject, entry: string, isError: boolean = fals
   project.logs.push(entry);
   if (isError) {
     project.errorLogs.push(entry);
-  }
-  // Remove oldest entries if over limit
-  while (project.logs.length > MAX_LOG_ENTRIES) {
-    project.logs.shift();
-  }
-  while (project.errorLogs.length > MAX_LOG_ENTRIES) {
-    project.errorLogs.shift();
   }
   // Emit to SSE clients
   project.logEmitter.emit('log', { entry, isError, timestamp: Date.now() });
@@ -737,18 +773,18 @@ router.post('/:id/start', async (req, res) => {
 
   // Create running project entry
   // BUG-F01 FIX: Process is initially null and will be set when installation/start begins
-  // Create EventEmitter with higher max listeners limit for SSE streaming
-  // Set to 0 (unlimited) to prevent memory leak warnings from reconnection loops
+  // Create EventEmitter with max listeners limit for SSE streaming
+  // Set to 50 to prevent memory leak warnings from reconnection loops while still allowing multiple clients
   const logEmitter = new EventEmitter();
-  logEmitter.setMaxListeners(0);
+  logEmitter.setMaxListeners(50);
 
   const runningProject: RunningProject = {
     projectId: id,
     port,
     process: null, // Will be set below when spawn is called
     status: 'installing',
-    logs: [],
-    errorLogs: [],
+    logs: new CircularBuffer<string>(MAX_LOG_ENTRIES),
+    errorLogs: new CircularBuffer<string>(MAX_LOG_ENTRIES),
     startedAt: Date.now(),
     url: `http://localhost:${port}`,
     logEmitter
